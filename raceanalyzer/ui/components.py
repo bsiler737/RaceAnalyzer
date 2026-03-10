@@ -513,3 +513,57 @@ def render_scary_racer_card(racer: dict):
     )
     wins = racer.get("wins", 0)
     st.caption(f"Points: {points:.1f} | Wins: {wins}")
+
+
+# --- Selectivity badge ---
+
+_SELECTIVITY_COLORS = {
+    "low": "#28a745",
+    "moderate": "#fd7e14",
+    "high": "#dc3545",
+    "extreme": "#B71C1C",
+}
+
+_SELECTIVITY_LABELS = {
+    "low": "Low attrition",
+    "moderate": "Moderate attrition",
+    "high": "High attrition",
+    "extreme": "Extreme attrition",
+}
+
+
+def render_selectivity_badge(label: str):
+    """Render a colored selectivity/drop rate badge."""
+    color = _SELECTIVITY_COLORS.get(label, "#6c757d")
+    display = _SELECTIVITY_LABELS.get(label, label.title())
+    st.markdown(
+        f'<span style="background-color:{color};color:white;padding:2px 8px;'
+        f'border-radius:4px;font-size:0.85em;">{display}</span>',
+        unsafe_allow_html=True,
+    )
+
+
+# --- Climb legend ---
+
+_CLIMB_LEGEND_ITEMS = [
+    ("Moderate (3-5%)", "#FFC107"),
+    ("Steep (5-8%)", "#FF5722"),
+    ("Brutal (8%+)", "#B71C1C"),
+]
+
+
+def render_climb_legend():
+    """Render a horizontal climb severity legend."""
+    items_html = ""
+    for label, color in _CLIMB_LEGEND_ITEMS:
+        items_html += (
+            f'<span style="display:inline-block;margin-right:12px;">'
+            f'<span style="display:inline-block;width:12px;height:12px;'
+            f'background:{color};border-radius:2px;vertical-align:middle;'
+            f'margin-right:4px;"></span>{label}</span>'
+        )
+    st.markdown(
+        f'<div style="font-size:0.85em;color:#666;margin-top:4px;">'
+        f'{items_html}</div>',
+        unsafe_allow_html=True,
+    )

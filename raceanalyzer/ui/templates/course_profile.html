@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Course Profile</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin="anonymous">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin="anonymous"></script>
+<script src="https://cdn.plot.ly/plotly-basic-2.35.0.min.js" charset="utf-8"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .container {
+    display: flex;
+    flex-direction: column;
+    height: __HEIGHT__px;
+    gap: 4px;
+  }
+  #map {
+    flex: 6;
+    min-height: 200px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+  }
+  #elevation-chart {
+    flex: 4;
+    min-height: 150px;
+  }
+  @media (min-width: 768px) {
+    .container {
+      flex-direction: row;
+    }
+    #map { flex: 6; }
+    #elevation-chart { flex: 4; }
+  }
+  .climb-legend {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(255,255,255,0.9);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    z-index: 1000;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  .climb-legend span {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .climb-legend-item {
+    display: inline-block;
+    margin-right: 10px;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div id="map"></div>
+  <div id="elevation-chart"></div>
+</div>
+
+<script type="application/json" id="course-data">__COURSE_DATA__</script>
+
+<script>
+(function() {
+  var raw = document.getElementById('course-data').textContent;
+  var data = JSON.parse(raw);
+  var profile = data.profile || [];
+  var climbs = data.climbs || [];
+  var raceName = data.race_name || 'Course';
+
+  if (!profile.length) return;
+
+  // --- MAP ---
+  var map = L.map('map', { scrollWheelZoom: true });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    maxZoom: 19
+  }).addTo(map);
+
+  // Route polyline
+  var routeCoords = profile.map(function(p) { return [p.y, p.x]; });
+  var routeLine = L.polyline(routeCoords, {
+    color: '#FC4C02', weight: 3, opacity: 0.8
+  }).addTo(map);
+  map.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+
+  // Start/finish markers
+  L.circleMarker(routeCoords[0], {
+    radius: 6, color: '#2E7D32', fillColor: '#4CAF50', fillOpacity: 1, weight: 2
+  }).bindTooltip('Start').addTo(map);
+  L.circleMarker(routeCoords[routeCoords.length - 1], {
+    radius: 6, color: '#C62828', fillColor: '#E53935', fillOpacity: 1, weight: 2
+  }).bindTooltip('Finish').addTo(map);
+
+  // Climb overlays on map
+  climbs.forEach(function(climb) {
+    var climbCoords = profile
+      .filter(function(p) { return p.d >= climb.start_d && p.d <= climb.end_d; })
+      .map(function(p) { return [p.y, p.x]; });
+    if (climbCoords.length > 1) {
+      L.polyline(climbCoords, {
+        color: climb.color, weight: 6, opacity: 0.7
+      }).bindTooltip(
+        climb.category.charAt(0).toUpperCase() + climb.category.slice(1) +
+        ' climb: ' + climb.avg_grade + '% avg, ' + climb.length_m + 'm'
+      ).addTo(map);
+    }
+  });
+
+  // Hover marker
+  var hoverMarker = L.circleMarker([0, 0], {
+    radius: 5, color: '#1565C0', fillColor: '#42A5F5',
+    fillOpacity: 1, weight: 2
+  });
+
+  // Climb legend
+  var hasClimbs = climbs.length > 0;
+  if (hasClimbs) {
+    var legendDiv = L.control({ position: 'bottomleft' });
+    legendDiv.onAdd = function() {
+      var div = L.DomUtil.create('div', 'climb-legend');
+      div.innerHTML =
+        '<div class="climb-legend-item"><span style="background:#FFC107"></span>Moderate</div>' +
+        '<div class="climb-legend-item"><span style="background:#FF5722"></span>Steep</div>' +
+        '<div class="climb-legend-item"><span style="background:#B71C1C"></span>Brutal</div>';
+      return div;
+    };
+    legendDiv.addTo(map);
+  }
+
+  // --- ELEVATION CHART ---
+  var distances = profile.map(function(p) { return p.d / 1000; }); // km
+  var elevations = profile.map(function(p) { return p.e; });
+
+  var traces = [{
+    x: distances,
+    y: elevations,
+    type: 'scatter',
+    mode: 'lines',
+    fill: 'tozeroy',
+    fillcolor: 'rgba(252, 76, 2, 0.15)',
+    line: { color: '#FC4C02', width: 2 },
+    name: 'Elevation',
+    hovertemplate: '%{x:.1f} km<br>%{y:.0f}m<extra></extra>'
+  }];
+
+  // Add climb fills as shapes
+  var shapes = climbs.map(function(climb) {
+    return {
+      type: 'rect',
+      xref: 'x', yref: 'paper',
+      x0: climb.start_d / 1000,
+      x1: climb.end_d / 1000,
+      y0: 0, y1: 1,
+      fillcolor: climb.color,
+      opacity: 0.15,
+      line: { width: 0 }
+    };
+  });
+
+  // Add climb annotations
+  var annotations = climbs.map(function(climb) {
+    var midD = (climb.start_d + climb.end_d) / 2000;
+    return {
+      x: midD,
+      y: 1,
+      xref: 'x',
+      yref: 'paper',
+      text: climb.avg_grade + '%',
+      showarrow: false,
+      font: { size: 10, color: climb.color },
+      yanchor: 'bottom'
+    };
+  });
+
+  var layout = {
+    margin: { l: 45, r: 10, t: 10, b: 35 },
+    xaxis: {
+      title: { text: 'Distance (km)', font: { size: 11 } },
+      showgrid: false
+    },
+    yaxis: {
+      title: { text: 'Elevation (m)', font: { size: 11 } },
+      showgrid: true,
+      gridcolor: '#f0f0f0'
+    },
+    showlegend: false,
+    shapes: shapes,
+    annotations: annotations,
+    hovermode: 'x unified',
+    plot_bgcolor: 'white',
+    paper_bgcolor: 'white'
+  };
+
+  var config = {
+    displayModeBar: false,
+    responsive: true
+  };
+
+  Plotly.newPlot('elevation-chart', traces, layout, config);
+
+  // --- HOVER SYNC ---
+  var chartEl = document.getElementById('elevation-chart');
+  chartEl.on('plotly_hover', function(eventData) {
+    if (!eventData.points || !eventData.points.length) return;
+    var idx = eventData.points[0].pointIndex;
+    if (idx >= 0 && idx < profile.length) {
+      var pt = profile[idx];
+      hoverMarker.setLatLng([pt.y, pt.x]);
+      if (!map.hasLayer(hoverMarker)) {
+        hoverMarker.addTo(map);
+      }
+    }
+  });
+
+  chartEl.on('plotly_unhover', function() {
+    if (map.hasLayer(hoverMarker)) {
+      map.removeLayer(hoverMarker);
+    }
+  });
+
+  // Click climb on chart -> zoom map
+  chartEl.on('plotly_click', function(eventData) {
+    if (!eventData.points || !eventData.points.length) return;
+    var clickD = eventData.points[0].x * 1000; // back to meters
+    for (var i = 0; i < climbs.length; i++) {
+      if (clickD >= climbs[i].start_d && clickD <= climbs[i].end_d) {
+        var climbPts = profile.filter(function(p) {
+          return p.d >= climbs[i].start_d && p.d <= climbs[i].end_d;
+        });
+        if (climbPts.length > 1) {
+          var bounds = L.latLngBounds(
+            climbPts.map(function(p) { return [p.y, p.x]; })
+          );
+          map.fitBounds(bounds, { padding: [30, 30] });
+        }
+        break;
+      }
+    }
+  });
+})();
+</script>
+</body>
+</html>

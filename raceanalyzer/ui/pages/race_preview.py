@@ -9,8 +9,13 @@ import streamlit as st
 from raceanalyzer import queries
 from raceanalyzer.elevation import COURSE_TYPE_DESCRIPTIONS, course_type_display
 from raceanalyzer.queries import finish_type_display_name
-from raceanalyzer.ui.components import render_confidence_badge, render_empty_state
-from raceanalyzer.ui.maps import render_course_map
+from raceanalyzer.ui.components import (
+    render_climb_legend,
+    render_confidence_badge,
+    render_empty_state,
+    render_selectivity_badge,
+)
+from raceanalyzer.ui.maps import render_course_map, render_interactive_course_profile
 
 
 def render():
@@ -56,7 +61,17 @@ def render():
             st.query_params["category"] = chosen_cat or ""
             st.rerun()
 
-    # Card 1: Terrain
+    # Card 1: "What to Expect" narrative
+    narrative = preview.get("narrative", "")
+    if narrative:
+        with st.container(border=True):
+            st.subheader("What to Expect")
+            st.write(narrative)
+
+    # Card 2: Interactive Course Profile (or fallback)
+    profile_points = preview.get("profile_points")
+    climbs = preview.get("climbs")
+
     with st.container(border=True):
         st.subheader("Course Profile")
         course = preview["course"]
@@ -69,18 +84,24 @@ def render():
             if course.get("distance_m"):
                 col3.metric("Distance", f"{course['distance_m']/1000:.1f} km")
 
-            # Terrain description
             desc = COURSE_TYPE_DESCRIPTIONS.get(course["course_type"], "")
             if desc:
                 st.caption(desc)
         else:
             st.info("No course data available.")
 
-        # Course map
-        if series.get("encoded_polyline"):
+        # Interactive map + elevation or fallback
+        if profile_points and len(profile_points) > 1:
+            if climbs:
+                render_climb_legend()
+            render_interactive_course_profile(
+                profile_points, climbs or [],
+                race_name=series["display_name"],
+            )
+        elif series.get("encoded_polyline"):
             render_course_map(series["encoded_polyline"], series["display_name"])
 
-    # Card 2: Prediction
+    # Card 3: Predicted Finish Type
     with st.container(border=True):
         st.subheader("Predicted Finish Type")
         pred = preview["prediction"]
@@ -88,11 +109,15 @@ def render():
             ft_display = finish_type_display_name(pred["predicted_finish_type"])
             st.markdown(f"### {ft_display}")
 
-            # Confidence badge
             confidence = pred["confidence"]
-            color_map = {"high": "green", "moderate": "orange", "low": "red"}
-            label_map = {"high": "High confidence", "moderate": "Moderate confidence",
-                         "low": "Low confidence"}
+            color_map = {
+                "high": "green", "moderate": "orange", "low": "red",
+            }
+            label_map = {
+                "high": "High confidence",
+                "moderate": "Moderate confidence",
+                "low": "Low confidence",
+            }
             render_confidence_badge(
                 label_map.get(confidence, confidence),
                 color_map.get(confidence, "gray"),
@@ -100,7 +125,6 @@ def render():
 
             st.caption(f"Based on {pred['edition_count']} previous edition(s)")
 
-            # Distribution
             if pred.get("distribution"):
                 with st.expander("Finish type distribution"):
                     for ft, count in sorted(
@@ -110,7 +134,43 @@ def render():
         else:
             st.info("No historical data for predictions yet.")
 
-    # Card 3: Top Contenders
+    # Card 4: Historical Stats (drop rate + speed)
+    drop_rate = preview.get("drop_rate")
+    typical_speed = preview.get("typical_speed")
+    if drop_rate or typical_speed:
+        with st.container(border=True):
+            st.subheader("Historical Stats")
+
+            if drop_rate:
+                rate_pct = round(drop_rate["drop_rate"] * 100)
+                col1, col2 = st.columns([2, 1])
+                col1.metric("Drop Rate", f"{rate_pct}%")
+                with col2:
+                    render_selectivity_badge(drop_rate["label"])
+                st.caption(
+                    f"Based on {drop_rate['edition_count']} edition(s) "
+                    f"({drop_rate['total_starters']} total starters, "
+                    f"{drop_rate['total_dropped']} dropped)"
+                )
+
+            if typical_speed:
+                st.divider()
+                col1, col2 = st.columns(2)
+                col1.metric(
+                    "Winning Speed",
+                    f"{typical_speed['median_winner_speed_mph']} mph"
+                )
+                col2.metric(
+                    "Field Speed",
+                    f"{typical_speed['median_field_speed_mph']} mph"
+                )
+                st.caption(
+                    f"Median across {typical_speed['edition_count']} edition(s). "
+                    f"({typical_speed['median_winner_speed_kph']} / "
+                    f"{typical_speed['median_field_speed_kph']} kph)"
+                )
+
+    # Card 5: Top Contenders
     with st.container(border=True):
         st.subheader("Top Contenders")
         contenders = preview["contenders"]
@@ -126,14 +186,16 @@ def render():
             for _, rider in contenders.iterrows():
                 with st.container():
                     col1, col2 = st.columns([3, 1])
-                    team_str = f" -- {rider['team']}" if rider.get("team") else ""
+                    team_str = (
+                        f" -- {rider['team']}" if rider.get("team") else ""
+                    )
                     col1.write(f"**{rider['name']}**{team_str}")
                     pts = rider.get("carried_points", 0)
                     col2.write(f"{pts:.0f} pts" if pts else "")
         else:
             st.info("No contender data available.")
 
-    # Card 4: Post-race feedback (shown after race date)
+    # Card 6: Post-race feedback (shown after race date)
     latest_date = preview.get("latest_date")
     pred = preview["prediction"]
     if latest_date and pred and latest_date < datetime.now():
@@ -160,7 +222,9 @@ def render():
                     session, int(series_id), selected_cat or "",
                     pred["predicted_finish_type"], choice, options,
                 )
-                st.success("Thank you! Your feedback helps improve predictions.")
+                st.success(
+                    "Thank you! Your feedback helps improve predictions."
+                )
 
 
 def _save_feedback(session, series_id, category, predicted_ft, choice, options):
@@ -169,7 +233,6 @@ def _save_feedback(session, series_id, category, predicted_ft, choice, options):
 
     from raceanalyzer.db.models import FinishType, Race, UserLabel
 
-    # Find most recent race in series
     race = (
         session.query(Race)
         .filter(Race.series_id == series_id)
@@ -183,7 +246,6 @@ def _save_feedback(session, series_id, category, predicted_ft, choice, options):
         actual_ft = FinishType(predicted_ft)
         is_correct = True
     else:
-        # Map display name back to enum
         for i, opt in enumerate(options):
             if finish_type_display_name(opt) == choice:
                 actual_ft = FinishType(opt)
@@ -192,7 +254,6 @@ def _save_feedback(session, series_id, category, predicted_ft, choice, options):
         else:
             return
 
-    # Session-based dedup
     session_id = st.session_state.get("_feedback_session_id", "anonymous")
 
     existing = (

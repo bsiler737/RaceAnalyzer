@@ -370,3 +370,45 @@ class TestGetRacePreview:
         preview = queries.get_race_preview(seeded_series_session, series.id)
         assert preview is not None
         assert preview["course"] is None
+
+    def test_includes_new_fields(self, seeded_course_session):
+        """Preview includes drop_rate, typical_speed, narrative, profile, climbs."""
+        from raceanalyzer.db.models import RaceSeries
+        bb = (
+            seeded_course_session.query(RaceSeries)
+            .filter(RaceSeries.display_name.like("%Banana Belt%"))
+            .first()
+        )
+        preview = queries.get_race_preview(seeded_course_session, bb.id)
+        assert preview is not None
+        # These keys should always be present (may be None)
+        assert "drop_rate" in preview
+        assert "typical_speed" in preview
+        assert "narrative" in preview
+        assert "profile_points" in preview
+        assert "climbs" in preview
+
+    def test_narrative_not_empty(self, seeded_course_session):
+        """Narrative should always produce some text."""
+        from raceanalyzer.db.models import RaceSeries
+        bb = (
+            seeded_course_session.query(RaceSeries)
+            .filter(RaceSeries.display_name.like("%Banana Belt%"))
+            .first()
+        )
+        preview = queries.get_race_preview(seeded_course_session, bb.id)
+        assert preview["narrative"]
+        assert len(preview["narrative"]) > 10
+        assert "None" not in preview["narrative"]
+
+    def test_degrades_gracefully_no_data(self, seeded_series_session):
+        """With no course data, new fields degrade gracefully."""
+        from raceanalyzer.db.models import RaceSeries
+        series = seeded_series_session.query(RaceSeries).first()
+        preview = queries.get_race_preview(seeded_series_session, series.id)
+        assert preview is not None
+        # No course -> no profile or climbs
+        assert preview["profile_points"] is None
+        assert preview["climbs"] is None
+        # Narrative still present (may say "new event" or based on predictions)
+        assert preview["narrative"] is not None

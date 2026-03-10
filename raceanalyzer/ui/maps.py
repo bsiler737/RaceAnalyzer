@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Optional
+from pathlib import Path
 
 import requests
 import streamlit as st
 
 logger = logging.getLogger(__name__)
+
+_TEMPLATE_DIR = Path(__file__).parent / "templates"
 
 _GEOCODE_CACHE: dict[str, tuple[float, float] | None] = {}
 
@@ -94,3 +97,88 @@ def render_course_map(encoded_polyline: str, race_name: str = ""):
     ])
 
     st_folium(m, use_container_width=True, height=400, returned_objects=[])
+
+
+def render_interactive_course_profile(
+    profile_points: list[dict],
+    climbs: list[dict],
+    race_name: str = "",
+    height: int = 700,
+):
+    """Render interactive Leaflet map + Plotly elevation chart with hover sync.
+
+    Falls back to render_course_map() + separate Plotly chart if template fails.
+    """
+    try:
+        template_path = _TEMPLATE_DIR / "course_profile.html"
+        html_template = template_path.read_text(encoding="utf-8")
+
+        course_data = json.dumps({
+            "profile": profile_points,
+            "climbs": climbs or [],
+            "race_name": race_name,
+        })
+
+        rendered = html_template.replace(
+            "__COURSE_DATA__", course_data
+        ).replace(
+            "__HEIGHT__", str(height)
+        )
+
+        st.components.v1.html(rendered, height=height, scrolling=False)
+
+    except Exception:
+        logger.warning(
+            "Interactive course profile failed, falling back to Folium + Plotly"
+        )
+        _render_fallback_profile(profile_points, climbs, race_name)
+
+
+def _render_fallback_profile(
+    profile_points: list[dict],
+    climbs: list[dict],
+    race_name: str = "",
+):
+    """Fallback: Folium map + separate Plotly elevation chart (no hover sync)."""
+    import plotly.graph_objects as go
+
+    # Build encoded polyline from profile points for Folium
+    try:
+        import polyline as pl
+
+        coords = [(p["y"], p["x"]) for p in profile_points]
+        encoded = pl.encode(coords)
+        render_course_map(encoded, race_name)
+    except Exception:
+        st.info("Map unavailable.")
+
+    # Plotly elevation chart
+    distances = [p["d"] / 1000 for p in profile_points]
+    elevations = [p["e"] for p in profile_points]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=distances, y=elevations,
+        mode="lines", fill="tozeroy",
+        fillcolor="rgba(252, 76, 2, 0.15)",
+        line=dict(color="#FC4C02", width=2),
+        name="Elevation",
+    ))
+
+    # Add climb regions
+    for climb in (climbs or []):
+        fig.add_vrect(
+            x0=climb["start_d"] / 1000,
+            x1=climb["end_d"] / 1000,
+            fillcolor=climb["color"],
+            opacity=0.15, line_width=0,
+        )
+
+    fig.update_layout(
+        xaxis_title="Distance (km)",
+        yaxis_title="Elevation (m)",
+        margin=dict(l=40, r=10, t=10, b=40),
+        height=250,
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True)
