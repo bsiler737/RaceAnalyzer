@@ -701,8 +701,16 @@ def get_race_preview(
         "has_startlist": bool,
     }
     """
+    import json
+
     from raceanalyzer.db.models import Startlist
-    from raceanalyzer.predictions import predict_contenders, predict_series_finish_type
+    from raceanalyzer.predictions import (
+        calculate_drop_rate,
+        calculate_typical_speeds,
+        generate_narrative,
+        predict_contenders,
+        predict_series_finish_type,
+    )
 
     series = session.get(RaceSeries, series_id)
     if series is None:
@@ -773,6 +781,46 @@ def get_race_preview(
     )
     latest_date = most_recent.date if most_recent else None
 
+    # Historical stats
+    drop_rate = calculate_drop_rate(session, series_id, category=category)
+    typical_speed = calculate_typical_speeds(session, series_id, category=category)
+
+    # Profile and climbs data
+    profile_points = None
+    climbs = None
+    if course_row:
+        if course_row.profile_json:
+            try:
+                profile_points = json.loads(course_row.profile_json)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if course_row.climbs_json:
+            try:
+                climbs = json.loads(course_row.climbs_json)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    # Narrative
+    distance_km = (
+        course_row.distance_m / 1000.0
+        if course_row and course_row.distance_m
+        else None
+    )
+    total_gain_m = course_row.total_gain_m if course_row else None
+    ct = course_row.course_type.value if course_row and course_row.course_type else None
+    pred_ft = prediction["predicted_finish_type"] if prediction else None
+    edition_count = prediction["edition_count"] if prediction else 0
+    narrative = generate_narrative(
+        course_type=ct,
+        predicted_finish_type=pred_ft,
+        drop_rate=drop_rate,
+        typical_speed=typical_speed,
+        distance_km=distance_km,
+        total_gain_m=total_gain_m,
+        climbs=climbs,
+        edition_count=edition_count,
+    )
+
     return {
         "series": series_dict,
         "course": course_dict,
@@ -781,6 +829,11 @@ def get_race_preview(
         "categories": all_categories,
         "has_startlist": has_startlist,
         "latest_date": latest_date,
+        "drop_rate": drop_rate,
+        "typical_speed": typical_speed,
+        "profile_points": profile_points,
+        "climbs": climbs,
+        "narrative": narrative,
     }
 
 

@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import statistics
 from collections import Counter
 from typing import Optional
 
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from raceanalyzer.config import Settings
 from raceanalyzer.db.models import (
+    Course,
     Race,
     RaceClassification,
+    RaceType,
     Result,
     Startlist,
 )
@@ -328,3 +332,341 @@ def _rank_from_category(
     ]
     df = pd.DataFrame(rows)
     return df.sort_values("carried_points", ascending=False).head(top_n).reset_index(drop=True)
+
+
+# --- Historical stats ---
+
+
+def calculate_drop_rate(
+    session: Session,
+    series_id: int,
+    category: Optional[str] = None,
+    settings: Optional[Settings] = None,
+) -> Optional[dict]:
+    """Calculate historical attrition rate (DNF + DNP only; excludes DQ).
+
+    Returns median drop rate across editions with label and confidence.
+    Returns None if no historical data.
+    """
+    if settings is None:
+        settings = Settings()
+
+    editions = (
+        session.query(Race)
+        .filter(Race.series_id == series_id)
+        .order_by(Race.date.desc())
+        .all()
+    )
+    if not editions:
+        return None
+
+    per_edition_rates = []
+    total_starters = 0
+    total_dropped = 0
+
+    for race in editions:
+        query = session.query(Result).filter(Result.race_id == race.id)
+        if category:
+            query = query.filter(Result.race_category_name == category)
+        results = query.all()
+
+        if not results:
+            continue
+
+        starters = len(results)
+        dropped = sum(1 for r in results if r.dnf or r.dnp)
+        total_starters += starters
+        total_dropped += dropped
+
+        if starters > 0:
+            per_edition_rates.append(dropped / starters)
+
+    if not per_edition_rates:
+        return None
+
+    drop_rate = statistics.median(per_edition_rates)
+
+    # Label mapping
+    if drop_rate < settings.drop_rate_low_max:
+        label = "low"
+    elif drop_rate < settings.drop_rate_moderate_max:
+        label = "moderate"
+    elif drop_rate < settings.drop_rate_high_max:
+        label = "high"
+    else:
+        label = "extreme"
+
+    # Confidence
+    editions_with_data = len(per_edition_rates)
+    min_starters = min(
+        len([r for r in session.query(Result).filter(Result.race_id == e.id).all()])
+        for e in editions
+        if session.query(Result).filter(Result.race_id == e.id).count() > 0
+    ) if editions_with_data > 0 else 0
+
+    if editions_with_data >= 3 and min_starters >= 10:
+        confidence = "high"
+    elif editions_with_data >= 2:
+        confidence = "moderate"
+    else:
+        confidence = "low"
+
+    return {
+        "drop_rate": round(drop_rate, 3),
+        "total_starters": total_starters,
+        "total_dropped": total_dropped,
+        "edition_count": editions_with_data,
+        "label": label,
+        "confidence": confidence,
+    }
+
+
+def calculate_typical_speeds(
+    session: Session,
+    series_id: int,
+    category: Optional[str] = None,
+    settings: Optional[Settings] = None,
+) -> Optional[dict]:
+    """Calculate historical finishing speeds.
+
+    Suppressed for criteriums (single-lap distance unreliable).
+    Returns None if distance, timing data, or race type makes speed unreliable.
+    """
+    if settings is None:
+        settings = Settings()
+
+    # Get course distance
+    course = (
+        session.query(Course)
+        .filter(Course.series_id == series_id)
+        .first()
+    )
+    if not course or not course.distance_m:
+        return None
+
+    distance_m = course.distance_m
+
+    # Check race type - suppress for criteriums
+    editions = (
+        session.query(Race)
+        .filter(Race.series_id == series_id)
+        .order_by(Race.date.desc())
+        .all()
+    )
+    if not editions:
+        return None
+
+    # If any edition is a criterium, suppress
+    for race in editions:
+        if race.race_type == RaceType.CRITERIUM:
+            return None
+
+    # Suppress for very short non-crit courses (likely single lap)
+    if distance_m < 5000:
+        return None
+
+    per_edition_winner_speeds = []
+    per_edition_field_speeds = []
+
+    for race in editions:
+        query = (
+            session.query(Result)
+            .filter(
+                Result.race_id == race.id,
+                Result.dnf.is_(False),
+                Result.dnp.is_(False),
+                Result.dq.is_(False),
+                Result.race_time_seconds.isnot(None),
+            )
+        )
+        if category:
+            query = query.filter(Result.race_category_name == category)
+
+        results = query.order_by(Result.place).all()
+
+        # Check if enough results have timing
+        total_results_query = session.query(Result).filter(
+            Result.race_id == race.id,
+            Result.dnf.is_(False),
+        )
+        if category:
+            total_results_query = total_results_query.filter(
+                Result.race_category_name == category
+            )
+        total_count = total_results_query.count()
+        timed_count = len(results)
+
+        if total_count == 0 or timed_count / total_count < 0.5:
+            continue
+
+        if not results:
+            continue
+
+        # Front group proxy: top K finishers
+        top_k = results[:settings.speed_top_k]
+        speeds = []
+        for r in top_k:
+            if r.race_time_seconds and r.race_time_seconds > 0:
+                speed_kph = distance_m / r.race_time_seconds * 3.6
+                if settings.speed_min_kph <= speed_kph <= settings.speed_max_kph:
+                    speeds.append(speed_kph)
+
+        if speeds:
+            per_edition_winner_speeds.append(speeds[0])  # fastest
+            per_edition_field_speeds.append(statistics.median(speeds))
+
+    if not per_edition_winner_speeds:
+        return None
+
+    median_winner_kph = statistics.median(per_edition_winner_speeds)
+    median_field_kph = statistics.median(per_edition_field_speeds)
+
+    # Confidence
+    editions_with_data = len(per_edition_winner_speeds)
+    if editions_with_data >= 3:
+        confidence = "high"
+    elif editions_with_data >= 2:
+        confidence = "moderate"
+    else:
+        confidence = "low"
+
+    return {
+        "median_winner_speed_mph": round(median_winner_kph * 0.621371, 1),
+        "median_field_speed_mph": round(median_field_kph * 0.621371, 1),
+        "median_winner_speed_kph": round(median_winner_kph, 1),
+        "median_field_speed_kph": round(median_field_kph, 1),
+        "edition_count": editions_with_data,
+        "confidence": confidence,
+    }
+
+
+# --- Narrative generator ---
+
+
+def generate_narrative(
+    course_type: Optional[str] = None,
+    predicted_finish_type: Optional[str] = None,
+    drop_rate: Optional[dict] = None,
+    typical_speed: Optional[dict] = None,
+    distance_km: Optional[float] = None,
+    total_gain_m: Optional[float] = None,
+    climbs: Optional[list] = None,
+    edition_count: int = 0,
+) -> str:
+    """Generate a template-based 'What to Expect' narrative.
+
+    Each sentence is independently optional based on data availability.
+    Returns 1-5 sentences of plain English.
+    """
+    sentences = []
+
+    # 1. Course sentence
+    if distance_km is not None and course_type:
+        dist_str = f"{distance_km:.0f}" if distance_km >= 10 else f"{distance_km:.1f}"
+        if course_type == "flat":
+            sentences.append(
+                f"This {dist_str} km flat course has minimal climbing"
+                " — positioning and pack tactics matter more than raw power."
+            )
+        elif course_type == "rolling":
+            gain_str = f" with {total_gain_m:.0f}m of climbing" if total_gain_m else ""
+            sentences.append(
+                f"This {dist_str} km rolling course{gain_str}"
+                " rewards strong all-rounders and punchy riders."
+            )
+        elif course_type == "hilly":
+            n_climbs = len(climbs) if climbs else 0
+            climb_phrase = (
+                f" across {n_climbs} significant climb"
+                + ("s" if n_climbs != 1 else "")
+                if n_climbs
+                else ""
+            )
+            gain_str = f"{total_gain_m:.0f}m" if total_gain_m else "significant"
+            sentences.append(
+                f"This {dist_str} km course packs"
+                f" {gain_str} of climbing{climb_phrase}."
+            )
+        elif course_type == "mountainous":
+            gain_str = f"{total_gain_m:.0f}m" if total_gain_m else "massive"
+            sentences.append(
+                f"This {dist_str} km mountain course packs"
+                f" {gain_str} of climbing"
+                " — expect the field to shatter on the climbs."
+            )
+
+    # 2. Climb sentence (highlight hardest or last significant climb)
+    if climbs:
+        hardest = max(climbs, key=lambda c: c.get("avg_grade", 0))
+        length_str = f"{hardest['length_m']:.0f}m"
+        grade_str = f"{hardest['avg_grade']:.0f}%"
+        cat = hardest.get("category", "")
+        # Check if it's in the final quarter
+        if distance_km and hardest.get("end_d"):
+            total_m = distance_km * 1000
+            if hardest["end_d"] > total_m * 0.75:
+                sentences.append(
+                    f"The hardest climb is a {length_str} {cat} effort"
+                    f" averaging {grade_str}"
+                    " — and it comes in the final quarter of the race."
+                )
+            else:
+                sentences.append(
+                    f"The hardest climb is a {length_str} {cat} effort"
+                    f" averaging {grade_str}."
+                )
+        else:
+            sentences.append(
+                f"The hardest climb is a {length_str} {cat} effort"
+                f" averaging {grade_str}."
+            )
+
+    # 3. History sentence
+    if predicted_finish_type and edition_count > 0:
+        from raceanalyzer.queries import finish_type_display_name
+
+        ft_name = finish_type_display_name(predicted_finish_type).lower()
+        sentences.append(
+            f"Based on {edition_count} previous"
+            f" edition{'s' if edition_count != 1 else ''},"
+            f" this race typically ends in a {ft_name}."
+        )
+
+    if drop_rate:
+        rate_pct = round(drop_rate["drop_rate"] * 100)
+        if rate_pct < 15:
+            qualifier = "fairly typical"
+        elif rate_pct < 30:
+            qualifier = "moderately selective"
+        elif rate_pct < 45:
+            qualifier = "quite selective"
+        else:
+            qualifier = "brutally selective"
+        sentences.append(
+            f"Historically {rate_pct}% of starters are dropped or DNF"
+            f" — {qualifier} for the category."
+        )
+
+    # 4. Pacing sentence
+    if typical_speed:
+        mph = typical_speed["median_winner_speed_mph"]
+        kph = typical_speed["median_winner_speed_kph"]
+        sentences.append(
+            f"The winning group usually averages around"
+            f" {mph} mph ({kph} kph)."
+        )
+
+    # 5. Caveat
+    if edition_count == 1:
+        sentences.append(
+            "Based on limited history (1 edition)"
+            " — take these numbers with a grain of salt."
+        )
+
+    if not sentences:
+        return (
+            "This is a new event"
+            " — no historical data is available yet."
+        )
+
+    return " ".join(sentences)

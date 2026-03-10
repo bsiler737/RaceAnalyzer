@@ -5,15 +5,24 @@ from __future__ import annotations
 from datetime import datetime
 
 from raceanalyzer.db.models import (
+    Course,
+    CourseType,
     FinishType,
     Race,
     RaceClassification,
     RaceSeries,
+    RaceType,
     Result,
     Rider,
     Startlist,
 )
-from raceanalyzer.predictions import predict_contenders, predict_series_finish_type
+from raceanalyzer.predictions import (
+    calculate_drop_rate,
+    calculate_typical_speeds,
+    generate_narrative,
+    predict_contenders,
+    predict_series_finish_type,
+)
 
 
 class TestPredictSeriesFinishType:
@@ -253,3 +262,260 @@ class TestHeuristicAccuracy:
         assert heuristic_correct >= baseline_correct
         # Heuristic should get all 5 right since each series is consistent
         assert heuristic_correct == 5
+
+
+# --- Drop rate tests ---
+
+
+def _create_drop_rate_fixture(session, series_name, editions_data):
+    """Helper: create series with multiple editions and results.
+
+    editions_data: list of (year, total_starters, num_dnf, num_dnp)
+    """
+    series = RaceSeries(normalized_name=series_name, display_name=series_name)
+    session.add(series)
+    session.flush()
+
+    for i, (year, total, n_dnf, n_dnp) in enumerate(editions_data):
+        race = Race(
+            id=2000 + i * 100 + hash(series_name) % 100,
+            name=f"{series_name} {year}",
+            date=datetime(year, 6, 1),
+            series_id=series.id,
+        )
+        session.add(race)
+
+        for j in range(total):
+            is_dnf = j < n_dnf
+            is_dnp = not is_dnf and j < n_dnf + n_dnp
+            session.add(Result(
+                race_id=race.id,
+                name=f"Rider {j}",
+                place=None if (is_dnf or is_dnp) else j + 1,
+                race_category_name="Cat 4/5",
+                race_time_seconds=None if (is_dnf or is_dnp) else 3600.0 + j * 5,
+                field_size=total,
+                dnf=is_dnf,
+                dnp=is_dnp,
+            ))
+
+    session.commit()
+    return series
+
+
+class TestCalculateDropRate:
+    def test_known_fixture(self, session):
+        """10 starters, 3 DNF -> 30% drop rate."""
+        series = _create_drop_rate_fixture(
+            session, "dropper", [(2024, 10, 3, 0)]
+        )
+        result = calculate_drop_rate(session, series.id)
+        assert result is not None
+        assert result["drop_rate"] == 0.3
+        assert result["total_starters"] == 10
+        assert result["total_dropped"] == 3
+        assert result["label"] == "high"
+
+    def test_no_history(self, session):
+        """No results -> None."""
+        series = RaceSeries(normalized_name="no_data", display_name="No Data")
+        session.add(series)
+        session.commit()
+
+        result = calculate_drop_rate(session, series.id)
+        assert result is None
+
+    def test_multiple_editions_median(self, session):
+        """Median across editions: 10%, 30%, 50% -> median 30%."""
+        series = _create_drop_rate_fixture(
+            session, "multi_ed",
+            [
+                (2022, 10, 1, 0),  # 10%
+                (2023, 10, 3, 0),  # 30%
+                (2024, 10, 5, 0),  # 50%
+            ],
+        )
+        result = calculate_drop_rate(session, series.id)
+        assert result is not None
+        assert result["drop_rate"] == 0.3
+        assert result["edition_count"] == 3
+        assert result["confidence"] == "high"
+
+    def test_dnp_handling(self, session):
+        """DNP counted as dropped alongside DNF."""
+        series = _create_drop_rate_fixture(
+            session, "dnp_test", [(2024, 10, 1, 2)]  # 1 DNF + 2 DNP = 30%
+        )
+        result = calculate_drop_rate(session, series.id)
+        assert result is not None
+        assert result["drop_rate"] == 0.3
+        assert result["total_dropped"] == 3
+
+    def test_label_thresholds(self, session):
+        """Verify label mapping: low/moderate/high/extreme."""
+        # 5% -> low
+        series = _create_drop_rate_fixture(
+            session, "low_drop", [(2024, 20, 1, 0)]
+        )
+        result = calculate_drop_rate(session, series.id)
+        assert result["label"] == "low"
+
+
+# --- Speed tests ---
+
+
+def _create_speed_fixture(session, series_name, race_type=None, distance_m=85000.0):
+    """Helper: create series with course and timed results."""
+    series = RaceSeries(normalized_name=series_name, display_name=series_name)
+    session.add(series)
+    session.flush()
+
+    course = Course(
+        series_id=series.id,
+        distance_m=distance_m,
+        total_gain_m=500.0,
+        course_type=CourseType.ROLLING,
+    )
+    session.add(course)
+
+    race = Race(
+        id=3000 + hash(series_name) % 1000,
+        name=f"{series_name} 2024",
+        date=datetime(2024, 6, 1),
+        series_id=series.id,
+        race_type=race_type,
+    )
+    session.add(race)
+
+    # 15 finishers with times
+    for j in range(15):
+        # ~85km in ~3h = ~28.3 kph
+        time_sec = 10800.0 + j * 60  # 3h + 1min per place
+        session.add(Result(
+            race_id=race.id,
+            name=f"Rider {j}",
+            place=j + 1,
+            race_category_name="Cat 3",
+            race_time_seconds=time_sec,
+            field_size=15,
+            dnf=False,
+        ))
+
+    session.commit()
+    return series
+
+
+class TestCalculateTypicalSpeeds:
+    def test_known_fixture(self, session):
+        """85km in 3h = ~28.3 kph for winner."""
+        series = _create_speed_fixture(session, "speedy")
+        result = calculate_typical_speeds(session, series.id)
+        assert result is not None
+        assert 25 < result["median_winner_speed_kph"] < 35
+        assert result["median_field_speed_kph"] > 0
+        assert result["median_winner_speed_mph"] > 0
+
+    def test_crit_suppression(self, session):
+        """Criteriums should return None."""
+        series = _create_speed_fixture(
+            session, "crit_speed", race_type=RaceType.CRITERIUM
+        )
+        result = calculate_typical_speeds(session, series.id)
+        assert result is None
+
+    def test_missing_distance(self, session):
+        """No distance -> None."""
+        series = _create_speed_fixture(session, "no_dist", distance_m=None)
+        # Fix: set distance to None on course
+        course = session.query(Course).filter(
+            Course.series_id == series.id
+        ).first()
+        course.distance_m = None
+        session.commit()
+
+        result = calculate_typical_speeds(session, series.id)
+        assert result is None
+
+    def test_short_distance_suppressed(self, session):
+        """Distance < 5km (non-crit) -> None."""
+        series = _create_speed_fixture(
+            session, "short_dist", distance_m=3000.0
+        )
+        result = calculate_typical_speeds(session, series.id)
+        assert result is None
+
+
+# --- Narrative tests ---
+
+
+class TestGenerateNarrative:
+    def test_full_data(self):
+        """All data present -> multi-sentence narrative."""
+        narrative = generate_narrative(
+            course_type="hilly",
+            predicted_finish_type="breakaway",
+            drop_rate={"drop_rate": 0.25, "label": "moderate"},
+            typical_speed={
+                "median_winner_speed_mph": 24.1,
+                "median_winner_speed_kph": 38.8,
+            },
+            distance_km=85.0,
+            total_gain_m=1200.0,
+            climbs=[{
+                "length_m": 2000, "avg_grade": 6, "category": "steep",
+                "end_d": 70000,
+            }],
+            edition_count=5,
+        )
+        assert "85 km" in narrative
+        assert "1200m" in narrative
+        assert "steep" in narrative
+        assert "breakaway" in narrative
+        assert "25%" in narrative
+        assert "24.1 mph" in narrative
+        assert "None" not in narrative
+
+    def test_no_data_new_event(self):
+        """No data -> new event message."""
+        narrative = generate_narrative()
+        assert "new event" in narrative.lower()
+        assert "None" not in narrative
+
+    def test_partial_data_no_speed(self):
+        """Course data but no speed -> narrative without pacing sentence."""
+        narrative = generate_narrative(
+            course_type="rolling",
+            distance_km=60.0,
+            total_gain_m=400.0,
+        )
+        assert "60 km" in narrative
+        assert "mph" not in narrative
+
+    def test_flat_course(self):
+        """Flat course narrative."""
+        narrative = generate_narrative(
+            course_type="flat",
+            distance_km=50.0,
+        )
+        assert "flat" in narrative.lower()
+        assert "positioning" in narrative.lower()
+
+    def test_no_climbs(self):
+        """No climbs -> no climb sentence."""
+        narrative = generate_narrative(
+            course_type="flat",
+            distance_km=50.0,
+            climbs=[],
+        )
+        assert "hardest climb" not in narrative.lower()
+
+    def test_single_edition_caveat(self):
+        """Single edition -> caveat sentence."""
+        narrative = generate_narrative(
+            course_type="rolling",
+            predicted_finish_type="bunch_sprint",
+            distance_km=60.0,
+            edition_count=1,
+        )
+        assert "limited history" in narrative.lower()
+        assert "grain of salt" in narrative.lower()
