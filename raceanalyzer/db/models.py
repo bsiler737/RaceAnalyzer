@@ -249,6 +249,10 @@ class Course(Base):
     m_per_km = Column(Float, nullable=True)
     course_type = Column(SAEnum(CourseType), nullable=True)
 
+    # Profile data (pre-computed from RWGPS track points)
+    profile_json = Column(Text, nullable=True)  # [{d, e, y, x, g}, ...]
+    climbs_json = Column(Text, nullable=True)  # [{start_d, end_d, ...}, ...]
+
     # Metadata
     extracted_at = Column(DateTime, nullable=True)
     source = Column(String, default="rwgps")  # "rwgps", "manual", "strava"

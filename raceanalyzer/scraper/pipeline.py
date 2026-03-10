@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -49,7 +48,7 @@ class ScrapeOrchestrator:
             self._archive_raw(race_id, html, raw_json)
 
             # Persist to database
-            race = self._persist_race(metadata, results)
+            self._persist_race(metadata, results)
 
             log_entry = ScrapeLog(
                 race_id=race_id,

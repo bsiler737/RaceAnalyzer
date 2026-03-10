@@ -465,6 +465,97 @@ def elevation_extract(ctx, force):
     click.echo(f"Extracted {extracted} courses ({skipped} skipped).")
 
 
+@main.command("course-profile-extract")
+@click.option("--force", is_flag=True, help="Re-extract even if profile data exists.")
+@click.pass_context
+def course_profile_extract(ctx, force):
+    """Extract course profiles and detect climbs from RWGPS route track points."""
+    import json
+    import time
+    from datetime import datetime
+
+    settings = ctx.obj["settings"]
+
+    from raceanalyzer.db.engine import get_session, init_db
+    from raceanalyzer.db.models import Course, RaceSeries
+    from raceanalyzer.elevation import build_profile, detect_climbs, extract_track_points
+
+    init_db(settings.db_path)
+    session = get_session(settings.db_path)
+
+    # Find series with RWGPS route IDs and existing Course rows
+    series_list = (
+        session.query(RaceSeries)
+        .filter(RaceSeries.rwgps_route_id.isnot(None))
+        .all()
+    )
+    click.echo(f"Found {len(series_list)} series with RWGPS routes.")
+
+    extracted = 0
+    skipped = 0
+    for series in series_list:
+        course = (
+            session.query(Course)
+            .filter(Course.series_id == series.id)
+            .first()
+        )
+        if not course:
+            click.echo(
+                f"  Skipping {series.display_name}: no Course row yet"
+                " (run elevation-extract first)."
+            )
+            continue
+
+        if course.profile_json and not force:
+            skipped += 1
+            continue
+
+        click.echo(
+            f"  Extracting profile: {series.display_name}"
+            f" (route {series.rwgps_route_id})..."
+        )
+
+        try:
+            import requests as req
+
+            resp = req.get(
+                f"https://ridewithgps.com/routes/{series.rwgps_route_id}.json",
+                headers={"User-Agent": "RaceAnalyzer/0.1"},
+                timeout=15,
+            )
+            if not resp.ok:
+                click.echo(f"    HTTP {resp.status_code}, skipping.")
+                continue
+
+            route_json = resp.json()
+            track_points = extract_track_points(route_json)
+
+            if not track_points:
+                click.echo("    No track points with elevation, skipping.")
+                continue
+
+            profile = build_profile(track_points)
+            climbs = detect_climbs(profile)
+
+            course.profile_json = json.dumps(profile)
+            course.climbs_json = json.dumps(climbs)
+            course.extracted_at = datetime.utcnow()
+            extracted += 1
+
+            click.echo(
+                f"    {len(profile)} profile points, {len(climbs)} climbs detected"
+            )
+
+        except Exception as exc:
+            click.echo(f"    Error: {exc}")
+
+        time.sleep(settings.min_request_delay)
+
+    session.commit()
+    session.close()
+    click.echo(f"Extracted {extracted} profiles ({skipped} skipped).")
+
+
 @main.command("override-route")
 @click.argument("series_id", type=int)
 @click.argument("rwgps_route_id", type=int)

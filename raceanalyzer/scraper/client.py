@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-import time
-
 import re
+import time
 
 import cloudscraper
 import requests
@@ -53,7 +52,9 @@ class RoadResultsClient:
                     raise RaceNotFoundError(f"Race not found: {url}")
                 if response.status_code in (403, 429) or response.status_code >= 500:
                     wait = self._settings.retry_backoff_base**attempt
-                    logger.warning("HTTP %d for %s, retry in %.1fs", response.status_code, url, wait)
+                    logger.warning(
+                        "HTTP %d for %s, retry in %.1fs", response.status_code, url, wait
+                    )
                     time.sleep(wait)
                     continue
                 response.raise_for_status()

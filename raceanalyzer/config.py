@@ -34,3 +34,23 @@ class Settings:
     # Prediction settings
     prediction_min_editions: int = 2
     prediction_min_results: int = 5
+
+    # Climb detection thresholds
+    climb_entry_grade: float = 2.5
+    climb_entry_sustain_m: float = 150.0
+    climb_exit_grade: float = 1.0
+    climb_exit_sustain_m: float = 200.0
+    climb_merge_gap_m: float = 150.0
+    climb_min_length_m: float = 500.0
+    climb_min_gain_m: float = 20.0
+    climb_min_avg_grade: float = 3.0
+
+    # Speed outlier bounds (kph)
+    speed_min_kph: float = 15.0
+    speed_max_kph: float = 55.0
+    speed_top_k: int = 10
+
+    # Drop rate label thresholds
+    drop_rate_low_max: float = 0.10
+    drop_rate_moderate_max: float = 0.25
+    drop_rate_high_max: float = 0.40
