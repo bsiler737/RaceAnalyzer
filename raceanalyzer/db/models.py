@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -318,6 +319,39 @@ class RefreshLog(Base):
 
     __table_args__ = (
         Index("ix_refresh_log_lookup", "race_id", "refresh_type"),
+    )
+
+
+class SeriesPrediction(Base):
+    """Pre-computed predictions for a series + category pair (Sprint 011)."""
+
+    __tablename__ = "series_predictions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    series_id = Column(Integer, ForeignKey("race_series.id"), index=True)
+    category = Column(String, nullable=True)
+
+    predicted_finish_type = Column(String, nullable=True)
+    confidence = Column(String, nullable=True)
+    edition_count = Column(Integer, default=0)
+    distribution_json = Column(Text, nullable=True)
+
+    drop_rate = Column(Float, nullable=True)
+    drop_rate_label = Column(String, nullable=True)
+
+    typical_winner_duration_min = Column(Float, nullable=True)
+    typical_field_duration_min = Column(Float, nullable=True)
+
+    field_size_median = Column(Integer, nullable=True)
+    field_size_min = Column(Integer, nullable=True)
+    field_size_max = Column(Integer, nullable=True)
+
+    last_computed = Column(DateTime, server_default=func.now())
+
+    series = relationship("RaceSeries", backref="predictions")
+
+    __table_args__ = (
+        UniqueConstraint("series_id", "category", name="uq_series_cat"),
     )
 
 

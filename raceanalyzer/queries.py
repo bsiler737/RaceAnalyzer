@@ -6,6 +6,11 @@ Separated from the UI for testability and reuse.
 
 from __future__ import annotations
 
+import enum
+import logging
+import time
+from datetime import date, datetime
+from itertools import groupby
 from typing import Optional
 
 import pandas as pd
@@ -14,6 +19,88 @@ from sqlalchemy.orm import Session
 
 from raceanalyzer.config import Settings
 from raceanalyzer.db.models import Course, Race, RaceClassification, RaceSeries, RaceType, Result
+
+logger = logging.getLogger("raceanalyzer")
+
+
+class Discipline(str, enum.Enum):
+    ROAD = "road"
+    GRAVEL = "gravel"
+    CYCLOCROSS = "cyclocross"
+    MTB = "mtb"
+    TRACK = "track"
+    UNKNOWN = "unknown"
+
+
+RACE_TYPE_TO_DISCIPLINE = {
+    RaceType.CRITERIUM: Discipline.ROAD,
+    RaceType.ROAD_RACE: Discipline.ROAD,
+    RaceType.HILL_CLIMB: Discipline.ROAD,
+    RaceType.STAGE_RACE: Discipline.ROAD,
+    RaceType.TIME_TRIAL: Discipline.ROAD,
+    RaceType.GRAVEL: Discipline.GRAVEL,
+}
+
+
+def discipline_for_race_type(race_type):
+    if race_type is None:
+        return Discipline.UNKNOWN
+    return RACE_TYPE_TO_DISCIPLINE.get(race_type, Discipline.UNKNOWN)
+
+
+class PerfTimer:
+    def __init__(self, label):
+        self.label = label
+        self.elapsed_ms = 0.0
+
+    def __enter__(self):
+        self._start = time.perf_counter()
+        return self
+
+    def __exit__(self, *exc):
+        self.elapsed_ms = (time.perf_counter() - self._start) * 1000
+        logger.info("[perf] %s: %.1fms", self.label, self.elapsed_ms)
+
+
+PERF_BUDGET_COLD_MS = 1000
+PERF_BUDGET_WARM_MS = 200
+
+
+def countdown_label(days_until):
+    if days_until is None:
+        return ""
+    if days_until == 0:
+        return "Today"
+    if days_until == 1:
+        return "Tomorrow"
+    if days_until <= 14:
+        return f"in {days_until} days"
+    weeks = days_until // 7
+    return f"in {weeks} weeks"
+
+
+def group_by_month(items):
+    upcoming = sorted(
+        [i for i in items if i["is_upcoming"]],
+        key=lambda i: i["upcoming_date"] or date.max,
+    )
+    historical = [i for i in items if not i["is_upcoming"]]
+
+    groups = []
+    for (year, month), group_items in groupby(
+        upcoming,
+        key=lambda i: (
+            (i["upcoming_date"].year, i["upcoming_date"].month)
+            if i.get("upcoming_date")
+            else (9999, 12)
+        ),
+    ):
+        header = f"{date(year, month, 1):%B %Y}"
+        groups.append((header, list(group_items)))
+
+    if historical:
+        groups.append(("Past Races", historical))
+    return groups
 
 # --- Race type inference ---
 
@@ -925,7 +1012,7 @@ def get_feed_items(
     Sorted: racing-soon upcoming first, then other upcoming, then historical.
     """
     import json
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     from raceanalyzer.predictions import predict_series_finish_type
 
@@ -1141,3 +1228,410 @@ def _snippet(text: str, max_sentences: int = 2, max_chars: int = 200) -> str:
     if len(result) > max_chars:
         result = result[: max_chars - 3].rstrip() + "..."
     return result
+
+
+# --- Sprint 011: Batch feed queries ---
+
+
+def get_feed_items_batch(
+    session,
+    *,
+    category=None,
+    search_query=None,
+    discipline_filter=None,
+    race_type_filter=None,
+    state_filter=None,
+    team_name=None,
+):
+    """Batch-load feed items in <=6 SQL queries. Returns list[dict] with Tier 1 data."""
+    from raceanalyzer.db.models import Course, SeriesPrediction
+
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Query 1: All series (optionally filtered by search)
+    with PerfTimer("Q1: series"):
+        if search_query and search_query.strip():
+            matching_ids = search_series(session, search_query)
+            if not matching_ids:
+                return []
+            series_rows = (
+                session.query(RaceSeries)
+                .filter(RaceSeries.id.in_(matching_ids))
+                .all()
+            )
+        else:
+            series_rows = session.query(RaceSeries).all()
+
+    if not series_rows:
+        return []
+
+    series_ids = [s.id for s in series_rows]
+    series_map = {s.id: s for s in series_rows}
+
+    # Query 2: All races for these series (batch)
+    with PerfTimer("Q2: races"):
+        all_races = (
+            session.query(Race)
+            .filter(Race.series_id.in_(series_ids))
+            .order_by(Race.date.desc())
+            .all()
+        )
+
+    # Group races by series
+    races_by_series = {}
+    for race in all_races:
+        races_by_series.setdefault(race.series_id, []).append(race)
+
+    # Query 3: All courses (batch)
+    with PerfTimer("Q3: courses"):
+        courses = (
+            session.query(Course)
+            .filter(Course.series_id.in_(series_ids))
+            .all()
+        )
+    course_map = {c.series_id: c for c in courses}
+
+    # Query 4: Pre-computed predictions (batch)
+    with PerfTimer("Q4: predictions"):
+        pred_query = session.query(SeriesPrediction).filter(
+            SeriesPrediction.series_id.in_(series_ids)
+        )
+        if category:
+            pred_query = pred_query.filter(
+                (SeriesPrediction.category == category)
+                | (SeriesPrediction.category.is_(None))
+            )
+        predictions = pred_query.all()
+
+    # Build prediction map: (series_id, category) -> prediction
+    pred_map = {}
+    for p in predictions:
+        key = (p.series_id, p.category)
+        pred_map[key] = p
+
+    # Query 5: Teammate matches (if team_name set)
+    teammates_map = {}
+    if team_name and len(team_name.strip()) >= 3:
+        with PerfTimer("Q5: teammates"):
+            teammates_map = get_teammates_by_series(
+                session, series_ids, category, team_name
+            )
+
+    # Build items
+    items = []
+    for sid in series_ids:
+        series = series_map[sid]
+        races = races_by_series.get(sid, [])
+        if not races:
+            continue
+
+        # Find upcoming and most recent
+        upcoming_race = None
+        most_recent = races[0]  # already sorted desc
+        for race in races:
+            if race.date and race.date >= today:
+                if upcoming_race is None or race.date < upcoming_race.date:
+                    upcoming_race = race
+
+        is_upcoming = upcoming_race is not None
+        days_until = None
+        if upcoming_race and upcoming_race.date:
+            days_until = (upcoming_race.date - today).days
+
+        # Apply filters
+        race_type_val = most_recent.race_type
+        disc = discipline_for_race_type(race_type_val)
+        if discipline_filter and disc.value not in discipline_filter:
+            continue
+        if race_type_filter and (
+            not race_type_val or race_type_val.value not in race_type_filter
+        ):
+            continue
+        if state_filter and most_recent.state_province not in state_filter:
+            continue
+
+        # Course data
+        course_row = course_map.get(sid)
+        course_type = None
+        distance_m = None
+        total_gain_m = None
+        if course_row:
+            course_type = (
+                course_row.course_type.value if course_row.course_type else None
+            )
+            distance_m = course_row.distance_m
+            total_gain_m = course_row.total_gain_m
+
+        # Predictions from pre-computed table
+        pred = pred_map.get((sid, category)) or pred_map.get((sid, None))
+        predicted_ft = pred.predicted_finish_type if pred else None
+        confidence = pred.confidence if pred else None
+        drop_rate_pct = (
+            round(pred.drop_rate * 100)
+            if pred and pred.drop_rate is not None
+            else None
+        )
+        drop_rate_label_val = pred.drop_rate_label if pred else None
+        field_size_display = None
+        if pred and pred.field_size_median:
+            if (
+                pred.field_size_min
+                and pred.field_size_max
+                and pred.field_size_min != pred.field_size_max
+            ):
+                field_size_display = (
+                    f"Usually {pred.field_size_min}-{pred.field_size_max} starters"
+                )
+            else:
+                field_size_display = f"Usually {pred.field_size_median} starters"
+
+        # Teammate names
+        teammate_names = teammates_map.get(sid, [])
+
+        race_type_str = race_type_val.value if race_type_val else None
+
+        item = {
+            "series_id": sid,
+            "display_name": series.display_name,
+            "location": most_recent.location,
+            "state_province": most_recent.state_province,
+            "edition_count": len(races),
+            "is_upcoming": is_upcoming,
+            "upcoming_date": upcoming_race.date if upcoming_race else None,
+            "days_until": days_until,
+            "countdown_label": countdown_label(days_until),
+            "registration_url": (
+                upcoming_race.registration_url if upcoming_race else None
+            ),
+            "most_recent_date": most_recent.date,
+            "race_type": race_type_str,
+            "discipline": disc.value,
+            "predicted_finish_type": (
+                predicted_ft
+                if predicted_ft and predicted_ft != "unknown"
+                else None
+            ),
+            "confidence": confidence,
+            "course_type": course_type,
+            "distance_m": distance_m,
+            "total_gain_m": total_gain_m,
+            "drop_rate_pct": drop_rate_pct,
+            "drop_rate_label": drop_rate_label_val,
+            "field_size_display": field_size_display,
+            "teammate_names": teammate_names,
+        }
+        items.append(item)
+
+    # Sort: upcoming by date asc, then historical by most_recent desc
+    def sort_key(item):
+        if item["is_upcoming"]:
+            return (0, item["upcoming_date"] or datetime.max, item["display_name"])
+        else:
+            epoch = datetime(1970, 1, 1)
+            d = item["most_recent_date"]
+            inv = datetime.max - (d - epoch) if d else datetime.min
+            return (1, inv, item["display_name"])
+
+    items.sort(key=sort_key)
+    return items
+
+
+def get_feed_item_detail(session, series_id, category=None):
+    """Load Tier 2 detail data for a single series (on demand)."""
+    import json
+
+    from raceanalyzer.predictions import (
+        calculate_drop_rate,
+        calculate_typical_duration,
+        generate_narrative,
+        predict_series_finish_type,
+        racer_type_description,
+    )
+
+    # Course data for sparkline and climbs
+    course_row = session.query(Course).filter(Course.series_id == series_id).first()
+    sparkline_points = []
+    climbs_data = None
+    course_type = None
+    distance_m = None
+    total_gain_m = None
+
+    if course_row:
+        course_type = (
+            course_row.course_type.value if course_row.course_type else None
+        )
+        distance_m = course_row.distance_m
+        total_gain_m = course_row.total_gain_m
+        if course_row.profile_json:
+            try:
+                profile = json.loads(course_row.profile_json)
+                sparkline_points = _downsample_profile(profile)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if course_row.climbs_json:
+            try:
+                climbs_data = json.loads(course_row.climbs_json)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    # Prediction (for narrative)
+    prediction = predict_series_finish_type(session, series_id, category=category)
+    predicted_ft = prediction["predicted_finish_type"]
+
+    # Drop rate
+    dr = calculate_drop_rate(session, series_id, category=category)
+
+    # Duration
+    duration = calculate_typical_duration(session, series_id, category=category)
+
+    # Racer type description
+    racer_desc = racer_type_description(course_type, predicted_ft)
+
+    # Narrative
+    distance_km = distance_m / 1000.0 if distance_m else None
+    narrative = generate_narrative(
+        course_type=course_type,
+        predicted_finish_type=predicted_ft if predicted_ft != "unknown" else None,
+        drop_rate=dr,
+        distance_km=distance_km,
+        total_gain_m=total_gain_m,
+        climbs=climbs_data,
+        edition_count=prediction["edition_count"],
+    )
+    narrative_snippet = _snippet(narrative, max_sentences=2, max_chars=200)
+
+    # Editions summary
+    editions = (
+        session.query(Race)
+        .filter(Race.series_id == series_id)
+        .order_by(Race.date.desc())
+        .all()
+    )
+    editions_summary = []
+    for ed in editions:
+        year = ed.date.year if ed.date else None
+        ed_ft = _compute_overall_finish_type(session, ed.id)
+        editions_summary.append(
+            {
+                "year": year,
+                "finish_type": ed_ft,
+                "finish_type_display": finish_type_display_name(ed_ft),
+            }
+        )
+
+    return {
+        "narrative_snippet": narrative_snippet,
+        "narrative": narrative,
+        "elevation_sparkline_points": sparkline_points,
+        "climb_highlight": climb_highlight(climbs_data),
+        "racer_type_description": racer_desc,
+        "duration_minutes": duration,
+        "editions_summary": editions_summary,
+    }
+
+
+def get_teammates_by_series(session, series_ids, category, team_name):
+    """Find teammates across multiple series by team name substring match."""
+    from raceanalyzer.db.models import Startlist
+
+    if not team_name or len(team_name.strip()) < 3:
+        return {}
+    normalized = team_name.strip()
+    query = session.query(Startlist.series_id, Startlist.rider_name).filter(
+        Startlist.series_id.in_(series_ids),
+        func.lower(Startlist.team).contains(normalized.lower()),
+    )
+    if category:
+        query = query.filter(Startlist.category == category)
+
+    result = {}
+    for sid, name in query.all():
+        result.setdefault(sid, []).append(name)
+    return result
+
+
+def compute_similarity(series_a, series_b):
+    """Score similarity between two series (0-100)."""
+    score = 0.0
+    if series_a.get("course_type") and series_a["course_type"] == series_b.get(
+        "course_type"
+    ):
+        score += 40
+    if series_a.get("predicted_finish_type") and series_a[
+        "predicted_finish_type"
+    ] == series_b.get("predicted_finish_type"):
+        score += 30
+    da, db = series_a.get("distance_m"), series_b.get("distance_m")
+    if da and db and da > 0 and db > 0:
+        ratio = min(da, db) / max(da, db)
+        if ratio > 0.75:
+            score += 20 * ((ratio - 0.75) / 0.25)
+    if series_a.get("discipline") and series_a["discipline"] == series_b.get(
+        "discipline"
+    ):
+        score += 10
+    return score
+
+
+def get_similar_series(session, series_id, all_items=None, top_n=3, min_score=50):
+    """Find similar series to the given one."""
+    if all_items is None:
+        all_items = get_feed_items_batch(session)
+
+    target = None
+    candidates = []
+    for item in all_items:
+        if item["series_id"] == series_id:
+            target = item
+        else:
+            candidates.append(item)
+
+    if target is None:
+        return []
+
+    scored = []
+    for c in candidates:
+        s = compute_similarity(target, c)
+        if s >= min_score:
+            scored.append((s, c))
+
+    scored.sort(key=lambda x: -x[0])
+    return [(score, item) for score, item in scored[:top_n]]
+
+
+def get_startlist_team_blocks(session, series_id, category=None, team_name=None):
+    """Get startlist grouped by team for a series."""
+    from raceanalyzer.db.models import Startlist
+
+    query = session.query(Startlist).filter(Startlist.series_id == series_id)
+    if category:
+        query = query.filter(Startlist.category == category)
+    entries = query.all()
+
+    if not entries:
+        return []
+
+    teams = {}
+    for e in entries:
+        team = e.team or "Unattached"
+        teams.setdefault(team, []).append(
+            {
+                "name": e.rider_name,
+                "carried_points": e.carried_points,
+            }
+        )
+
+    # Sort teams by size descending
+    blocks = []
+    for team_name_val, riders in sorted(teams.items(), key=lambda x: -len(x[1])):
+        blocks.append(
+            {
+                "team": team_name_val,
+                "riders": sorted(
+                    riders, key=lambda r: -(r.get("carried_points") or 0)
+                ),
+                "count": len(riders),
+            }
+        )
+
+    return blocks

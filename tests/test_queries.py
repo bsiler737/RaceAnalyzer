@@ -564,3 +564,237 @@ class TestSnippet:
     def test_empty(self):
         assert queries._snippet("") == ""
         assert queries._snippet(None) == ""
+
+
+# --- Sprint 011: New query tests ---
+
+
+class TestDiscipline:
+    def test_road_types(self):
+        from raceanalyzer.db.models import RaceType
+
+        assert (
+            queries.discipline_for_race_type(RaceType.CRITERIUM)
+            == queries.Discipline.ROAD
+        )
+        assert (
+            queries.discipline_for_race_type(RaceType.ROAD_RACE)
+            == queries.Discipline.ROAD
+        )
+        assert (
+            queries.discipline_for_race_type(RaceType.TIME_TRIAL)
+            == queries.Discipline.ROAD
+        )
+
+    def test_gravel(self):
+        from raceanalyzer.db.models import RaceType
+
+        assert (
+            queries.discipline_for_race_type(RaceType.GRAVEL)
+            == queries.Discipline.GRAVEL
+        )
+
+    def test_none(self):
+        assert queries.discipline_for_race_type(None) == queries.Discipline.UNKNOWN
+
+    def test_unknown_type(self):
+        assert queries.discipline_for_race_type(None) == queries.Discipline.UNKNOWN
+
+
+class TestCountdownLabel:
+    def test_today(self):
+        assert queries.countdown_label(0) == "Today"
+
+    def test_tomorrow(self):
+        assert queries.countdown_label(1) == "Tomorrow"
+
+    def test_few_days(self):
+        assert queries.countdown_label(4) == "in 4 days"
+
+    def test_two_weeks(self):
+        assert queries.countdown_label(14) == "in 14 days"
+
+    def test_weeks(self):
+        assert queries.countdown_label(21) == "in 3 weeks"
+
+    def test_none(self):
+        assert queries.countdown_label(None) == ""
+
+
+class TestGroupByMonth:
+    def test_groups_upcoming(self):
+        from datetime import datetime
+
+        items = [
+            {"is_upcoming": True, "upcoming_date": datetime(2026, 3, 15)},
+            {"is_upcoming": True, "upcoming_date": datetime(2026, 3, 20)},
+            {"is_upcoming": True, "upcoming_date": datetime(2026, 4, 5)},
+            {"is_upcoming": False, "most_recent_date": datetime(2025, 6, 1)},
+        ]
+        groups = queries.group_by_month(items)
+        assert len(groups) == 3  # March, April, Past Races
+        assert groups[0][0] == "March 2026"
+        assert len(groups[0][1]) == 2
+        assert groups[1][0] == "April 2026"
+        assert groups[2][0] == "Past Races"
+
+    def test_no_upcoming(self):
+        from datetime import datetime
+
+        items = [
+            {"is_upcoming": False, "most_recent_date": datetime(2025, 6, 1)},
+        ]
+        groups = queries.group_by_month(items)
+        assert len(groups) == 1
+        assert groups[0][0] == "Past Races"
+
+    def test_empty(self):
+        groups = queries.group_by_month([])
+        assert groups == []
+
+
+class TestPerfTimer:
+    def test_measures_time(self):
+        import time
+
+        with queries.PerfTimer("test") as t:
+            time.sleep(0.01)
+        assert t.elapsed_ms > 0
+
+
+class TestGetFeedItemsBatch:
+    def test_returns_items(self, seeded_series_session):
+        # First precompute predictions
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        assert len(items) > 0
+
+    def test_has_tier1_keys(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        required = {
+            "series_id",
+            "display_name",
+            "is_upcoming",
+            "countdown_label",
+            "discipline",
+            "race_type",
+            "teammate_names",
+        }
+        for item in items:
+            missing = required - set(item.keys())
+            assert not missing, f"Missing keys: {missing}"
+
+    def test_empty_db(self, session):
+        items = queries.get_feed_items_batch(session)
+        assert items == []
+
+    def test_search_filter(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(
+            seeded_series_session, search_query="banana"
+        )
+        assert len(items) >= 1
+        assert all("banana" in i["display_name"].lower() for i in items)
+
+    def test_state_filter(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(
+            seeded_series_session, state_filter=["WA"]
+        )
+        assert all(i["state_province"] == "WA" for i in items)
+
+
+class TestGetFeedItemDetail:
+    def test_returns_detail(self, seeded_series_session):
+        from raceanalyzer.db.models import RaceSeries
+
+        series = seeded_series_session.query(RaceSeries).first()
+        detail = queries.get_feed_item_detail(seeded_series_session, series.id)
+        assert detail is not None
+        assert "narrative_snippet" in detail
+        assert "editions_summary" in detail
+
+    def test_editions_have_finish_type(self, seeded_series_session):
+        from raceanalyzer.db.models import RaceSeries
+
+        series = seeded_series_session.query(RaceSeries).first()
+        detail = queries.get_feed_item_detail(seeded_series_session, series.id)
+        for ed in detail["editions_summary"]:
+            assert "finish_type_display" in ed
+
+
+class TestComputeSimilarity:
+    def test_identical_series(self):
+        a = {
+            "course_type": "flat",
+            "predicted_finish_type": "bunch_sprint",
+            "distance_m": 40000,
+            "discipline": "road",
+        }
+        score = queries.compute_similarity(a, a)
+        assert score == 100
+
+    def test_different_series(self):
+        a = {
+            "course_type": "flat",
+            "predicted_finish_type": "bunch_sprint",
+            "distance_m": 40000,
+            "discipline": "road",
+        }
+        b = {
+            "course_type": "hilly",
+            "predicted_finish_type": "gc_selective",
+            "distance_m": 100000,
+            "discipline": "road",
+        }
+        score = queries.compute_similarity(a, b)
+        assert score < 50
+
+    def test_missing_fields(self):
+        a = {
+            "course_type": None,
+            "predicted_finish_type": None,
+            "distance_m": None,
+            "discipline": None,
+        }
+        b = {
+            "course_type": "flat",
+            "predicted_finish_type": "bunch_sprint",
+            "distance_m": 40000,
+            "discipline": "road",
+        }
+        score = queries.compute_similarity(a, b)
+        assert score == 0
+
+
+class TestGetTeammatesBySeriesEmpty:
+    def test_short_name_rejected(self, seeded_series_session):
+        result = queries.get_teammates_by_series(
+            seeded_series_session, [1], None, "AB"
+        )
+        assert result == {}
+
+    def test_none_name(self, seeded_series_session):
+        result = queries.get_teammates_by_series(
+            seeded_series_session, [1], None, None
+        )
+        assert result == {}
+
+    def test_empty_name(self, seeded_series_session):
+        result = queries.get_teammates_by_series(
+            seeded_series_session, [1], None, ""
+        )
+        assert result == {}

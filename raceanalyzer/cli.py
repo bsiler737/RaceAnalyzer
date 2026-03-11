@@ -404,6 +404,27 @@ def build_series_cmd(ctx):
     session.close()
 
 
+@main.command("compute-predictions")
+@click.pass_context
+def compute_predictions(ctx):
+    """Pre-compute series predictions for the feed (Sprint 011)."""
+    settings = ctx.obj["settings"]
+
+    from raceanalyzer.db.engine import get_session, init_db
+    from raceanalyzer.precompute import precompute_all
+
+    init_db(settings.db_path)
+    session = get_session(settings.db_path)
+
+    click.echo("Pre-computing series predictions...")
+    summary = precompute_all(session)
+    click.echo(
+        f"Computed {summary['predictions_count']} predictions "
+        f"across {summary['series_count']} series."
+    )
+    session.close()
+
+
 @main.command("match-routes")
 @click.option("--dry-run", is_flag=True, help="Show matches without saving.")
 @click.option("--min-score", type=float, default=0.25, help="Minimum match score.")
