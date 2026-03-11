@@ -602,26 +602,8 @@ def render_elevation_sparkline(
 
 
 def render_feed_card(item: dict):
-    """Render the rich content of a feed card (Sprint 010 Phase 2)."""
-    from raceanalyzer.queries import finish_type_plain_english
-
-    # Row 1: Badges (plain-English finish type, terrain, drop rate)
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        if item.get("predicted_finish_type"):
-            plain = finish_type_plain_english(item["predicted_finish_type"])
-            if plain:
-                st.write(plain)
-            from raceanalyzer.queries import finish_type_display_name
-            st.caption(finish_type_display_name(item["predicted_finish_type"]))
-    with col2:
-        if item.get("course_type"):
-            render_terrain_badge(item["course_type"])
-    with col3:
-        if item.get("drop_rate_pct") is not None:
-            st.caption(f"{item['drop_rate_pct']}% drop rate")
-
-    # Row 2: Narrative snippet + sparkline
+    """Render Tier 2 detail content inside an expanded feed card (Sprint 011)."""
+    # Narrative + racer type
     text_col, spark_col = st.columns([3, 1])
     with text_col:
         if item.get("narrative_snippet"):
@@ -632,7 +614,7 @@ def render_feed_card(item: dict):
         if item.get("elevation_sparkline_points"):
             render_elevation_sparkline(item["elevation_sparkline_points"])
 
-    # Row 3: Duration + climb highlight
+    # Duration + climb highlight
     if item.get("duration_minutes") or item.get("climb_highlight"):
         if item.get("duration_minutes"):
             winner_m = item["duration_minutes"]["winner_duration_minutes"]
@@ -641,11 +623,7 @@ def render_feed_card(item: dict):
         if item.get("climb_highlight"):
             st.caption(item["climb_highlight"])
 
-    # Row 4: Registration + full preview link
-    if item.get("is_upcoming") and item.get("registration_url"):
-        st.markdown(f"[Register]({item['registration_url']})")
-
-    # Row 5: Historical editions
+    # Historical editions
     editions = item.get("editions_summary", [])
     if editions and len(editions) > 1:
         with st.popover(f"{len(editions)} previous editions"):
@@ -699,3 +677,135 @@ def render_climb_legend():
         f'{items_html}</div>',
         unsafe_allow_html=True,
     )
+
+
+def render_feed_filters(session) -> dict:
+    """Render sidebar filters: discipline, race type, state/region.
+
+    Returns dict with filter values. Syncs to st.query_params.
+    """
+    from raceanalyzer.queries import (
+        RACE_TYPE_TO_DISCIPLINE,
+        Discipline,
+        race_type_display_name,
+    )
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Feed Filters")
+
+    # Discipline filter
+    disc_options = [d.value for d in Discipline if d != Discipline.UNKNOWN]
+    current_disc = (
+        st.query_params.get("discipline", "").split(",")
+        if st.query_params.get("discipline")
+        else []
+    )
+    current_disc = [d for d in current_disc if d in disc_options]
+
+    selected_disc = st.sidebar.multiselect(
+        "Discipline",
+        options=disc_options,
+        default=current_disc or disc_options,
+        format_func=lambda x: x.title(),
+        key="filter_discipline",
+    )
+
+    # Sync to query params
+    if set(selected_disc) != set(disc_options):
+        new_val = ",".join(selected_disc)
+        if st.query_params.get("discipline") != new_val:
+            st.query_params["discipline"] = new_val
+    elif "discipline" in st.query_params:
+        del st.query_params["discipline"]
+
+    # Race type filter (conditional on discipline)
+    available_types = []
+    for rt, d in RACE_TYPE_TO_DISCIPLINE.items():
+        if d.value in selected_disc:
+            available_types.append(rt.value)
+
+    current_rt = (
+        st.query_params.get("race_type", "").split(",")
+        if st.query_params.get("race_type")
+        else []
+    )
+    current_rt = [r for r in current_rt if r in available_types]
+
+    if available_types:
+        selected_rt = st.sidebar.multiselect(
+            "Race Type",
+            options=available_types,
+            default=current_rt or available_types,
+            format_func=lambda x: race_type_display_name(x),
+            key="filter_race_type",
+        )
+        if set(selected_rt) != set(available_types):
+            new_val = ",".join(selected_rt)
+            if st.query_params.get("race_type") != new_val:
+                st.query_params["race_type"] = new_val
+        elif "race_type" in st.query_params:
+            del st.query_params["race_type"]
+    else:
+        selected_rt = []
+
+    # State/region filter
+    states = _cached_states(session)
+    current_states = (
+        st.query_params.get("states", "").split(",")
+        if st.query_params.get("states")
+        else []
+    )
+    current_states = [s for s in current_states if s in states]
+
+    selected_states = st.sidebar.multiselect(
+        "State/Region",
+        options=states,
+        default=current_states or states,
+        key="filter_states",
+    )
+    if set(selected_states) != set(states):
+        new_val = ",".join(selected_states)
+        if st.query_params.get("states") != new_val:
+            st.query_params["states"] = new_val
+    elif "states" in st.query_params:
+        del st.query_params["states"]
+
+    return {
+        "discipline": (
+            selected_disc if set(selected_disc) != set(disc_options) else None
+        ),
+        "race_type": (
+            selected_rt
+            if available_types and set(selected_rt) != set(available_types)
+            else None
+        ),
+        "states": (
+            selected_states if set(selected_states) != set(states) else None
+        ),
+    }
+
+
+def render_team_setting() -> str | None:
+    """Render team name input in sidebar. Returns team name or None."""
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("My Team")
+
+    current = st.query_params.get("team", "")
+    team_name = st.sidebar.text_input(
+        "Team name",
+        value=current,
+        placeholder="e.g. Audi Cycling",
+        key="team_name_input",
+    )
+
+    if team_name != current:
+        if team_name:
+            st.query_params["team"] = team_name
+        elif "team" in st.query_params:
+            del st.query_params["team"]
+
+    if team_name and len(team_name.strip()) < 3:
+        st.sidebar.caption("Enter at least 3 characters")
+        return None
+
+    return team_name.strip() if team_name and len(team_name.strip()) >= 3 else None

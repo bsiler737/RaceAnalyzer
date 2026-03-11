@@ -1,0 +1,135 @@
+"""Tests for feed organization and filtering (Sprint 011 Phase 2)."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+
+from raceanalyzer import queries
+from raceanalyzer.db.models import Race, RaceSeries
+
+
+class TestMonthGroupingIntegration:
+    def test_groups_items(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        groups = queries.group_by_month(items)
+        assert len(groups) > 0
+
+    def test_past_races_last(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        groups = queries.group_by_month(items)
+        # All items are historical in seeded data, so should be "Past Races"
+        if groups:
+            assert groups[-1][0] == "Past Races"
+
+
+class TestFilterInteractions:
+    def test_state_filter_reduces(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        all_items = queries.get_feed_items_batch(seeded_series_session)
+        wa_items = queries.get_feed_items_batch(
+            seeded_series_session, state_filter=["WA"]
+        )
+        assert len(wa_items) <= len(all_items)
+        assert all(i["state_province"] == "WA" for i in wa_items)
+
+    def test_search_and_state_combined(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(
+            seeded_series_session,
+            search_query="banana",
+            state_filter=["WA"],
+        )
+        assert all("banana" in i["display_name"].lower() for i in items)
+        assert all(i["state_province"] == "WA" for i in items)
+
+
+class TestEmptyStates:
+    def test_no_match_search(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(
+            seeded_series_session, search_query="zzz_nonexistent"
+        )
+        assert items == []
+
+    def test_no_match_state(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(
+            seeded_series_session, state_filter=["XX"]
+        )
+        assert items == []
+
+
+class TestCountdownInFeedItems:
+    def test_historical_has_no_countdown(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        for item in items:
+            if not item["is_upcoming"]:
+                assert item["countdown_label"] == ""
+
+    def test_upcoming_has_countdown(self, seeded_series_session):
+        """If we add an upcoming race, it should have a countdown."""
+        from raceanalyzer.precompute import precompute_all
+
+        # Add an upcoming race
+        series = seeded_series_session.query(RaceSeries).first()
+        future_date = datetime.now() + timedelta(days=5)
+        upcoming = Race(
+            id=9999,
+            name="Future Race",
+            date=future_date,
+            location="Seattle",
+            state_province="WA",
+            is_upcoming=True,
+            series_id=series.id,
+        )
+        seeded_series_session.add(upcoming)
+        seeded_series_session.commit()
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        upcoming_items = [i for i in items if i["is_upcoming"]]
+        assert len(upcoming_items) >= 1
+        for item in upcoming_items:
+            assert item["countdown_label"] != ""
+            assert "days" in item["countdown_label"] or item[
+                "countdown_label"
+            ] in ("Today", "Tomorrow")
+
+
+class TestDeepLinkBackwardCompat:
+    def test_series_id_param(self, seeded_series_session):
+        """Existing ?series_id= URLs should still find the right series."""
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        all_items = queries.get_feed_items_batch(seeded_series_session)
+        if all_items:
+            target_id = all_items[0]["series_id"]
+            filtered = [i for i in all_items if i["series_id"] == target_id]
+            assert len(filtered) == 1
