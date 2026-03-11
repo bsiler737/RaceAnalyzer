@@ -654,6 +654,36 @@ def render_feed_card(item: dict):
                 st.write(f"- {year_str}: {ed['finish_type_display']}")
 
 
+def render_global_category_filter(session) -> None:
+    """Render a persistent global category filter in the sidebar.
+
+    Reads/writes st.session_state.global_category.
+    Syncs to st.query_params['category'] for URL persistence (Sprint 010).
+    """
+    categories = _cached_categories(session)
+    current = st.session_state.get("global_category")
+
+    cat_options = [None] + categories
+    default_idx = 0
+    if current and current in categories:
+        default_idx = categories.index(current) + 1
+
+    chosen = st.sidebar.selectbox(
+        "Your Category",
+        options=cat_options,
+        index=default_idx,
+        format_func=lambda x: "All Categories" if x is None else x,
+        key="global_category_selector",
+    )
+
+    if chosen != current:
+        st.session_state["global_category"] = chosen
+        if chosen:
+            st.query_params["category"] = chosen
+        elif "category" in st.query_params:
+            del st.query_params["category"]
+
+
 def render_climb_legend():
     """Render a horizontal climb severity legend."""
     items_html = ""

@@ -33,6 +33,8 @@ def render():
         return
 
     selected_cat = st.query_params.get("category")
+    if not selected_cat:
+        selected_cat = st.session_state.get("global_category")
 
     preview = queries.get_race_preview(session, int(series_id), category=selected_cat)
     if preview is None:

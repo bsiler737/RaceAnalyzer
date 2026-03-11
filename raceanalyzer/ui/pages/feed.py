@@ -8,6 +8,7 @@ from raceanalyzer import queries
 from raceanalyzer.ui.components import (
     render_empty_state,
     render_feed_card,
+    render_global_category_filter,
 )
 
 FEED_PAGE_SIZE = 20
@@ -40,7 +41,8 @@ def render():
             elif "q" in st.query_params:
                 del st.query_params["q"]
 
-    # --- Category filter (read global if set) ---
+    # --- Global category filter in sidebar ---
+    render_global_category_filter(session)
     category = st.session_state.get("global_category")
 
     # --- Fetch feed items ---
@@ -63,6 +65,10 @@ def render():
                 if "q" in st.query_params:
                     del st.query_params["q"]
                 st.rerun()
+        elif category:
+            st.warning(
+                f"No races found for '{category}'. Try 'All Categories'."
+            )
         else:
             render_empty_state(
                 "No races found. Run `raceanalyzer scrape` to import data."

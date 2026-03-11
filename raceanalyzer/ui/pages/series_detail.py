@@ -106,9 +106,16 @@ def render():
     # --- Category selector ---
     categories = detail["categories"]
     if categories and not trend_df.empty:
+        # Default to global category if set
+        global_cat = st.session_state.get("global_category")
+        default_idx = 0
+        if global_cat and global_cat in categories:
+            default_idx = categories.index(global_cat) + 1
+
         selected_cat = st.selectbox(
             "Filter by category:",
             options=[None] + categories,
+            index=default_idx,
             format_func=lambda x: "All Categories" if x is None else x,
         )
         if selected_cat:
