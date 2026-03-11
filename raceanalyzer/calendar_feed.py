@@ -57,9 +57,9 @@ def search_upcoming_events_rr(settings: Optional[Settings] = None) -> list[dict]
                 "appTypes": "BIKEREG",
                 "minDate": today.isoformat(),
                 "userDistanceFilter": {
-                    "lat": settings.road_results_search_lat,
-                    "lon": settings.road_results_search_lon,
-                    "radius": settings.road_results_search_radius_miles,
+                    "latitude": settings.road_results_search_lat,
+                    "longitude": settings.road_results_search_lon,
+                    "distance": float(settings.road_results_search_radius_miles),
                 },
             },
         }
@@ -203,13 +203,20 @@ def _search_bikereg(
 
 
 def _parse_date(date_str: str) -> Optional[datetime]:
-    """Parse a date string from BikeReg. Returns None on failure."""
+    """Parse a date string from BikeReg or GraphQL. Returns None on failure."""
     if not date_str:
         return None
 
+    # Strip timezone offset for GraphQL dates like "2026-03-14T00:00:00.000-04:00"
+    import re
+
+    cleaned = re.sub(r"[+-]\d{2}:\d{2}$", "", date_str)
+    # Strip milliseconds like ".000"
+    cleaned = re.sub(r"\.\d+$", "", cleaned)
+
     for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%Y-%m-%dT%H:%M:%S"):
         try:
-            return datetime.strptime(date_str, fmt)
+            return datetime.strptime(cleaned, fmt)
         except ValueError:
             continue
 
