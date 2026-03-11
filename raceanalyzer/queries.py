@@ -363,15 +363,38 @@ def get_available_years(session: Session) -> list[int]:
     return [int(r[0]) for r in rows if r[0]]
 
 
+_STATE_NORMALIZE = {
+    "Oregon": "OR",
+    "OR.": "OR",
+    "US-OR": "OR",
+    "Washington": "WA",
+    "Wa": "WA",
+}
+
+
+def normalize_state(raw: str) -> str:
+    """Normalize state/province values to standard abbreviations."""
+    return _STATE_NORMALIZE.get(raw, raw)
+
+
 def get_available_states(session: Session) -> list[str]:
-    """Distinct state_province values, sorted."""
+    """Distinct state_province values, normalized and sorted."""
     rows = (
         session.query(distinct(Race.state_province))
         .filter(Race.state_province.isnot(None))
         .order_by(Race.state_province)
         .all()
     )
-    return [r[0] for r in rows if r[0]]
+    raw_states = [r[0] for r in rows if r[0]]
+    # Normalize and deduplicate
+    seen = set()
+    result = []
+    for s in raw_states:
+        norm = normalize_state(s)
+        if norm not in seen:
+            seen.add(norm)
+            result.append(norm)
+    return sorted(result)
 
 
 def confidence_label(
@@ -1338,16 +1361,17 @@ def get_feed_items_batch(
         if upcoming_race and upcoming_race.date:
             days_until = (upcoming_race.date - today).days
 
-        # Apply filters
+        # Apply filters — pass through races with unknown type/discipline
         race_type_val = most_recent.race_type
         disc = discipline_for_race_type(race_type_val)
-        if discipline_filter and disc.value not in discipline_filter:
+        if discipline_filter and disc != Discipline.UNKNOWN and disc.value not in discipline_filter:
             continue
-        if race_type_filter and (
-            not race_type_val or race_type_val.value not in race_type_filter
-        ):
-            continue
-        if state_filter and most_recent.state_province not in state_filter:
+        if race_type_filter and race_type_val is not None:
+            if race_type_val.value not in race_type_filter:
+                continue
+        raw_st = most_recent.state_province
+        norm_state = normalize_state(raw_st) if raw_st else None
+        if state_filter and norm_state not in state_filter:
             continue
 
         # Course data

@@ -177,7 +177,7 @@ def _render_container_card(
         loc_parts = []
         if item.get("location"):
             loc_parts.append(item["location"])
-        if item.get("state_province"):
+        if item.get("state_province") and item["state_province"] not in item.get("location", ""):
             loc_parts.append(item["state_province"])
         if loc_parts:
             header_parts.append(", ".join(loc_parts))

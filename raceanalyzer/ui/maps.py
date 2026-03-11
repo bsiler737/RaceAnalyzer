@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 
@@ -121,33 +120,11 @@ def render_interactive_course_profile(
     race_name: str = "",
     height: int = 700,
 ):
-    """Render interactive Leaflet map + Plotly elevation chart with hover sync.
+    """Render course map + Plotly elevation chart.
 
-    Falls back to render_course_map() + separate Plotly chart if template fails.
+    Uses Folium map + Plotly chart for reliable rendering across all courses.
     """
-    try:
-        template_path = _TEMPLATE_DIR / "course_profile.html"
-        html_template = template_path.read_text(encoding="utf-8")
-
-        course_data = json.dumps({
-            "profile": profile_points,
-            "climbs": climbs or [],
-            "race_name": race_name,
-        })
-
-        rendered = html_template.replace(
-            "__COURSE_DATA__", course_data
-        ).replace(
-            "__HEIGHT__", str(height)
-        )
-
-        st.components.v1.html(rendered, height=height, scrolling=False)
-
-    except Exception:
-        logger.warning(
-            "Interactive course profile failed, falling back to Folium + Plotly"
-        )
-        _render_fallback_profile(profile_points, climbs, race_name)
+    _render_fallback_profile(profile_points, climbs, race_name)
 
 
 def _render_fallback_profile(
