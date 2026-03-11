@@ -250,6 +250,119 @@ def seed_demo(ctx, num_races, seed):
     session.close()
 
 
+@main.command("ingest-raw")
+@click.pass_context
+def ingest_raw(ctx):
+    """Re-ingest results from archived raw HTML+JSON files in data/raw/.
+
+    Useful when the database was reset after scraping. Reads each pair of
+    {id}.html and {id}.json, parses them with the standard parsers, and
+    persists to the database exactly as a live scrape would.
+    """
+    import json
+    from datetime import datetime
+
+    from raceanalyzer.db.engine import get_session, init_db
+    from raceanalyzer.db.models import ScrapeLog
+    from raceanalyzer.scraper.errors import ExpectedParsingError, UnexpectedParsingError
+    from raceanalyzer.scraper.parsers import RacePageParser, RaceResultParser
+    from raceanalyzer.scraper.pipeline import ScrapeOrchestrator
+
+    settings = ctx.obj["settings"]
+    init_db(settings.db_path)
+    session = get_session(settings.db_path)
+
+    raw_dir = Path(settings.raw_data_dir)
+    if not raw_dir.exists():
+        click.echo(f"No raw data directory found at {raw_dir}", err=True)
+        raise SystemExit(1)
+
+    # Find all JSON files (each corresponds to a race)
+    json_files = sorted(raw_dir.glob("*.json"), key=lambda p: int(p.stem))
+    if not json_files:
+        click.echo("No raw JSON files found.", err=True)
+        raise SystemExit(1)
+
+    # Skip already-ingested race IDs
+    existing_ids = {
+        row[0]
+        for row in session.query(ScrapeLog.race_id)
+        .filter(ScrapeLog.status.in_(["success", "ingest"]))
+        .all()
+    }
+
+    # Build a lightweight orchestrator just for _persist_race
+    from raceanalyzer.scraper.client import RoadResultsClient
+
+    client = RoadResultsClient(settings)
+    orchestrator = ScrapeOrchestrator(client, session, settings)
+
+    success = 0
+    skipped = 0
+    errors = 0
+
+    click.echo(f"Found {len(json_files)} raw files, {len(existing_ids)} already ingested.")
+
+    for json_path in json_files:
+        race_id = int(json_path.stem)
+        html_path = raw_dir / f"{race_id}.html"
+
+        if race_id in existing_ids:
+            skipped += 1
+            continue
+
+        if not html_path.exists():
+            logger.warning("Missing HTML for race %d, skipping.", race_id)
+            errors += 1
+            continue
+
+        try:
+            html = html_path.read_text(encoding="utf-8")
+            raw_json = json.loads(json_path.read_text(encoding="utf-8"))
+
+            page_parser = RacePageParser(race_id, html)
+            metadata = page_parser.parse()
+
+            result_parser = RaceResultParser(race_id, raw_json)
+            results = result_parser.results()
+
+            orchestrator._persist_race(metadata, results)
+
+            session.add(ScrapeLog(
+                race_id=race_id,
+                status="ingest",
+                scraped_at=datetime.utcnow(),
+                result_count=len(results),
+            ))
+            session.commit()
+            success += 1
+
+        except (ExpectedParsingError, UnexpectedParsingError) as e:
+            session.rollback()
+            session.add(ScrapeLog(
+                race_id=race_id,
+                status="error",
+                scraped_at=datetime.utcnow(),
+                error_message=str(e),
+            ))
+            session.commit()
+            errors += 1
+            logger.debug("Parse error for race %d: %s", race_id, e)
+
+        except Exception as e:
+            session.rollback()
+            errors += 1
+            logger.warning("Error ingesting race %d: %s", race_id, e)
+
+        if (success + errors) % 100 == 0 and (success + errors) > 0:
+            click.echo(f"  Progress: {success} ingested, {errors} errors, {skipped} skipped...")
+
+    click.echo(
+        f"Done. Ingested {success} races, {errors} errors, {skipped} skipped."
+    )
+    session.close()
+
+
 @main.command("clear-demo")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
 @click.pass_context
@@ -363,14 +476,14 @@ def match_routes(ctx, dry_run, min_score):
                     series.rwgps_encoded_polyline = polyline
                     click.echo(f"    Cached polyline ({len(polyline)} chars)")
                 matched += 1
+                if not dry_run:
+                    session.commit()
         else:
             click.echo(f"  {series.display_name} -> no match")
 
         # Rate limit: 1 req/sec to RWGPS
         time.sleep(1.0)
 
-    if not dry_run:
-        session.commit()
     session.close()
 
     click.echo(f"Matched {matched}/{len(series_list)} series.")
@@ -593,24 +706,40 @@ def override_route(ctx, series_id, rwgps_route_id):
 @main.command("fetch-calendar")
 @click.option("--region", default="WA", help="State/region code (default: WA).")
 @click.option("--days-ahead", type=int, default=60, help="Days to look ahead (default: 60).")
+@click.option(
+    "--source",
+    type=click.Choice(["road-results", "bikereg"]),
+    default="road-results",
+    help="Data source (default: road-results).",
+)
 @click.pass_context
-def fetch_calendar(ctx, region, days_ahead):
-    """Import upcoming race dates from BikeReg."""
+def fetch_calendar(ctx, region, days_ahead, source):
+    """Discover upcoming races and match to existing series."""
+    from datetime import datetime as dt
 
     settings = ctx.obj["settings"]
 
-    from raceanalyzer.calendar_feed import match_event_to_series, search_upcoming_events
+    from raceanalyzer.calendar_feed import (
+        match_event_to_series,
+        search_upcoming_events,
+        search_upcoming_events_rr,
+    )
     from raceanalyzer.db.engine import get_session, init_db
-    from raceanalyzer.db.models import RaceSeries
+    from raceanalyzer.db.models import Race, RaceSeries
+    from raceanalyzer.refresh import record_refresh
 
     init_db(settings.db_path)
     session = get_session(settings.db_path)
 
-    click.echo(f"Searching BikeReg for events in {region} ({days_ahead} days ahead)...")
-    events = search_upcoming_events(region, days_ahead, delay=settings.bikereg_request_delay)
+    if source == "bikereg":
+        click.echo(f"Searching BikeReg for events in {region} ({days_ahead} days ahead)...")
+        events = search_upcoming_events(region, days_ahead, delay=settings.bikereg_request_delay)
+    else:
+        click.echo("Searching road-results/GraphQL for upcoming PNW events...")
+        events = search_upcoming_events_rr(settings)
 
     if not events:
-        click.echo("No upcoming events found (BikeReg may be unavailable).")
+        click.echo("No upcoming events found.")
         session.close()
         return
 
@@ -622,15 +751,67 @@ def fetch_calendar(ctx, region, days_ahead):
     series_lookup = {s.normalized_name: s for s in all_series}
 
     matched = 0
+    created = 0
     for event in events:
-        match = match_event_to_series(event["name"], series_names)
-        if match and match in series_lookup:
-            series = series_lookup[match]
-            click.echo(f"  {event['name']} -> matched series \"{series.display_name}\"")
+        event_name = event["name"]
+        match = match_event_to_series(event_name, series_names)
+        series = series_lookup.get(match) if match else None
+
+        if source == "road-results":
+            # Create or update Race row
+            event_id = event.get("event_id")
+            existing_race = (
+                session.query(Race).filter(Race.event_id == event_id).first()
+                if event_id
+                else None
+            )
+
+            if existing_race:
+                existing_race.is_upcoming = True
+                existing_race.registration_source = "road-results"
+                if series:
+                    existing_race.series_id = series.id
+            else:
+                race = Race(
+                    id=event_id or (90000 + created),
+                    name=event_name,
+                    date=event.get("date"),
+                    location=f"{event.get('city', '')}, {event.get('state', '')}".strip(", "),
+                    state_province=event.get("state", ""),
+                    registration_url=event.get("registration_url", ""),
+                    registration_source="road-results",
+                    is_upcoming=True,
+                    event_id=event_id,
+                    series_id=series.id if series else None,
+                )
+                session.add(race)
+                created += 1
+
+        if series:
+            click.echo(f"  {event_name} -> matched series \"{series.display_name}\"")
             matched += 1
         else:
-            click.echo(f"  {event['name']} -> no match")
+            click.echo(f"  {event_name} -> no match")
 
+    # Cleanup: mark past races as not upcoming
+    today = dt.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    past_upcoming = (
+        session.query(Race)
+        .filter(Race.is_upcoming.is_(True), Race.date < today)
+        .all()
+    )
+    for race in past_upcoming:
+        race.is_upcoming = False
+    if past_upcoming:
+        click.echo(f"Marked {len(past_upcoming)} past races as no longer upcoming.")
+
+    if source == "road-results":
+        record_refresh(
+            session, race_id=None, refresh_type="calendar", status="success",
+            entry_count=len(events),
+        )
+
+    session.commit()
     session.close()
     click.echo(f"Matched {matched}/{len(events)} events to existing series.")
 

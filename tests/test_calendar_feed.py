@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import responses
 
-from raceanalyzer.calendar_feed import match_event_to_series, search_upcoming_events
+from raceanalyzer.calendar_feed import (
+    match_event_to_series,
+    search_upcoming_events,
+    search_upcoming_events_rr,
+)
+from raceanalyzer.config import Settings
 
 
 class TestSearchUpcomingEvents:
@@ -103,6 +108,131 @@ class TestSearchUpcomingEvents:
 
         events = search_upcoming_events("OR", 60, delay=0)
         assert len(events) == 1
+
+
+class TestSearchUpcomingEventsRR:
+    """Tests for GraphQL-based calendar discovery (Sprint 009)."""
+
+    @responses.activate
+    def test_successful_graphql_response(self):
+        """3 upcoming events from GraphQL are parsed correctly."""
+        responses.add(
+            responses.POST,
+            "https://outsideapi.com/fed-gw/graphql",
+            json={
+                "data": {
+                    "athleticEventCalendar": {
+                        "nodes": [
+                            {
+                                "eventId": 12345,
+                                "name": "Mason Lake RR 1",
+                                "startDate": "2026-03-14",
+                                "city": "Shelton",
+                                "state": "WA",
+                                "latitude": 47.2,
+                                "longitude": -123.1,
+                                "athleticEvent": {
+                                    "eventTypes": [1],
+                                    "eventUrl": "https://www.bikereg.com/mason-lake-1",
+                                },
+                            },
+                            {
+                                "eventId": 12346,
+                                "name": "Seward Park Crit",
+                                "startDate": "2026-04-05",
+                                "city": "Seattle",
+                                "state": "WA",
+                                "latitude": 47.55,
+                                "longitude": -122.25,
+                                "athleticEvent": {
+                                    "eventTypes": [1],
+                                    "eventUrl": "https://www.bikereg.com/seward-park",
+                                },
+                            },
+                            {
+                                "eventId": 12347,
+                                "name": "Cherry Pie Crit",
+                                "startDate": "2026-02-21",
+                                "city": "Niles",
+                                "state": "OR",
+                                "latitude": 44.0,
+                                "longitude": -123.0,
+                                "athleticEvent": {
+                                    "eventTypes": [1],
+                                    "eventUrl": "https://www.bikereg.com/cherry-pie",
+                                },
+                            },
+                        ]
+                    }
+                }
+            },
+            status=200,
+        )
+
+        events = search_upcoming_events_rr()
+        assert len(events) == 3
+        assert events[0]["event_id"] == 12345
+        assert events[0]["name"] == "Mason Lake RR 1"
+        assert events[0]["city"] == "Shelton"
+        assert events[0]["state"] == "WA"
+        assert events[0]["registration_url"] == "https://www.bikereg.com/mason-lake-1"
+        assert events[0]["date"] is not None
+
+    @responses.activate
+    def test_empty_graphql_response(self):
+        """Empty nodes returns empty list."""
+        responses.add(
+            responses.POST,
+            "https://outsideapi.com/fed-gw/graphql",
+            json={"data": {"athleticEventCalendar": {"nodes": []}}},
+            status=200,
+        )
+
+        events = search_upcoming_events_rr()
+        assert events == []
+
+    @responses.activate
+    def test_graphql_http_error(self):
+        """HTTP error returns empty list gracefully."""
+        responses.add(
+            responses.POST,
+            "https://outsideapi.com/fed-gw/graphql",
+            status=500,
+        )
+
+        events = search_upcoming_events_rr()
+        assert events == []
+
+    @responses.activate
+    def test_graphql_network_error(self):
+        """Network error returns empty list gracefully."""
+        responses.add(
+            responses.POST,
+            "https://outsideapi.com/fed-gw/graphql",
+            body=ConnectionError("timeout"),
+        )
+
+        events = search_upcoming_events_rr()
+        assert events == []
+
+    @responses.activate
+    def test_custom_settings(self):
+        """Settings control search parameters."""
+        responses.add(
+            responses.POST,
+            "https://outsideapi.com/fed-gw/graphql",
+            json={"data": {"athleticEventCalendar": {"nodes": []}}},
+            status=200,
+        )
+
+        settings = Settings()
+        settings.road_results_search_lat = 45.5
+        settings.road_results_search_lon = -122.7
+        events = search_upcoming_events_rr(settings)
+        assert events == []
+
+        # Verify the request was made
+        assert len(responses.calls) == 1
 
 
 class TestMatchEventToSeries:

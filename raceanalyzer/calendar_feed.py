@@ -1,4 +1,4 @@
-"""Upcoming race calendar scraper (BikeReg/OBRA)."""
+"""Upcoming race calendar discovery (road-results GraphQL + BikeReg fallback)."""
 
 from __future__ import annotations
 
@@ -9,9 +9,114 @@ from typing import Optional
 
 import requests
 
+from raceanalyzer.config import Settings
+
 logger = logging.getLogger(__name__)
 
 _BIKEREG_SEARCH_URL = "https://www.bikereg.com/api/search"
+_GRAPHQL_URL = "https://outsideapi.com/fed-gw/graphql"
+
+_GRAPHQL_QUERY = """
+query AR_SearchUpcomingCX($first: Int, $searchParameters: SearchEventQueryParamsInput) {
+  athleticEventCalendar(first: $first, searchParameters: $searchParameters) {
+    nodes {
+      name
+      startDate
+      endDate
+      latitude
+      longitude
+      city
+      state
+      eventId
+      athleticEvent {
+        eventTypes
+        eventUrl
+      }
+    }
+  }
+}
+"""
+
+
+def search_upcoming_events_rr(settings: Optional[Settings] = None) -> list[dict]:
+    """Discover upcoming PNW races from the GraphQL API (outsideapi.com).
+
+    Returns: [{"event_id": int, "name": str, "date": datetime, "city": str,
+               "state": str, "registration_url": str}]
+    Graceful: returns [] on any failure.
+    """
+    if settings is None:
+        settings = Settings()
+
+    try:
+        today = datetime.utcnow().date()
+        variables = {
+            "first": 50,
+            "searchParameters": {
+                "eventTypes": [1],
+                "appTypes": "BIKEREG",
+                "minDate": today.isoformat(),
+                "userDistanceFilter": {
+                    "lat": settings.road_results_search_lat,
+                    "lon": settings.road_results_search_lon,
+                    "radius": settings.road_results_search_radius_miles,
+                },
+            },
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "apollographql-client-name": "crossresults",
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+        }
+
+        resp = requests.post(
+            _GRAPHQL_URL,
+            json={"query": _GRAPHQL_QUERY, "variables": variables},
+            headers=headers,
+            timeout=15,
+        )
+
+        if not resp.ok:
+            logger.warning("GraphQL API returned %d", resp.status_code)
+            return []
+
+        data = resp.json()
+        nodes = (
+            data.get("data", {})
+            .get("athleticEventCalendar", {})
+            .get("nodes", [])
+        )
+
+        events = []
+        for node in nodes:
+            event_id = node.get("eventId")
+            name = node.get("name", "")
+            if not event_id or not name:
+                continue
+
+            date = _parse_date(node.get("startDate", ""))
+            athletic_event = node.get("athleticEvent") or {}
+            registration_url = athletic_event.get("eventUrl", "")
+
+            events.append({
+                "event_id": int(event_id),
+                "name": name,
+                "date": date,
+                "city": node.get("city", ""),
+                "state": node.get("state", ""),
+                "registration_url": registration_url,
+            })
+
+        logger.info("GraphQL discovered %d upcoming events", len(events))
+        return events
+
+    except Exception:
+        logger.warning("GraphQL calendar discovery failed", exc_info=True)
+        return []
 
 
 def search_upcoming_events(
@@ -21,6 +126,9 @@ def search_upcoming_events(
     delay: float = 2.0,
 ) -> list[dict]:
     """Search BikeReg for upcoming cycling events in a region.
+
+    .. deprecated:: Sprint 009
+        Use :func:`search_upcoming_events_rr` instead. Retained for ``--source bikereg`` fallback.
 
     Returns: [{"name", "date", "url", "location", "categories": [...]}]
     Graceful: returns [] on any failure.
