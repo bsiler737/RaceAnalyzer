@@ -818,63 +818,186 @@ def fetch_calendar(ctx, region, days_ahead, source):
 
 @main.command("fetch-startlists")
 @click.option("--region", default="WA", help="State/region code (default: WA).")
+@click.option(
+    "--source",
+    type=click.Choice(["road-results", "bikereg"]),
+    default="road-results",
+    help="Data source (default: road-results).",
+)
+@click.option("--dry-run", is_flag=True, help="Preview which races would be refreshed.")
 @click.pass_context
-def fetch_startlists(ctx, region):
-    """Pull registered riders from BikeReg for upcoming races."""
-    from datetime import datetime
+def fetch_startlists(ctx, region, source, dry_run):
+    """Fetch registered riders for upcoming races."""
+    import hashlib
+    from datetime import datetime as dt
 
     settings = ctx.obj["settings"]
 
     from raceanalyzer.db.engine import get_session, init_db
     from raceanalyzer.db.models import Race, Startlist
+    from raceanalyzer.refresh import is_refreshable, record_refresh, should_refresh
     from raceanalyzer.startlists import fetch_startlist
 
     init_db(settings.db_path)
     session = get_session(settings.db_path)
 
-    # Find upcoming races with registration URLs
+    if source == "bikereg":
+        # Legacy BikeReg path
+        upcoming = (
+            session.query(Race)
+            .filter(
+                Race.is_upcoming.is_(True),
+                Race.registration_url.isnot(None),
+            )
+            .all()
+        )
+
+        if not upcoming:
+            click.echo("No upcoming races with registration URLs found.")
+            session.close()
+            return
+
+        click.echo(f"Fetching startlists for {len(upcoming)} upcoming races...")
+        total_entries = 0
+
+        for race in upcoming:
+            riders = fetch_startlist(
+                race.registration_url,
+                "",
+                delay=settings.bikereg_request_delay,
+            )
+            if riders:
+                for rider_data in riders:
+                    entry = Startlist(
+                        race_id=race.id,
+                        series_id=race.series_id,
+                        rider_name=rider_data["name"],
+                        team=rider_data.get("team", ""),
+                        source="bikereg",
+                        source_url=race.registration_url,
+                        scraped_at=dt.utcnow(),
+                    )
+                    session.add(entry)
+                    total_entries += 1
+                click.echo(f"  {race.name}: {len(riders)} riders")
+
+        session.commit()
+        session.close()
+        click.echo(f"Scraped {total_entries} startlist entries across {len(upcoming)} events.")
+        return
+
+    # Road-results predictor path
+    from raceanalyzer.scraper.client import RoadResultsClient
+    from raceanalyzer.startlists import fetch_startlist_rr
+
+    today = dt.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     upcoming = (
         session.query(Race)
         .filter(
             Race.is_upcoming.is_(True),
-            Race.registration_url.isnot(None),
+            Race.date >= today,
         )
         .all()
     )
 
     if not upcoming:
-        click.echo("No upcoming races with registration URLs found.")
+        click.echo("No upcoming future-dated races found.")
         session.close()
         return
 
-    click.echo(f"Fetching startlists for {len(upcoming)} upcoming races...")
+    if dry_run:
+        click.echo(f"Dry run: {len(upcoming)} races would be refreshed:")
+        for race in upcoming:
+            refreshable = is_refreshable(race)
+            fresh = not should_refresh(session, race.id, "startlist")
+            status = "skip (recently refreshed)" if fresh else ("ready" if refreshable else "skip")
+            click.echo(f"  {race.name} ({race.date.strftime('%Y-%m-%d') if race.date else '?'}): {status}")
+        session.close()
+        return
+
+    client = RoadResultsClient(settings)
     total_entries = 0
+    total_races = 0
+
+    click.echo(f"Fetching predictor startlists for {len(upcoming)} upcoming races...")
 
     for race in upcoming:
-        riders = fetch_startlist(
-            race.registration_url,
-            "",  # Fetch all categories
-            delay=settings.bikereg_request_delay,
-        )
-        if riders:
+        riders = fetch_startlist_rr(client, race, session)
+
+        if not riders:
+            click.echo(f"  {race.name}: skipped or empty")
+            continue
+
+        # Atomic clear-and-reinsert within a savepoint
+        try:
+            nested = session.begin_nested()
+
+            # Delete existing road-results startlist entries for this race
+            session.query(Startlist).filter(
+                Startlist.race_id == race.id,
+                Startlist.source == "road-results",
+            ).delete()
+
+            # Build checksum for change detection
+            rider_str = "|".join(
+                f"{r['name']}:{r.get('carried_points', '')}"
+                for r in sorted(riders, key=lambda x: x["name"])
+            )
+            checksum = hashlib.sha256(rider_str.encode()).hexdigest()
+
+            # Insert new rows
+            cats = set()
             for rider_data in riders:
                 entry = Startlist(
                     race_id=race.id,
                     series_id=race.series_id,
                     rider_name=rider_data["name"],
+                    rider_id=rider_data.get("rider_id"),
+                    category=rider_data.get("category"),
                     team=rider_data.get("team", ""),
-                    source="bikereg",
-                    source_url=race.registration_url,
-                    scraped_at=datetime.utcnow(),
+                    source="road-results",
+                    scraped_at=dt.utcnow(),
+                    checksum=checksum,
+                    carried_points=rider_data.get("carried_points"),
+                    road_results_racer_id=rider_data.get("racer_id"),
+                    event_id=race.event_id,
                 )
                 session.add(entry)
                 total_entries += 1
+                if rider_data.get("category"):
+                    cats.add(rider_data["category"])
 
-            click.echo(f"  {race.name}: {len(riders)} riders")
+            nested.commit()
+
+            record_refresh(
+                session, race_id=race.id, refresh_type="startlist",
+                status="success", entry_count=len(riders), checksum=checksum,
+                event_id=race.event_id,
+            )
+            total_races += 1
+
+            click.echo(
+                f"  {race.name}: {len(riders)} riders ({len(cats)} categories)"
+            )
+
+            # Inter-race delay
+            import time
+            time.sleep(3.0)
+
+        except Exception:
+            nested.rollback()
+            logger.warning("Failed to persist startlist for %s", race.name, exc_info=True)
+            record_refresh(
+                session, race_id=race.id, refresh_type="startlist",
+                status="error", error_message="persist failed",
+                event_id=race.event_id,
+            )
 
     session.commit()
     session.close()
-    click.echo(f"Scraped {total_entries} startlist entries across {len(upcoming)} events.")
+    click.echo(
+        f"Fetched {total_entries} startlist entries across {total_races} races."
+    )
 
 
 if __name__ == "__main__":

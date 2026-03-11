@@ -10,9 +10,13 @@ import responses
 from raceanalyzer.config import Settings
 from raceanalyzer.scraper.client import RoadResultsClient
 from raceanalyzer.scraper.errors import NoResultsError, RaceNotFoundError
-from raceanalyzer.scraper.parsers import RacePageParser, RaceResultParser
+from raceanalyzer.scraper.parsers import (
+    PredictorCategoryParser,
+    PredictorRiderParser,
+    RacePageParser,
+    RaceResultParser,
+)
 from raceanalyzer.scraper.pipeline import ScrapeOrchestrator
-
 
 SAMPLE_HTML = '''<html><body>
 <div class="resultstitle" >Banana Belt RR &bull; Mar 2 2024 &bull; Hillsboro, OR
@@ -132,6 +136,89 @@ class TestRaceResultParser:
             parser.results()
 
 
+SAMPLE_PREDICTOR_CATEGORIES_HTML = """
+<html><body>
+<div class='predictorheader'>
+  <span class='categoryname' raceid='74287-1'>Men Cat 1/2</span>
+  <span class='ridercount'>(15 riders)</span>
+</div>
+<div class='predictorheader'>
+  <span class='categoryname' raceid='74287-3'>Master Men 40+ 1/2/3</span>
+  <span class='ridercount'>(8 riders)</span>
+</div>
+<div class='predictorheader'>
+  <span class='categoryname' raceid='74287-5'>Women Cat 1/2/3</span>
+  <span class='ridercount'>(12 riders)</span>
+</div>
+<p>This race has 51 racers preregistered</p>
+</body></html>
+"""
+
+SAMPLE_PREDICTOR_RIDERS_HTML = """
+<html><body>
+<table class='datatable1'>
+<tr><td>1. <a href="?n=racers&sn=r&rID=1162">Brian Breach</a></td>
+    <td>Stages by Cuore</td><td>267.12</td></tr>
+<tr><td>2. <a href="?n=racers&sn=r&rID=2045">Carlos Climb *</a></td>
+    <td>Fast Team</td><td>312.50</td></tr>
+<tr><td>3. <a href="?n=racers&sn=r&rID=3099">Diana Sprint</a></td>
+    <td></td><td>450.00</td></tr>
+</table>
+</body></html>
+"""
+
+
+class TestPredictorCategoryParser:
+    def test_parse_categories(self):
+        parser = PredictorCategoryParser(SAMPLE_PREDICTOR_CATEGORIES_HTML)
+        cats = parser.categories()
+        assert len(cats) == 3
+        assert cats[0]["cat_id"] == "74287-1"
+        assert cats[0]["cat_name"] == "Men Cat 1/2"
+        assert cats[1]["cat_id"] == "74287-3"
+        assert cats[2]["cat_name"] == "Women Cat 1/2/3"
+
+    def test_total_riders(self):
+        parser = PredictorCategoryParser(SAMPLE_PREDICTOR_CATEGORIES_HTML)
+        assert parser.total_riders() == 51
+
+    def test_empty_html(self):
+        parser = PredictorCategoryParser("<html></html>")
+        assert parser.categories() == []
+        assert parser.total_riders() is None
+
+
+class TestPredictorRiderParser:
+    def test_parse_riders(self):
+        parser = PredictorRiderParser(SAMPLE_PREDICTOR_RIDERS_HTML)
+        riders = parser.riders()
+        assert len(riders) == 3
+
+        assert riders[0]["rank"] == 1
+        assert riders[0]["name"] == "Brian Breach"
+        assert riders[0]["racer_id"] == 1162
+        assert riders[0]["team"] == "Stages by Cuore"
+        assert riders[0]["points"] == 267.12
+
+    def test_asterisk_stripped(self):
+        parser = PredictorRiderParser(SAMPLE_PREDICTOR_RIDERS_HTML)
+        riders = parser.riders()
+        assert riders[1]["name"] == "Carlos Climb"  # asterisk stripped
+
+    def test_empty_team(self):
+        parser = PredictorRiderParser(SAMPLE_PREDICTOR_RIDERS_HTML)
+        riders = parser.riders()
+        assert riders[2]["team"] == ""
+
+    def test_empty_html(self):
+        parser = PredictorRiderParser("<html></html>")
+        assert parser.riders() == []
+
+    def test_no_table(self):
+        parser = PredictorRiderParser("<html><table class='other'></table></html>")
+        assert parser.riders() == []
+
+
 class TestRoadResultsClient:
     @responses.activate
     def test_fetch_race_page(self):
@@ -197,7 +284,7 @@ class TestScrapeOrchestrator:
         assert log_entry.result_count == 3
 
         # Verify data persisted
-        from raceanalyzer.db.models import Race, Result, Rider
+        from raceanalyzer.db.models import Race, Rider
 
         race = session.get(Race, 1000)
         assert race is not None

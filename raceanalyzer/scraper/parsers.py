@@ -97,6 +97,115 @@ class RacePageParser:
         }
 
 
+class PredictorCategoryParser:
+    """Parses predictor.aspx category discovery response (Sprint 009)."""
+
+    def __init__(self, html: str):
+        self._html = html
+
+    def categories(self) -> list[dict]:
+        """Extract category entries from predictor HTML.
+
+        Returns: [{"cat_id": str, "cat_name": str}]
+        Conservative: returns [] on unexpected structure.
+        """
+        try:
+            pattern = re.compile(
+                r"<span\s+class=['\"]categoryname['\"]"
+                r"\s+raceid=['\"]([^'\"]+)['\"]"
+                r"\s*>(.*?)</span>",
+                re.IGNORECASE,
+            )
+            matches = pattern.findall(self._html)
+            return [{"cat_id": m[0], "cat_name": m[1].strip()} for m in matches]
+        except Exception:
+            logger.warning("Failed to parse predictor categories")
+            return []
+
+    def total_riders(self) -> int | None:
+        """Extract total rider count from 'This race has N racers preregistered'."""
+        try:
+            match = re.search(r"This race has (\d+) racers? preregistered", self._html)
+            return int(match.group(1)) if match else None
+        except Exception:
+            return None
+
+
+class PredictorRiderParser:
+    """Parses predictor.aspx per-category rider response (Sprint 009)."""
+
+    def __init__(self, html: str):
+        self._html = html
+
+    def riders(self) -> list[dict]:
+        """Extract ranked riders from predictor HTML table.
+
+        Returns: [{"rank": int, "name": str, "racer_id": int, "team": str, "points": float}]
+        Conservative: returns [] on unexpected structure.
+        """
+        try:
+            # Find the data table
+            table_match = re.search(
+                r"<table[^>]*class=['\"]datatable1['\"][^>]*>(.*?)</table>",
+                self._html,
+                re.DOTALL | re.IGNORECASE,
+            )
+            if not table_match:
+                return []
+
+            table_html = table_match.group(1)
+            rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table_html, re.DOTALL | re.IGNORECASE)
+
+            riders = []
+            for row_html in rows:
+                cells = re.findall(r"<td[^>]*>(.*?)</td>", row_html, re.DOTALL | re.IGNORECASE)
+                if len(cells) < 3:
+                    continue
+
+                # Cell 0: "N. <a href='?n=racers&sn=r&rID=1162'>Name</a>"
+                cell0 = cells[0].strip()
+
+                # Extract rank
+                rank_match = re.match(r"(\d+)\.", cell0)
+                rank = int(rank_match.group(1)) if rank_match else None
+
+                # Extract name and racer_id from link
+                link_match = re.search(
+                    r"rID=(\d+)['\"]?\s*>(.*?)</a>", cell0, re.IGNORECASE
+                )
+                if not link_match:
+                    continue
+                racer_id = int(link_match.group(1))
+                name = link_match.group(2).strip()
+
+                # Strip asterisks (road-results uses them for riders with < 4 scoring races)
+                name = name.replace("*", "").strip()
+
+                # Cell 1: team
+                team = re.sub(r"<[^>]+>", "", cells[1]).strip()
+
+                # Cell 2: points
+                points_str = re.sub(r"<[^>]+>", "", cells[2]).strip()
+                try:
+                    points = float(points_str)
+                except (ValueError, TypeError):
+                    points = None
+
+                riders.append({
+                    "rank": rank,
+                    "name": name,
+                    "racer_id": racer_id,
+                    "team": team,
+                    "points": points,
+                })
+
+            return riders
+
+        except Exception:
+            logger.warning("Failed to parse predictor riders")
+            return []
+
+
 class RaceResultParser:
     """Parses the JSON API response into normalized result dicts."""
 

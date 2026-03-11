@@ -86,6 +86,36 @@ class RoadResultsClient:
             return []
         return data
 
+    def fetch_predictor_categories(self, event_id: int) -> str:
+        """GET predictor.aspx?url={event_id}&token={random} -> HTML string.
+
+        Returns raw HTML for category discovery.
+        """
+        import random
+
+        token = random.randint(1000, 9999)
+        url = f"{self._settings.base_url}/predictor.aspx?url={event_id}&token={token}"
+        return self._request_with_retry(url).text
+
+    def fetch_predictor_category(self, event_id: int, cat_id: str) -> str:
+        """GET predictor.aspx?url={event_id}&cat={cat_id}&v=1 -> HTML string.
+
+        Returns raw HTML with ranked riders for a single category.
+        Rate limited at road_results_predictor_delay.
+        """
+        delay = getattr(self._settings, "road_results_predictor_delay", 1.0)
+        elapsed = time.monotonic() - self._last_request_time
+        if elapsed < delay:
+            time.sleep(delay - elapsed)
+
+        url = (
+            f"{self._settings.base_url}/predictor.aspx"
+            f"?url={event_id}&cat={cat_id}&v=1"
+        )
+        response = self._request_with_retry(url)
+        self._last_request_time = time.monotonic()
+        return response.text
+
     def discover_region_race_ids(self, region: int) -> list[int]:
         """Scrape the all-results page for a region and return race IDs.
 
