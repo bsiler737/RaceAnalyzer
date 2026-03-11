@@ -503,7 +503,8 @@ class TestGetFeedItems:
             "editions_summary",
         }
         for item in items:
-            assert required.issubset(set(item.keys())), f"Missing keys: {required - set(item.keys())}"
+            missing = required - set(item.keys())
+            assert not missing, f"Missing keys: {missing}"
 
     def test_search_filters(self, seeded_series_session):
         all_items = queries.get_feed_items(seeded_series_session)
@@ -522,6 +523,23 @@ class TestGetFeedItems:
             seeded_series_session, search_query="zzz_nonexistent"
         )
         assert items == []
+
+    def test_items_have_editions_summary(self, seeded_series_session):
+        items = queries.get_feed_items(seeded_series_session)
+        for item in items:
+            assert isinstance(item["editions_summary"], list)
+            for ed in item["editions_summary"]:
+                assert "year" in ed
+                assert "finish_type_display" in ed
+
+    def test_items_degrade_without_course(self, seeded_series_session):
+        """Feed items without course data should still work (no sparkline/terrain)."""
+        items = queries.get_feed_items(seeded_series_session)
+        # seeded_series_session has no course data
+        for item in items:
+            assert item["elevation_sparkline_points"] == []
+            assert item["course_type"] is None
+            assert item["climb_highlight"] is None
 
 
 class TestSnippet:
