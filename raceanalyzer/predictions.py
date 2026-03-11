@@ -680,3 +680,98 @@ def generate_narrative(
         )
 
     return " ".join(sentences)
+
+
+# --- Racer type description (Sprint 010) ---
+
+RACER_TYPE_DESCRIPTIONS: dict[tuple[str, str], str] = {
+    ("flat", "bunch_sprint"): "Sprinters and pack riders thrive here.",
+    ("flat", "breakaway"): "Strong riders who can sustain a solo effort have an edge.",
+    ("flat", "small_group_sprint"): "Fast finishers who can follow moves do well.",
+    ("flat", "reduced_sprint"): "All-rounders with a strong kick have the advantage.",
+    ("rolling", "bunch_sprint"): "Riders who can handle surges and still sprint do well.",
+    ("rolling", "reduced_sprint"): "Punchy riders who can handle repeated surges do well.",
+    ("rolling", "breakaway"): "Strong all-rounders who can attack on the hills thrive.",
+    ("rolling", "small_group_sprint"): "Tactical riders who can bridge gaps excel here.",
+    ("hilly", "breakaway"): "Pure climbers and aggressive attackers dominate.",
+    ("hilly", "gc_selective"): "Pure climbers dominate this race.",
+    ("hilly", "reduced_sprint"): "Climbers with a finishing kick do well.",
+    ("mountainous", "gc_selective"): "Only the strongest climbers survive this race.",
+}
+
+
+def racer_type_description(
+    course_type: Optional[str], finish_type: Optional[str]
+) -> Optional[str]:
+    """Return a sentence describing what kind of racer does well.
+
+    Returns None if the combination isn't in the lookup table.
+    """
+    if not course_type or not finish_type:
+        return None
+    return RACER_TYPE_DESCRIPTIONS.get((course_type, finish_type))
+
+
+def calculate_typical_duration(
+    session: Session,
+    series_id: int,
+    category: Optional[str] = None,
+) -> Optional[dict]:
+    """Calculate typical race duration from historical Results.
+
+    Uses race_time_seconds directly. Suppressed for time trials.
+    Returns None if insufficient data.
+    """
+    editions = (
+        session.query(Race)
+        .filter(Race.series_id == series_id)
+        .order_by(Race.date.desc())
+        .all()
+    )
+    if not editions:
+        return None
+
+    # Suppress for TTs
+    for race in editions:
+        if race.race_type == RaceType.TIME_TRIAL:
+            return None
+
+    per_edition_winner = []
+    per_edition_field = []
+
+    for race in editions:
+        query = (
+            session.query(Result)
+            .filter(
+                Result.race_id == race.id,
+                Result.dnf.is_(False),
+                Result.dnp.is_(False),
+                Result.dq.is_(False),
+                Result.race_time_seconds.isnot(None),
+            )
+        )
+        if category:
+            query = query.filter(Result.race_category_name == category)
+
+        results = query.order_by(Result.place).all()
+        if not results:
+            continue
+
+        times = [
+            r.race_time_seconds for r in results
+            if r.race_time_seconds and r.race_time_seconds > 0
+        ]
+        if not times:
+            continue
+
+        per_edition_winner.append(times[0] / 60.0)  # minutes
+        per_edition_field.append(statistics.median(times) / 60.0)
+
+    if not per_edition_winner:
+        return None
+
+    return {
+        "winner_duration_minutes": round(statistics.median(per_edition_winner), 1),
+        "field_duration_minutes": round(statistics.median(per_edition_field), 1),
+        "edition_count": len(per_edition_winner),
+    }

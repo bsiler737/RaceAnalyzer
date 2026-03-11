@@ -7,8 +7,7 @@ import streamlit as st
 from raceanalyzer import queries
 from raceanalyzer.ui.components import (
     render_empty_state,
-    render_prediction_badge,
-    render_terrain_badge,
+    render_feed_card,
 )
 
 FEED_PAGE_SIZE = 20
@@ -137,25 +136,10 @@ def _render_feed_expander(item: dict, expanded: bool = False, key_prefix: str = 
         if is_dormant:
             st.caption("No upcoming edition")
 
-        # Row 1: Prediction + terrain + drop rate
-        col1, col2, col3 = st.columns([2, 1, 1])
-        with col1:
-            if item.get("predicted_finish_type"):
-                render_prediction_badge(
-                    item["predicted_finish_type"], item["confidence"]
-                )
-        with col2:
-            if item.get("course_type"):
-                render_terrain_badge(item["course_type"])
-        with col3:
-            if item.get("drop_rate_pct") is not None:
-                st.caption(f"{item['drop_rate_pct']}% drop rate")
+        # Rich card content
+        render_feed_card(item)
 
-        # Row 2: Narrative snippet
-        if item.get("narrative_snippet"):
-            st.write(item["narrative_snippet"])
-
-        # Row 3: Location + editions
+        # Location metadata
         loc_parts = []
         if item.get("location"):
             loc_parts.append(item["location"])
@@ -170,19 +154,7 @@ def _render_feed_expander(item: dict, expanded: bool = False, key_prefix: str = 
         if meta_parts:
             st.caption(" | ".join(meta_parts))
 
-        # Row 4: Registration link
-        if item.get("is_upcoming") and item.get("registration_url"):
-            st.markdown(f"[Register]({item['registration_url']})")
-
-        # Row 5: Historical editions popover
-        editions = item.get("editions_summary", [])
-        if editions and len(editions) > 1:
-            with st.popover(f"{len(editions)} previous editions"):
-                for ed in editions:
-                    year_str = str(ed["year"]) if ed.get("year") else "?"
-                    st.write(f"- {year_str}: {ed['finish_type_display']}")
-
-        # Row 6: Navigation buttons
+        # Navigation buttons
         btn_col, preview_col = st.columns(2)
         series_id = item["series_id"]
         with btn_col:

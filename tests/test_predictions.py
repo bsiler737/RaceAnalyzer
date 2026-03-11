@@ -18,10 +18,12 @@ from raceanalyzer.db.models import (
 )
 from raceanalyzer.predictions import (
     calculate_drop_rate,
+    calculate_typical_duration,
     calculate_typical_speeds,
     generate_narrative,
     predict_contenders,
     predict_series_finish_type,
+    racer_type_description,
 )
 
 
@@ -603,3 +605,71 @@ class TestGenerateNarrative:
         )
         assert "limited history" in narrative.lower()
         assert "grain of salt" in narrative.lower()
+
+
+# --- Sprint 010: Racer type description ---
+
+
+class TestRacerTypeDescription:
+    def test_known_combination(self):
+        result = racer_type_description("flat", "bunch_sprint")
+        assert result is not None
+        assert "sprinter" in result.lower()
+
+    def test_hilly_gc(self):
+        result = racer_type_description("hilly", "gc_selective")
+        assert result is not None
+        assert "climber" in result.lower()
+
+    def test_unknown_combination(self):
+        result = racer_type_description("flat", "gc_selective")
+        assert result is None
+
+    def test_none_inputs(self):
+        assert racer_type_description(None, "bunch_sprint") is None
+        assert racer_type_description("flat", None) is None
+        assert racer_type_description(None, None) is None
+
+
+# --- Sprint 010: Typical duration ---
+
+
+class TestCalculateTypicalDuration:
+    def test_known_fixture(self, session):
+        """Fixture with known times should return durations."""
+        series = _create_speed_fixture(session, "duration_test")
+        result = calculate_typical_duration(session, series.id)
+        assert result is not None
+        # 15 riders, winner time = 10800s = 180min
+        assert result["winner_duration_minutes"] == 180.0
+        assert result["field_duration_minutes"] > 0
+        assert result["edition_count"] == 1
+
+    def test_tt_suppressed(self, session):
+        """Time trials should return None."""
+        series = _create_speed_fixture(
+            session, "tt_duration", race_type=RaceType.TIME_TRIAL
+        )
+        result = calculate_typical_duration(session, series.id)
+        assert result is None
+
+    def test_no_data(self, session):
+        """No editions -> None."""
+        series = RaceSeries(normalized_name="no_dur", display_name="No Duration")
+        session.add(series)
+        session.commit()
+        result = calculate_typical_duration(session, series.id)
+        assert result is None
+
+    def test_with_category(self, session):
+        """Category filter should work."""
+        series = _create_speed_fixture(session, "dur_cat")
+        result = calculate_typical_duration(session, series.id, category="Cat 3")
+        assert result is not None
+        assert result["winner_duration_minutes"] > 0
+
+    def test_wrong_category_returns_none(self, session):
+        """Non-existent category -> None."""
+        series = _create_speed_fixture(session, "dur_nocat")
+        result = calculate_typical_duration(session, series.id, category="Nonexistent")
+        assert result is None

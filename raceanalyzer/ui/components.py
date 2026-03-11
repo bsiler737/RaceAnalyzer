@@ -552,6 +552,108 @@ _CLIMB_LEGEND_ITEMS = [
 ]
 
 
+def render_dormant_badge():
+    """Render a 'No upcoming edition' badge with reduced opacity."""
+    st.markdown(
+        '<span style="background:#9E9E9E;color:white;padding:2px 8px;'
+        'border-radius:4px;font-size:0.8em;">No upcoming edition</span>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_elevation_sparkline(
+    profile_points: list, width: int = 200, height: int = 40
+):
+    """Render a tiny elevation sparkline as inline SVG."""
+    if not profile_points or len(profile_points) < 2:
+        return
+
+    elevations = [p.get("e", 0) for p in profile_points]
+    min_e = min(elevations)
+    max_e = max(elevations)
+    e_range = max_e - min_e
+    if e_range <= 0:
+        e_range = 1.0
+
+    n = len(profile_points)
+    x_step = width / max(n - 1, 1)
+
+    # Build SVG path
+    points_str = ""
+    for i, e in enumerate(elevations):
+        x = round(i * x_step, 1)
+        y = round(height - ((e - min_e) / e_range) * height, 1)
+        if i == 0:
+            points_str += f"M{x},{y}"
+        else:
+            points_str += f" L{x},{y}"
+
+    # Close path for fill
+    fill_path = points_str + f" L{width},{height} L0,{height} Z"
+
+    svg = (
+        f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}"'
+        f' xmlns="http://www.w3.org/2000/svg">'
+        f'<path d="{fill_path}" fill="#4CAF50" opacity="0.3"/>'
+        f'<path d="{points_str}" fill="none" stroke="#4CAF50" stroke-width="1.5"/>'
+        f'</svg>'
+    )
+    st.markdown(svg, unsafe_allow_html=True)
+
+
+def render_feed_card(item: dict):
+    """Render the rich content of a feed card (Sprint 010 Phase 2)."""
+    from raceanalyzer.queries import finish_type_plain_english
+
+    # Row 1: Badges (plain-English finish type, terrain, drop rate)
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        if item.get("predicted_finish_type"):
+            plain = finish_type_plain_english(item["predicted_finish_type"])
+            if plain:
+                st.write(plain)
+            from raceanalyzer.queries import finish_type_display_name
+            st.caption(finish_type_display_name(item["predicted_finish_type"]))
+    with col2:
+        if item.get("course_type"):
+            render_terrain_badge(item["course_type"])
+    with col3:
+        if item.get("drop_rate_pct") is not None:
+            st.caption(f"{item['drop_rate_pct']}% drop rate")
+
+    # Row 2: Narrative snippet + sparkline
+    text_col, spark_col = st.columns([3, 1])
+    with text_col:
+        if item.get("narrative_snippet"):
+            st.write(item["narrative_snippet"])
+        if item.get("racer_type_description"):
+            st.caption(item["racer_type_description"])
+    with spark_col:
+        if item.get("elevation_sparkline_points"):
+            render_elevation_sparkline(item["elevation_sparkline_points"])
+
+    # Row 3: Duration + climb highlight
+    if item.get("duration_minutes") or item.get("climb_highlight"):
+        if item.get("duration_minutes"):
+            winner_m = item["duration_minutes"]["winner_duration_minutes"]
+            hours, mins = divmod(int(winner_m), 60)
+            st.caption(f"Typical duration: ~{hours}h {mins:02d}m")
+        if item.get("climb_highlight"):
+            st.caption(item["climb_highlight"])
+
+    # Row 4: Registration + full preview link
+    if item.get("is_upcoming") and item.get("registration_url"):
+        st.markdown(f"[Register]({item['registration_url']})")
+
+    # Row 5: Historical editions
+    editions = item.get("editions_summary", [])
+    if editions and len(editions) > 1:
+        with st.popover(f"{len(editions)} previous editions"):
+            for ed in editions:
+                year_str = str(ed["year"]) if ed.get("year") else "?"
+                st.write(f"- {year_str}: {ed['finish_type_display']}")
+
+
 def render_climb_legend():
     """Render a horizontal climb severity legend."""
     items_html = ""

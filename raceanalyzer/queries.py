@@ -1022,6 +1022,14 @@ def get_feed_items(
                 except (json.JSONDecodeError, TypeError):
                     pass
 
+        # Racer type description
+        from raceanalyzer.predictions import racer_type_description
+        racer_desc = racer_type_description(course_type, predicted_ft)
+
+        # Duration
+        from raceanalyzer.predictions import calculate_typical_duration
+        duration = calculate_typical_duration(session, series.id, category=category)
+
         # Drop rate (lightweight: just percentage + label)
         drop_rate_pct = None
         drop_rate_label = None
@@ -1082,6 +1090,8 @@ def get_feed_items(
             "narrative_snippet": narrative_snippet,
             "elevation_sparkline_points": sparkline_points,
             "climb_highlight": climb_highlight(climbs_data),
+            "racer_type_description": racer_desc,
+            "duration_minutes": duration,
             "editions_summary": editions_summary,
         }
         items.append(item)
