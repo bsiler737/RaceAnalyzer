@@ -809,3 +809,89 @@ def render_team_setting() -> str | None:
         return None
 
     return team_name.strip() if team_name and len(team_name.strip()) >= 3 else None
+
+
+def render_climb_breakdown(climbs, distance_m=None, finish_type=None, drop_rate=None):
+    """Render climb-by-climb breakdown with race context narratives."""
+    from raceanalyzer.predictions import climb_context_line
+
+    if not climbs:
+        st.info("No significant climbs detected on this course.")
+        return
+
+    for i, climb in enumerate(climbs):
+        context = climb_context_line(
+            climb, total_distance_m=distance_m,
+            finish_type=finish_type, drop_rate=drop_rate,
+        )
+        st.markdown(f"**Climb {i + 1}:** {context}")
+
+
+def render_finish_pattern(editions_summary):
+    """Render historical finish type icons per edition year."""
+    if not editions_summary:
+        return
+
+    icons_html = ""
+    for ed in editions_summary:
+        year = ed.get("year", "?")
+        ft = ed.get("finish_type", "unknown")
+        ft_display = ed.get("finish_type_display", "Unknown")
+        icon = FINISH_TYPE_ICONS.get(ft, FINISH_TYPE_ICONS["unknown"])
+        icons_html += (
+            f'<span style="display:inline-block;text-align:center;margin-right:12px;" '
+            f'title="{html.escape(str(year))}: {html.escape(ft_display)}">'
+            f'{icon}<br><span style="font-size:0.75em;color:#666;">'
+            f'{html.escape(str(year))}</span>'
+            f'</span>'
+        )
+
+    st.markdown(icons_html, unsafe_allow_html=True)
+
+
+def render_similar_races(similar_items):
+    """Render similar races as deep links."""
+    if not similar_items:
+        st.info("No similar races found.")
+        return
+
+    for score, item in similar_items:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            name = item["display_name"]
+            loc = item.get("location", "")
+            st.write(f"**{name}** — {loc}")
+        with col2:
+            sid = item["series_id"]
+            if st.button("View", key=f"similar_{sid}", use_container_width=True):
+                st.query_params["series_id"] = str(sid)
+                st.rerun()
+
+
+def render_team_startlist(team_blocks, user_team_name=None):
+    """Render startlist grouped by team with user's team highlighted."""
+    if not team_blocks:
+        st.info("No startlist data available.")
+        return
+
+    for block in team_blocks:
+        team = block["team"]
+        riders = block["riders"]
+        count = block["count"]
+
+        # Highlight user's team
+        is_user_team = (
+            user_team_name
+            and len(user_team_name) >= 3
+            and user_team_name.lower() in team.lower()
+        )
+
+        header = f"**{html.escape(team)}** ({count})"
+        if is_user_team:
+            header = f"⭐ {header}"
+
+        st.markdown(header)
+        for rider in riders:
+            pts = rider.get("carried_points")
+            pts_str = f" — {pts:.0f} pts" if pts else ""
+            st.caption(f"  {rider['name']}{pts_str}")

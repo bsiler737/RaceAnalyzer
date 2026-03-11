@@ -64,7 +64,7 @@ def render_location_map(lat: float, lon: float, zoom: int = 12):
     )
 
 
-def render_course_map(encoded_polyline: str, race_name: str = ""):
+def render_course_map(encoded_polyline: str, race_name: str = "", climbs=None):
     """Render a Strava-style route polyline map via Folium."""
     import folium
     import polyline as pl
@@ -89,6 +89,22 @@ def render_course_map(encoded_polyline: str, race_name: str = ""):
         coords[-1], popup="Finish",
         icon=folium.Icon(color="red", icon="flag-checkered", prefix="fa"),
     ).add_to(m)
+
+    # DD-07: Add climb markers
+    if climbs:
+        for i, climb in enumerate(climbs):
+            lat = climb.get("y") or climb.get("lat")
+            lon = climb.get("x") or climb.get("lon")
+            if lat and lon:
+                grade = climb.get("avg_grade", 0)
+                length_km = climb.get("length_m", 0) / 1000
+                popup_text = f"Climb {i + 1}: {length_km:.1f}km at {grade:.1f}%"
+                color = "orange" if grade < 5 else "red" if grade < 8 else "darkred"
+                folium.Marker(
+                    [lat, lon],
+                    popup=popup_text,
+                    icon=folium.Icon(color=color, icon="arrow-up", prefix="fa"),
+                ).add_to(m)
 
     # Fit bounds to route
     m.fit_bounds([

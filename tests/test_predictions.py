@@ -673,3 +673,90 @@ class TestCalculateTypicalDuration:
         series = _create_speed_fixture(session, "dur_nocat")
         result = calculate_typical_duration(session, series.id, category="Nonexistent")
         assert result is None
+
+
+# --- Sprint 011: Racer type long form ---
+
+
+class TestRacerTypeLongForm:
+    def test_with_all_data(self):
+        from raceanalyzer.predictions import racer_type_long_form
+
+        result = racer_type_long_form(
+            "flat", "bunch_sprint",
+            drop_rate={"drop_rate": 0.05, "label": "low"},
+            edition_count=5,
+        )
+        assert result is not None
+        assert "Sprinters" in result
+        assert "5 previous editions" in result
+
+    def test_with_high_drop_rate(self):
+        from raceanalyzer.predictions import racer_type_long_form
+
+        result = racer_type_long_form(
+            "hilly", "gc_selective",
+            drop_rate={"drop_rate": 0.40, "label": "high"},
+            edition_count=3,
+        )
+        assert result is not None
+        assert "non-negotiable" in result
+
+    def test_none_inputs(self):
+        from raceanalyzer.predictions import racer_type_long_form
+
+        result = racer_type_long_form(None, None)
+        assert result is None
+
+    def test_single_edition(self):
+        from raceanalyzer.predictions import racer_type_long_form
+
+        result = racer_type_long_form("flat", "bunch_sprint", edition_count=1)
+        assert result is not None
+        assert "may evolve" in result
+
+
+# --- Sprint 011: Climb context line ---
+
+
+class TestClimbContextLine:
+    def test_late_selective_climb(self):
+        from raceanalyzer.predictions import climb_context_line
+
+        climb = {
+            "start_d": 70000, "length_m": 2000,
+            "avg_grade": 7.0, "max_grade": 12.0,
+        }
+        result = climb_context_line(
+            climb, total_distance_m=100000, finish_type="gc_selective",
+        )
+        assert "Likely where the field splits" in result
+        assert "7.0%" in result
+
+    def test_early_easy_sprint(self):
+        from raceanalyzer.predictions import climb_context_line
+
+        climb = {"start_d": 5000, "length_m": 1000, "avg_grade": 3.0}
+        result = climb_context_line(
+            climb, total_distance_m=80000, finish_type="bunch_sprint",
+        )
+        assert "Unlikely to be decisive" in result
+
+    def test_basic_stats(self):
+        from raceanalyzer.predictions import climb_context_line
+
+        climb = {"start_d": 20000, "length_m": 1500, "avg_grade": 5.5}
+        result = climb_context_line(climb)
+        assert "Km 20" in result
+        assert "1.5 km" in result
+        assert "5.5%" in result
+
+    def test_high_drop_rate_climb(self):
+        from raceanalyzer.predictions import climb_context_line
+
+        climb = {"start_d": 50000, "length_m": 3000, "avg_grade": 6.0}
+        result = climb_context_line(
+            climb, total_distance_m=60000,
+            drop_rate={"drop_rate": 0.35},
+        )
+        assert "sheds riders" in result

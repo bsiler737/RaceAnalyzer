@@ -712,6 +712,92 @@ def racer_type_description(
     return RACER_TYPE_DESCRIPTIONS.get((course_type, finish_type))
 
 
+def racer_type_long_form(
+    course_type: Optional[str],
+    finish_type: Optional[str],
+    drop_rate: Optional[dict] = None,
+    edition_count: int = 0,
+) -> Optional[str]:
+    """Expanded racer type paragraph with course-specific reasoning."""
+    short = racer_type_description(course_type, finish_type)
+    if not short:
+        # Fallback: generate from components
+        if not course_type or not finish_type:
+            return None
+        short = "This race suits versatile riders."
+
+    parts = [short]
+
+    # Add historical context
+    if edition_count >= 3:
+        parts.append(
+            f"This pattern has held across {edition_count} previous editions."
+        )
+    elif edition_count >= 1:
+        parts.append(
+            f"Based on {edition_count} previous edition{'s' if edition_count != 1 else ''}"
+            " — the pattern may evolve."
+        )
+
+    # Add drop rate context
+    if drop_rate:
+        rate_pct = round(drop_rate["drop_rate"] * 100)
+        if rate_pct >= 30:
+            parts.append(
+                f"With a {rate_pct}% drop rate, fitness is non-negotiable"
+                " — expect to be tested."
+            )
+        elif rate_pct >= 15:
+            parts.append(
+                f"The {rate_pct}% drop rate suggests the race is moderately selective."
+            )
+
+    return " ".join(parts)
+
+
+def climb_context_line(
+    climb: dict,
+    total_distance_m: Optional[float] = None,
+    finish_type: Optional[str] = None,
+    drop_rate: Optional[dict] = None,
+) -> str:
+    """Generate a hedged race-context narrative for a single climb."""
+    parts = []
+    start_km = climb.get("start_d", 0) / 1000.0
+    length_km = climb.get("length_m", 0) / 1000.0
+    avg_grade = climb.get("avg_grade", 0)
+    max_grade = climb.get("max_grade", 0)
+
+    # Basic stats
+    end_km = start_km + length_km
+    stats = f"Km {start_km:.0f}\u2013{end_km:.0f}: {length_km:.1f} km at {avg_grade:.1f}% avg"
+    if max_grade and max_grade > avg_grade + 2:
+        stats += f" (max {max_grade:.0f}%)"
+    parts.append(stats)
+
+    # Race context (hedged language)
+    if total_distance_m and total_distance_m > 0:
+        position_ratio = climb.get("start_d", 0) / total_distance_m
+        is_late = position_ratio > 0.6
+
+        selective_types = {"gc_selective", "breakaway_selective", "breakaway"}
+        sprint_types = {"bunch_sprint", "small_group_sprint", "reduced_sprint"}
+        high_drop = drop_rate and drop_rate.get("drop_rate", 0) >= 0.25
+
+        if is_late and finish_type in selective_types:
+            parts.append("Likely where the field splits.")
+        elif is_late and high_drop:
+            parts.append("This climb sheds riders.")
+        elif not is_late and avg_grade < 5 and finish_type in sprint_types:
+            parts.append("Unlikely to be decisive.")
+        elif is_late and avg_grade >= 6:
+            parts.append("Could be where the selection happens.")
+        elif high_drop:
+            parts.append("This climb sheds riders.")
+
+    return " — ".join(parts)
+
+
 def calculate_typical_duration(
     session: Session,
     series_id: int,
