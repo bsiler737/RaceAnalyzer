@@ -849,3 +849,285 @@ def get_series_editions(session: Session, series_id: int) -> list[dict]:
         {"id": e.id, "name": e.name, "date": e.date}
         for e in editions
     ]
+
+
+# --- Feed queries (Sprint 010) ---
+
+
+def finish_type_plain_english(finish_type_value: str) -> str:
+    """Return the full plain-English tooltip for a finish type."""
+    return FINISH_TYPE_TOOLTIPS.get(finish_type_value, "")
+
+
+def climb_highlight(climbs: Optional[list]) -> Optional[str]:
+    """Return a one-liner about the hardest climb, or None."""
+    if not climbs:
+        return None
+    hardest = max(climbs, key=lambda c: c.get("avg_grade", 0))
+    length_km = hardest.get("length_m", 0) / 1000.0
+    grade = hardest.get("avg_grade", 0)
+    if length_km <= 0 or grade <= 0:
+        return None
+    start_km = hardest.get("start_d", 0) / 1000.0
+    return (
+        f"The race gets hard at km {start_km:.0f}"
+        f" \u2014 a {length_km:.1f} km climb averaging {grade:.1f}%"
+    )
+
+
+def _downsample_profile(profile_points: list, target: int = 50) -> list:
+    """Downsample profile points to approximately `target` points."""
+    if not profile_points or len(profile_points) <= target:
+        return profile_points or []
+    step = max(1, len(profile_points) // target)
+    sampled = profile_points[::step]
+    # Always include the last point
+    if sampled[-1] != profile_points[-1]:
+        sampled.append(profile_points[-1])
+    return sampled
+
+
+def search_series(
+    session: Session,
+    query_str: str,
+) -> list[int]:
+    """Return series IDs matching a search string (case-insensitive).
+
+    Escapes SQL LIKE wildcards in user input.
+    """
+    if not query_str or not query_str.strip():
+        return []
+    escaped = (
+        query_str.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+    pattern = f"%{escaped}%"
+    rows = (
+        session.query(RaceSeries.id)
+        .filter(RaceSeries.display_name.ilike(pattern))
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
+def get_feed_items(
+    session: Session,
+    *,
+    category: Optional[str] = None,
+    search_query: Optional[str] = None,
+    racing_soon_only: bool = False,
+) -> list[dict]:
+    """Return feed items: one per series, enriched with preview data.
+
+    Each item contains series metadata, upcoming edition info, prediction,
+    narrative snippet, drop rate, course info, and sort-relevant flags.
+    Sorted: racing-soon upcoming first, then other upcoming, then historical.
+    """
+    import json
+    from datetime import datetime, timedelta
+
+    from raceanalyzer.predictions import predict_series_finish_type
+
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    soon_cutoff = today + timedelta(days=7)
+
+    # Get all series (optionally filtered by search)
+    if search_query and search_query.strip():
+        matching_ids = search_series(session, search_query)
+        if not matching_ids:
+            return []
+        series_list = (
+            session.query(RaceSeries)
+            .filter(RaceSeries.id.in_(matching_ids))
+            .all()
+        )
+    else:
+        series_list = session.query(RaceSeries).all()
+
+    if not series_list:
+        return []
+
+    items = []
+    for series in series_list:
+        # Find upcoming edition (date >= today)
+        upcoming_race = (
+            session.query(Race)
+            .filter(
+                Race.series_id == series.id,
+                Race.date >= today,
+            )
+            .order_by(Race.date.asc())
+            .first()
+        )
+
+        # Most recent edition (for non-upcoming sort)
+        most_recent = (
+            session.query(Race)
+            .filter(Race.series_id == series.id)
+            .order_by(Race.date.desc())
+            .first()
+        )
+
+        if most_recent is None:
+            continue
+
+        is_upcoming = upcoming_race is not None
+        is_racing_soon = (
+            is_upcoming
+            and upcoming_race.date is not None
+            and upcoming_race.date <= soon_cutoff
+        )
+
+        if racing_soon_only and not is_racing_soon:
+            continue
+
+        # Edition count
+        edition_count = (
+            session.query(func.count(Race.id))
+            .filter(Race.series_id == series.id)
+            .scalar()
+        )
+
+        # Prediction
+        prediction = predict_series_finish_type(session, series.id, category=category)
+        predicted_ft = prediction["predicted_finish_type"]
+        confidence = prediction["confidence"]
+
+        # Course data
+        course_row = (
+            session.query(Course)
+            .filter(Course.series_id == series.id)
+            .first()
+        )
+        course_type = None
+        distance_m = None
+        total_gain_m = None
+        sparkline_points = []
+        climbs_data = None
+
+        if course_row:
+            course_type = course_row.course_type.value if course_row.course_type else None
+            distance_m = course_row.distance_m
+            total_gain_m = course_row.total_gain_m
+            if course_row.profile_json:
+                try:
+                    profile = json.loads(course_row.profile_json)
+                    sparkline_points = _downsample_profile(profile)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            if course_row.climbs_json:
+                try:
+                    climbs_data = json.loads(course_row.climbs_json)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        # Drop rate (lightweight: just percentage + label)
+        drop_rate_pct = None
+        drop_rate_label = None
+        from raceanalyzer.predictions import calculate_drop_rate
+        dr = calculate_drop_rate(session, series.id, category=category)
+        if dr:
+            drop_rate_pct = round(dr["drop_rate"] * 100)
+            drop_rate_label = dr["label"]
+
+        # Narrative snippet (first 2 sentences, capped at 200 chars)
+        from raceanalyzer.predictions import generate_narrative
+        distance_km = distance_m / 1000.0 if distance_m else None
+        narrative = generate_narrative(
+            course_type=course_type,
+            predicted_finish_type=predicted_ft if predicted_ft != "unknown" else None,
+            drop_rate=dr,
+            distance_km=distance_km,
+            total_gain_m=total_gain_m,
+            climbs=climbs_data,
+            edition_count=prediction["edition_count"],
+        )
+        narrative_snippet = _snippet(narrative, max_sentences=2, max_chars=200)
+
+        # Editions summary (year + finish type)
+        editions = (
+            session.query(Race)
+            .filter(Race.series_id == series.id)
+            .order_by(Race.date.desc())
+            .all()
+        )
+        editions_summary = []
+        for ed in editions:
+            year = ed.date.year if ed.date else None
+            ed_ft = _compute_overall_finish_type(session, ed.id)
+            editions_summary.append({
+                "year": year,
+                "finish_type_display": finish_type_display_name(ed_ft),
+            })
+
+        item = {
+            "series_id": series.id,
+            "display_name": series.display_name,
+            "location": most_recent.location,
+            "state_province": most_recent.state_province,
+            "edition_count": edition_count,
+            "is_upcoming": is_upcoming,
+            "is_racing_soon": is_racing_soon,
+            "upcoming_date": upcoming_race.date if upcoming_race else None,
+            "registration_url": upcoming_race.registration_url if upcoming_race else None,
+            "most_recent_date": most_recent.date,
+            "predicted_finish_type": predicted_ft if predicted_ft != "unknown" else None,
+            "confidence": confidence,
+            "course_type": course_type,
+            "distance_m": distance_m,
+            "total_gain_m": total_gain_m,
+            "drop_rate_pct": drop_rate_pct,
+            "drop_rate_label": drop_rate_label,
+            "narrative_snippet": narrative_snippet,
+            "elevation_sparkline_points": sparkline_points,
+            "climb_highlight": climb_highlight(climbs_data),
+            "editions_summary": editions_summary,
+        }
+        items.append(item)
+
+    # Sort: racing-soon first, then upcoming by date, then historical by recency
+    def sort_key(item):
+        # Tier 0: racing soon (by date asc)
+        # Tier 1: upcoming (by date asc)
+        # Tier 2: not upcoming (by most_recent_date desc)
+        if item["is_racing_soon"]:
+            tier = 0
+        elif item["is_upcoming"]:
+            tier = 1
+        else:
+            tier = 2
+
+        date_for_sort = item["upcoming_date"] or item["most_recent_date"]
+        if tier <= 1:
+            # Upcoming: sort ascending (soonest first)
+            return (tier, date_for_sort or datetime.max, item["display_name"])
+        else:
+            # Historical: sort descending (most recent first)
+            # Negate by using a large date minus actual date
+            epoch = datetime(1970, 1, 1)
+            inv = datetime.max - (date_for_sort - epoch) if date_for_sort else datetime.min
+            return (tier, inv, item["display_name"])
+
+    items.sort(key=sort_key)
+    return items
+
+
+def _snippet(text: str, max_sentences: int = 2, max_chars: int = 200) -> str:
+    """Extract the first N sentences from text, capped at max_chars."""
+    if not text:
+        return ""
+    sentences = []
+    remaining = text
+    for _ in range(max_sentences):
+        # Find sentence boundary (". " followed by uppercase or end)
+        idx = remaining.find(". ")
+        if idx == -1:
+            sentences.append(remaining)
+            break
+        sentences.append(remaining[: idx + 1])
+        remaining = remaining[idx + 2 :]
+    result = " ".join(sentences)
+    if len(result) > max_chars:
+        result = result[: max_chars - 3].rstrip() + "..."
+    return result

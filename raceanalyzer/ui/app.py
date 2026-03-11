@@ -23,15 +23,21 @@ def main():
         st.session_state.db_session = get_session(settings.db_path)
         st.session_state.settings = settings
 
-    calendar_page = st.Page(
-        "pages/calendar.py", title="Race Calendar", icon="\U0001f4c5", default=True,
-    )
+    # Seed global session state from query params (Sprint 010)
+    st.session_state.setdefault("global_category", st.query_params.get("category"))
+    st.session_state.setdefault("search_query", st.query_params.get("q", ""))
+    st.session_state.setdefault("feed_page_size", 20)
+
+    feed_page = st.Page("pages/feed.py", title="Race Feed", icon="\U0001f3c1", default=True)
+    calendar_page = st.Page("pages/calendar.py", title="Browse All", icon="\U0001f4c5")
     series_page = st.Page("pages/series_detail.py", title="Series Detail", icon="\U0001f3c6")
     detail_page = st.Page("pages/race_detail.py", title="Race Detail", icon="\U0001f3c1")
     preview_page = st.Page("pages/race_preview.py", title="Race Preview", icon="\U0001f52e")
     dashboard_page = st.Page("pages/dashboard.py", title="Finish Type Dashboard", icon="\U0001f4ca")
 
-    pg = st.navigation([calendar_page, series_page, detail_page, preview_page, dashboard_page])
+    pg = st.navigation([
+        feed_page, calendar_page, series_page, detail_page, preview_page, dashboard_page,
+    ])
     pg.run()
 
 

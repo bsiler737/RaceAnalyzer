@@ -412,3 +412,137 @@ class TestGetRacePreview:
         assert preview["climbs"] is None
         # Narrative still present (may say "new event" or based on predictions)
         assert preview["narrative"] is not None
+
+
+# --- Sprint 010: Feed queries ---
+
+
+class TestFinishTypePlainEnglish:
+    def test_known_type(self):
+        result = queries.finish_type_plain_english("bunch_sprint")
+        assert "pack stayed together" in result.lower()
+
+    def test_unknown_type(self):
+        result = queries.finish_type_plain_english("nonexistent")
+        assert result == ""
+
+
+class TestClimbHighlight:
+    def test_with_climbs(self):
+        climbs = [
+            {"length_m": 1800, "avg_grade": 6.0, "start_d": 18000, "end_d": 19800},
+        ]
+        result = queries.climb_highlight(climbs)
+        assert result is not None
+        assert "km 18" in result
+        assert "1.8 km" in result
+        assert "6.0%" in result
+
+    def test_no_climbs(self):
+        assert queries.climb_highlight(None) is None
+        assert queries.climb_highlight([]) is None
+
+    def test_picks_hardest(self):
+        climbs = [
+            {"length_m": 1000, "avg_grade": 3.0, "start_d": 5000},
+            {"length_m": 2000, "avg_grade": 8.0, "start_d": 15000},
+        ]
+        result = queries.climb_highlight(climbs)
+        assert "8.0%" in result
+
+
+class TestDownsampleProfile:
+    def test_short_profile_unchanged(self):
+        points = [{"d": i, "e": i * 10} for i in range(10)]
+        result = queries._downsample_profile(points, target=50)
+        assert len(result) == 10
+
+    def test_long_profile_downsampled(self):
+        points = [{"d": i, "e": i * 10} for i in range(500)]
+        result = queries._downsample_profile(points, target=50)
+        assert len(result) <= 60  # approximate
+
+    def test_empty(self):
+        assert queries._downsample_profile([]) == []
+        assert queries._downsample_profile(None) == []
+
+
+class TestSearchSeries:
+    def test_finds_match(self, seeded_series_session):
+        ids = queries.search_series(seeded_series_session, "banana")
+        assert len(ids) >= 1
+
+    def test_case_insensitive(self, seeded_series_session):
+        ids = queries.search_series(seeded_series_session, "BANANA")
+        assert len(ids) >= 1
+
+    def test_no_match(self, seeded_series_session):
+        ids = queries.search_series(seeded_series_session, "zzz_nonexistent")
+        assert ids == []
+
+    def test_empty_query(self, seeded_series_session):
+        ids = queries.search_series(seeded_series_session, "")
+        assert ids == []
+
+    def test_wildcard_escaped(self, seeded_series_session):
+        # % and _ should be escaped, not treated as wildcards
+        ids = queries.search_series(seeded_series_session, "100%")
+        assert ids == []
+
+
+class TestGetFeedItems:
+    def test_returns_items(self, seeded_series_session):
+        items = queries.get_feed_items(seeded_series_session)
+        assert len(items) > 0
+
+    def test_each_item_has_required_keys(self, seeded_series_session):
+        items = queries.get_feed_items(seeded_series_session)
+        required = {
+            "series_id", "display_name", "is_upcoming",
+            "predicted_finish_type", "narrative_snippet",
+            "editions_summary",
+        }
+        for item in items:
+            assert required.issubset(set(item.keys())), f"Missing keys: {required - set(item.keys())}"
+
+    def test_search_filters(self, seeded_series_session):
+        all_items = queries.get_feed_items(seeded_series_session)
+        banana_items = queries.get_feed_items(
+            seeded_series_session, search_query="banana"
+        )
+        assert len(banana_items) < len(all_items)
+        assert all("banana" in i["display_name"].lower() for i in banana_items)
+
+    def test_empty_db(self, session):
+        items = queries.get_feed_items(session)
+        assert items == []
+
+    def test_search_no_match(self, seeded_series_session):
+        items = queries.get_feed_items(
+            seeded_series_session, search_query="zzz_nonexistent"
+        )
+        assert items == []
+
+
+class TestSnippet:
+    def test_two_sentences(self):
+        text = "First sentence. Second sentence. Third sentence."
+        result = queries._snippet(text, max_sentences=2)
+        assert "First sentence." in result
+        assert "Second sentence." in result
+        assert "Third" not in result
+
+    def test_single_sentence(self):
+        text = "Just one sentence without period"
+        result = queries._snippet(text, max_sentences=2)
+        assert result == text
+
+    def test_max_chars(self):
+        text = "A" * 300
+        result = queries._snippet(text, max_chars=200)
+        assert len(result) <= 200
+        assert result.endswith("...")
+
+    def test_empty(self):
+        assert queries._snippet("") == ""
+        assert queries._snippet(None) == ""
