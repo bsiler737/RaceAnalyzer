@@ -101,8 +101,9 @@ class Race(Base):
 
     # Upcoming race fields
     registration_url = Column(String, nullable=True)
-    registration_source = Column(String, nullable=True)  # "bikereg", "obra"
+    registration_source = Column(String, nullable=True)  # "bikereg", "obra", "road-results"
     is_upcoming = Column(Boolean, default=False)
+    event_id = Column(Integer, nullable=True)  # BikeReg/GraphQL eventId (Sprint 009)
 
     series = relationship("RaceSeries", back_populates="races")
     results = relationship("Result", back_populates="race", cascade="all, delete-orphan")
@@ -281,10 +282,15 @@ class Startlist(Base):
     team = Column(String, nullable=True)
 
     # Source tracking
-    source = Column(String, nullable=False)  # "bikereg", "obra", "manual"
+    source = Column(String, nullable=False)  # "bikereg", "obra", "manual", "road-results"
     source_url = Column(String, nullable=True)
     scraped_at = Column(DateTime, nullable=False)
     checksum = Column(String, nullable=True)  # Hash of rider list for change detection
+
+    # Road-results power ranking data (Sprint 009)
+    carried_points = Column(Float, nullable=True)
+    road_results_racer_id = Column(Integer, nullable=True)
+    event_id = Column(Integer, nullable=True)
 
     rider = relationship("Rider")
 
@@ -292,6 +298,26 @@ class Startlist(Base):
         Index("ix_startlists_race_id", "race_id"),
         Index("ix_startlists_series_id", "series_id"),
         Index("ix_startlists_rider_id", "rider_id"),
+    )
+
+
+class RefreshLog(Base):
+    """Tracks calendar and startlist refresh operations (Sprint 009)."""
+
+    __tablename__ = "refresh_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    race_id = Column(Integer, nullable=True)
+    event_id = Column(Integer, nullable=True)
+    refresh_type = Column(String, nullable=False)  # "calendar", "startlist"
+    refreshed_at = Column(DateTime, nullable=False)
+    status = Column(String, nullable=False)  # "success", "empty", "error"
+    entry_count = Column(Integer, nullable=True)
+    checksum = Column(String, nullable=True)  # SHA-256 of rider list
+    error_message = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_refresh_log_lookup", "race_id", "refresh_type"),
     )
 
 

@@ -192,7 +192,7 @@ def _rank_from_startlist(
                 .all()
             )
             for r in rider_results:
-                if r.carried_points and r.carried_points > best_points:
+                if r.carried_points is not None and r.carried_points > best_points:
                     best_points = r.carried_points
                 if r.place == 1:
                     wins += 1
@@ -261,7 +261,7 @@ def _rank_from_series_history(
                 "last_raced": None,
             }
         stats = rider_stats[r.rider_id]
-        if r.carried_points and r.carried_points > stats["carried_points"]:
+        if r.carried_points is not None and r.carried_points > stats["carried_points"]:
             stats["carried_points"] = r.carried_points
         if r.team:
             stats["team"] = r.team
@@ -314,7 +314,7 @@ def _rank_from_category(
                 "last_raced": None,
             }
         stats = rider_stats[r.rider_id]
-        if r.carried_points and r.carried_points > stats["carried_points"]:
+        if r.carried_points is not None and r.carried_points > stats["carried_points"]:
             stats["carried_points"] = r.carried_points
         if r.team:
             stats["team"] = r.team

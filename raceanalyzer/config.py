@@ -27,9 +27,16 @@ class Settings:
     terrain_rolling_max: float = 10.0
     terrain_hilly_max: float = 15.0
 
-    # BikeReg settings
+    # BikeReg settings (deprecated — use road-results pipeline; retained for --source bikereg)
     bikereg_base_url: str = "https://www.bikereg.com"
     bikereg_request_delay: float = 2.0
+
+    # Road-results calendar & predictor settings (Sprint 009)
+    road_results_search_lat: float = 47.6  # Seattle
+    road_results_search_lon: float = -122.3
+    road_results_search_radius_miles: int = 300
+    road_results_calendar_days_ahead: int = 90
+    road_results_predictor_delay: float = 1.0
 
     # Prediction settings
     prediction_min_editions: int = 2
