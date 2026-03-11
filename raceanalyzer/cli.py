@@ -911,7 +911,8 @@ def fetch_startlists(ctx, region, source, dry_run):
             refreshable = is_refreshable(race)
             fresh = not should_refresh(session, race.id, "startlist")
             status = "skip (recently refreshed)" if fresh else ("ready" if refreshable else "skip")
-            click.echo(f"  {race.name} ({race.date.strftime('%Y-%m-%d') if race.date else '?'}): {status}")
+            date_str = race.date.strftime('%Y-%m-%d') if race.date else '?'
+            click.echo(f"  {race.name} ({date_str}): {status}")
         session.close()
         return
 

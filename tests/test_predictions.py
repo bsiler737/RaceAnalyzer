@@ -210,6 +210,90 @@ class TestPredictContenders:
         contenders = predict_contenders(session, series.id, "Cat 3")
         assert contenders.empty
 
+    def test_inline_carried_points_preferred(self, session):
+        """When Startlist has carried_points, use them directly (no historical lookup)."""
+        series = RaceSeries(normalized_name="inline_pts", display_name="Inline Pts")
+        session.add(series)
+        session.flush()
+
+        rider = Rider(name="Predictor Rider", road_results_id=5555)
+        session.add(rider)
+        session.flush()
+
+        # Historical result with carried_points=100
+        race = Race(id=9801, name="Old Race", date=datetime(2024, 3, 1), series_id=series.id)
+        session.add(race)
+        session.add(Result(
+            race_id=race.id, rider_id=rider.id, name="Predictor Rider",
+            place=5, race_category_name="Cat 3", carried_points=100.0,
+            field_size=10, dnf=False,
+        ))
+
+        # Startlist with inline carried_points=267.12 (from road-results predictor)
+        session.add(Startlist(
+            series_id=series.id, rider_name="Predictor Rider", rider_id=rider.id,
+            category="Cat 3", source="road-results", scraped_at=datetime(2024, 6, 1),
+            carried_points=267.12,
+        ))
+        session.commit()
+
+        contenders = predict_contenders(session, series.id, "Cat 3")
+        assert not contenders.empty
+        # Should use 267.12 from startlist, NOT 100.0 from historical results
+        assert contenders.iloc[0]["carried_points"] == 267.12
+
+    def test_none_carried_points_falls_back(self, session):
+        """When Startlist.carried_points is None, fall back to historical lookup."""
+        series = RaceSeries(normalized_name="fallback_pts", display_name="Fallback Pts")
+        session.add(series)
+        session.flush()
+
+        rider = Rider(name="History Rider", road_results_id=6666)
+        session.add(rider)
+        session.flush()
+
+        race = Race(id=9802, name="Old Race", date=datetime(2024, 3, 1), series_id=series.id)
+        session.add(race)
+        session.add(Result(
+            race_id=race.id, rider_id=rider.id, name="History Rider",
+            place=1, race_category_name="Cat 3", carried_points=85.5,
+            field_size=10, dnf=False,
+        ))
+
+        # Startlist WITHOUT carried_points (BikeReg source)
+        session.add(Startlist(
+            series_id=series.id, rider_name="History Rider", rider_id=rider.id,
+            category="Cat 3", source="bikereg", scraped_at=datetime(2024, 6, 1),
+        ))
+        session.commit()
+
+        contenders = predict_contenders(session, series.id, "Cat 3")
+        assert not contenders.empty
+        # Should fall back to historical 85.5
+        assert contenders.iloc[0]["carried_points"] == 85.5
+
+    def test_zero_carried_points_valid(self, session):
+        """carried_points=0.0 on Startlist is treated as valid (not falsy)."""
+        series = RaceSeries(normalized_name="zero_pts_sl", display_name="Zero Pts SL")
+        session.add(series)
+        session.flush()
+
+        rider = Rider(name="Zero Rider")
+        session.add(rider)
+        session.flush()
+
+        # Startlist with carried_points=0.0
+        session.add(Startlist(
+            series_id=series.id, rider_name="Zero Rider", rider_id=rider.id,
+            category="Cat 3", source="road-results", scraped_at=datetime(2024, 6, 1),
+            carried_points=0.0,
+        ))
+        session.commit()
+
+        contenders = predict_contenders(session, series.id, "Cat 3")
+        assert not contenders.empty
+        assert contenders.iloc[0]["carried_points"] == 0.0
+
 
 class TestHeuristicAccuracy:
     def test_beats_random_baseline(self, session):

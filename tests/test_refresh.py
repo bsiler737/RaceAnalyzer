@@ -61,7 +61,7 @@ class TestIsRefreshable:
 
 class TestRecordRefresh:
     def test_creates_entry(self, session):
-        entry = record_refresh(
+        record_refresh(
             session,
             race_id=1,
             refresh_type="startlist",
@@ -83,7 +83,7 @@ class TestRecordRefresh:
         assert stored.refreshed_at is not None
 
     def test_calendar_level_null_race_id(self, session):
-        entry = record_refresh(
+        record_refresh(
             session,
             race_id=None,
             refresh_type="calendar",

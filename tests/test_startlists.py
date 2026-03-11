@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import responses
 
-from raceanalyzer.db.models import Race, RaceSeries, Rider, Startlist
+from raceanalyzer.db.models import Race, RaceSeries, Rider
 from raceanalyzer.startlists import fetch_startlist, fetch_startlist_rr
 
 

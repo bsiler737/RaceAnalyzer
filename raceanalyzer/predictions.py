@@ -172,14 +172,22 @@ def _rank_from_startlist(
     category: str,
     top_n: int,
 ) -> pd.DataFrame:
-    """Tier 1: Rank startlist riders by carried_points."""
+    """Tier 1: Rank startlist riders by carried_points.
+
+    When ``entry.carried_points`` is set (from road-results predictor), use it
+    directly. Fall back to historical Result lookup only when it is None.
+    """
     rows = []
     for entry in entries:
-        # Look up best carried_points for this rider
-        best_points = 0.0
         wins = 0
         last_raced = None
         team = entry.team or ""
+
+        # Prefer inline carried_points from Startlist (road-results predictor)
+        if getattr(entry, "carried_points", None) is not None:
+            best_points = entry.carried_points
+        else:
+            best_points = 0.0
 
         if entry.rider_id:
             rider_results = (
@@ -192,8 +200,10 @@ def _rank_from_startlist(
                 .all()
             )
             for r in rider_results:
-                if r.carried_points is not None and r.carried_points > best_points:
-                    best_points = r.carried_points
+                # Only look up historical points if startlist didn't provide them
+                if getattr(entry, "carried_points", None) is None:
+                    if r.carried_points is not None and r.carried_points > best_points:
+                        best_points = r.carried_points
                 if r.place == 1:
                     wins += 1
                 if r.team:

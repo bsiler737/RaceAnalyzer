@@ -245,6 +245,19 @@ class TestRoadResultsClient:
         assert len(data) == 3
 
     @responses.activate
+    def test_fetch_race_json_invalid_json(self):
+        """Invalid JSON response returns empty list gracefully."""
+        responses.add(
+            responses.GET,
+            "https://www.road-results.com/downloadrace.php?raceID=1000&json=1",
+            body="<html>Cloudflare challenge</html>",
+            status=200,
+        )
+        client = RoadResultsClient(Settings(min_request_delay=0))
+        data = client.fetch_race_json(1000)
+        assert data == []
+
+    @responses.activate
     def test_404_raises_race_not_found(self):
         responses.add(
             responses.GET,

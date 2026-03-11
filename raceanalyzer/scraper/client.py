@@ -79,9 +79,15 @@ class RoadResultsClient:
 
     def fetch_race_json(self, race_id: int) -> list[dict]:
         """GET /downloadrace.php?raceID={race_id}&json=1 -> list of result dicts."""
+        import json
+
         url = f"{self._settings.base_url}/downloadrace.php?raceID={race_id}&json=1"
         response = self._request_with_retry(url)
-        data = response.json()
+        try:
+            data = response.json()
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("Invalid JSON response for race %d", race_id)
+            return []
         if not isinstance(data, list):
             return []
         return data
