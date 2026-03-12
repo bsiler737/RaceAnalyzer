@@ -187,6 +187,39 @@ class TestSearchPastOnlyResults:
             assert all(not item["is_upcoming"] for item in items)
 
 
+class TestExpandedTier1Fields:
+    """Sprint 013: New Tier 1 fields in feed items."""
+
+    def test_new_fields_present(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        for item in items:
+            # These keys must exist (may be None)
+            assert "elevation_sparkline_points" in item
+            assert "climbs_json" in item
+            assert "typical_field_duration_min" in item
+            assert "rwgps_encoded_polyline" in item
+            assert "distribution_json" in item
+            assert "field_size_median" in item
+
+    def test_beginner_friendly_filter(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+        from raceanalyzer.ui.feed_card import is_beginner_friendly
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        friendly = [i for i in items if is_beginner_friendly(i)[0]]
+        # Some items may be friendly, all must pass without error
+        for item in friendly:
+            ok, reasons = is_beginner_friendly(item)
+            assert ok is True
+            assert len(reasons) >= 1
+
+
 class TestPredictionSourceInFeedItems:
     """Sprint 012: prediction_source is included in feed items."""
 
