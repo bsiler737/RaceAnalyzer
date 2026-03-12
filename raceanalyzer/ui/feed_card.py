@@ -608,6 +608,23 @@ def build_card_html(item: dict) -> str:
         f'</div>'
     )
 
+    # --- Registration urgency badge (VD-07) ---
+    days = item.get("days_until")
+    if item.get("is_upcoming") and days is not None and days <= 7:
+        if days <= 3:
+            urg_bg = "#D32F2F"
+            urg_text = f"Race in {days} day{'s' if days != 1 else ''}!"
+        else:
+            urg_bg = "#F57C00"
+            urg_text = f"Race in {days} days"
+        parts.append(
+            f'<div style="margin-top:2px;">'
+            f'<span style="background:{urg_bg};color:#fff;'
+            f'padding:1px 8px;border-radius:4px;'
+            f'font-size:0.75em;font-weight:600;">'
+            f'{html.escape(urg_text)}</span></div>'
+        )
+
     # --- Row 2: Location + Race type badge ---
     loc_parts = []
     if item.get("location"):
