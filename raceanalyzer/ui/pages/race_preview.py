@@ -15,6 +15,7 @@ from raceanalyzer.ui.components import (
     render_confidence_badge,
     render_empty_state,
     render_finish_pattern,
+    render_scary_racer_card,
     render_selectivity_badge,
     render_similar_races,
     render_team_startlist,
@@ -25,8 +26,12 @@ from raceanalyzer.ui.maps import render_course_map, render_interactive_course_pr
 def render():
     session = st.session_state.db_session
 
-    # Back navigation
+    # Back navigation (restore feed scroll position)
     if st.button("Back to Feed"):
+        # Restore pagination to where user left off
+        scroll_idx = st.session_state.get("feed_scroll_index")
+        if scroll_idx:
+            st.session_state["feed_page_size"] = scroll_idx
         st.switch_page("pages/feed.py")
 
     series_id = st.query_params.get("series_id")
@@ -174,12 +179,24 @@ def render():
 
             st.caption(f"Based on {pred['edition_count']} previous edition(s)")
 
+            # RP-04: Large distribution bar chart (replaces expander text list)
             if pred.get("distribution"):
-                with st.expander("Finish type distribution"):
-                    for ft, count in sorted(
-                        pred["distribution"].items(), key=lambda x: -x[1]
-                    ):
-                        st.write(f"- {finish_type_display_name(ft)}: {count}")
+                import pandas as pd
+
+                from raceanalyzer.ui.charts import build_distribution_bar_chart
+
+                dist_data = [
+                    {"finish_type": ft, "count": count}
+                    for ft, count in pred["distribution"].items()
+                ]
+                dist_df = pd.DataFrame(dist_data)
+                fig = build_distribution_bar_chart(dist_df)
+                fig.update_layout(height=max(200, len(dist_data) * 40))
+                fig.update_traces(
+                    texttemplate="%{x}",
+                    textposition="outside",
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
             # DD-05: Historical finish type visualization
             detail = queries.get_feed_item_detail(
@@ -263,13 +280,29 @@ def render():
             else:
                 st.info("No startlist or contender data available.")
 
+    # RP-05: Scary Riders section
+    with st.container(border=True):
+        st.subheader("Scary Riders")
+        latest_race = queries.get_latest_race_for_series(session, int(series_id))
+        if latest_race:
+            scary_racers = queries.get_scary_racers(
+                session, latest_race.id, category=selected_cat
+            )
+            if scary_racers:
+                for racer in scary_racers[:10]:
+                    render_scary_racer_card(racer)
+            else:
+                st.info("No historical results yet.")
+        else:
+            st.info("No past editions to analyze.")
+
     # DD-06: Similar Races
     with st.container(border=True):
         st.subheader("Similar Races")
         similar = queries.get_similar_series(session, int(series_id))
         render_similar_races(similar)
 
-    # DD-07: Course map with climb markers
+    # RP-02: Course map at full content width with climb markers
     if series.get("encoded_polyline") and profile_points and len(profile_points) > 1:
         with st.container(border=True):
             st.subheader("Course Map")
