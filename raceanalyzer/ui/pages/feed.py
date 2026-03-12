@@ -15,8 +15,6 @@ from raceanalyzer.ui.components import (
     render_team_setting,
 )
 from raceanalyzer.ui.feed_card import (
-    CHIP_TOOLTIPS,
-    _card_has_chip,
     build_card_html,
     generate_ics,
     generate_share_text,
@@ -413,18 +411,6 @@ def _render_container_card(
         card_html = build_card_html(item)
         st.markdown(card_html, unsafe_allow_html=True)
 
-        # Card info popover (Sprint 014: TT-01)
-        with st.popover(
-            "\u2139\ufe0f Card info",
-            use_container_width=False,
-        ):
-            for chip_key, explanation in CHIP_TOOLTIPS.items():
-                if _card_has_chip(item, chip_key):
-                    st.markdown(
-                        f"**{chip_key.replace('_', ' ').title()}**: "
-                        f"{explanation}"
-                    )
-
         # --- Action row ---
         _render_action_row(item, session, category, key_prefix, expanded)
 
@@ -443,7 +429,7 @@ def _render_action_row(item, session, category, key_prefix, expanded):
 
     cols = st.columns([2, 1, 1])
 
-    # Preview — primary CTA
+    # Preview — primary CTA (Sprint 015: RP-01 navigate to full page)
     with cols[0]:
         if st.button(
             "Preview",
@@ -451,7 +437,13 @@ def _render_action_row(item, session, category, key_prefix, expanded):
             use_container_width=True,
             type="primary",
         ):
-            _show_race_detail(series_id, session, category)
+            st.session_state["preview_series_id"] = series_id
+            st.query_params["series_id"] = str(series_id)
+            # Track feed scroll position for restoration
+            st.session_state["feed_scroll_index"] = st.session_state.get(
+                "feed_page_size", 20
+            )
+            st.switch_page("pages/race_preview.py")
 
     # Register — secondary (hidden when not applicable)
     with cols[1]:
@@ -547,32 +539,6 @@ def _render_action_row(item, session, category, key_prefix, expanded):
 
 
 # --- Dialogs (Sprint 013: AP-03, AP-04, AP-06) ---
-
-
-@st.dialog("Race Details", width="large")
-def _show_race_detail(series_id, session, category):
-    """Bottom sheet / dialog with full Tier 2 content (Sprint 013: AP-03)."""
-    detail = queries.get_feed_item_detail(session, series_id, category=category)
-    if not detail:
-        st.warning("Race details not available.")
-        return
-
-    render_feed_card(detail)
-
-    # Previous editions timeline (Sprint 013: AP-05)
-    editions = detail.get("editions_summary", [])
-    if editions and len(editions) > 1:
-        st.markdown("**Previous editions**")
-        from raceanalyzer.ui.components import render_finish_pattern
-
-        render_finish_pattern(editions)
-
-    # Course map (if available)
-    if detail.get("elevation_sparkline_points"):
-        from raceanalyzer.ui.components import render_elevation_sparkline
-
-        st.markdown("**Elevation profile**")
-        render_elevation_sparkline(detail["elevation_sparkline_points"])
 
 
 @st.dialog("Compare Races", width="large")

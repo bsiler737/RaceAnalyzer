@@ -542,6 +542,29 @@ def inject_feed_styles():
     div[data-testid="stExpander"] {
         transition: max-height 300ms ease, opacity 200ms ease;
     }
+
+    /* Sprint 015: Two-column card responsive collapse (CL-04) */
+    @media (max-width: 480px) {
+        .feed-card-inner {
+            grid-template-columns: 1fr !important;
+        }
+        .feed-card-right {
+            flex-direction: row !important;
+            justify-content: center;
+        }
+    }
+
+    /* Sprint 015: Info icon disclosure (CL-05) */
+    .feed-card-info summary::-webkit-details-marker { display: none; }
+    .feed-card-info summary::marker { display: none; content: ""; }
+
+    /* Sprint 015: Prediction details disclosure (CL-03) */
+    .feed-card-prediction-details summary::-webkit-details-marker { display: none; }
+    .feed-card-prediction-details summary::marker { display: none; content: ""; }
+    .feed-card-prediction-details[open] summary span {
+        transform: rotate(90deg);
+        display: inline-block;
+    }
     </style>
     """,
         unsafe_allow_html=True,
@@ -554,6 +577,8 @@ def inject_feed_styles():
 def build_card_html(item: dict) -> str:
     """Build the full collapsed-card HTML for a feed item.
 
+    Sprint 015: Two-column CSS Grid layout (text left, visuals right).
+    Prediction details below fold in <details>. Info icon as <details> in upper-right.
     Returns a single HTML string to be rendered via st.markdown(unsafe_allow_html=True).
     All user strings are HTML-escaped.
     """
@@ -563,52 +588,74 @@ def build_card_html(item: dict) -> str:
     ft = item.get("predicted_finish_type") or "unknown"
     accent_color = FINISH_TYPE_COLORS.get(ft, "#9E9E9E")
     ft_icon = FINISH_TYPE_ICONS.get(ft, FINISH_TYPE_ICONS.get("unknown", ""))
-    # Scale icon to 20x20
     ft_icon_20 = ft_icon.replace('width="24"', 'width="20"').replace('height="24"', 'height="20"')
 
+    # --- Build right-column visuals ---
+    sparkline_html = ""
+    route_html = ""
+
+    profile_points = item.get("elevation_sparkline_points")
+    if profile_points:
+        sparkline_html = render_elevation_sparkline_svg(profile_points)
+
+    encoded_poly = item.get("rwgps_encoded_polyline")
+    if encoded_poly:
+        route_html = render_route_trace_svg(encoded_poly)
+
+    has_visuals = bool(sparkline_html or route_html)
+
+    # --- Grid template: two-column if visuals, single if not ---
+    if has_visuals:
+        grid_cols = "grid-template-columns:1fr auto;"
+    else:
+        grid_cols = "grid-template-columns:1fr;"
+
     parts.append(
-        f'<div class="feed-card-inner" style="border-left:4px solid '
-        f'{accent_color};padding-left:12px;">'
+        f'<div class="feed-card-inner" style="position:relative;border-left:4px solid '
+        f'{accent_color};padding-left:12px;display:grid;{grid_cols}gap:12px;">'
     )
 
-    # --- Row 1: Name + Date pill ---
+    # === LEFT COLUMN ===
+    parts.append('<div class="feed-card-left">')
+
+    # --- Row 1: Name + countdown pill inline (CL-02) ---
     name = html.escape(str(item.get("display_name", "")))
-    date_pill = ""
+    countdown_pill = ""
     if item.get("is_upcoming") and item.get("upcoming_date"):
-        try:
-            date_str = html.escape(f"{item['upcoming_date']:%b %d, %Y}")
-        except (TypeError, ValueError):
-            date_str = ""
-        if date_str:
-            pill_label, pill_bg, pill_text = countdown_pill_style(item.get("days_until"))
-            if pill_label:
-                date_pill = (
-                    f'<span class="feed-card-date-pill" '
-                    f'style="background:{pill_bg};color:{pill_text};'
-                    f'padding:2px 8px;border-radius:12px;'
-                    f'font-size:0.8em;font-weight:500;'
-                    f'white-space:nowrap;">{html.escape(pill_label)}</span>'
+        pill_label, pill_bg, pill_text = countdown_pill_style(item.get("days_until"))
+        if pill_label:
+            countdown_pill = (
+                f'<span class="feed-card-date-pill" '
+                f'style="background:{pill_bg};color:{pill_text};'
+                f'padding:2px 8px;border-radius:12px;'
+                f'font-size:0.8em;font-weight:500;'
+                f'white-space:nowrap;margin-left:6px;">{html.escape(pill_label)}</span>'
+            )
+        else:
+            try:
+                date_str = html.escape(f"{item['upcoming_date']:%b %d, %Y}")
+                countdown_pill = (
+                    f'<span style="color:var(--text-color,#666);'
+                    f'font-size:0.85em;margin-left:6px;">{date_str}</span>'
                 )
-            else:
-                date_pill = (
-                    '<span style="color:var(--text-color,#666);'
-                    f'font-size:0.85em;">{date_str}</span>'
-                )
+            except (TypeError, ValueError):
+                pass
     elif item.get("most_recent_date"):
         try:
             date_str = html.escape(f"last raced {item['most_recent_date']:%b %Y}")
-            date_pill = (
-                '<span style="color:var(--text-color,#888);'
-                f'font-size:0.8em;">{date_str}</span>'
+            countdown_pill = (
+                f'<span style="color:var(--text-color,#888);'
+                f'font-size:0.8em;margin-left:6px;">{date_str}</span>'
             )
         except (TypeError, ValueError):
             pass
 
     parts.append(
-        f'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;'
-        f'flex-wrap:wrap;">'
-        f'<span style="font-weight:600;font-size:1.05em;">{name}</span>'
-        f'{date_pill}'
+        f'<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;'
+        f'max-width:calc(100% - 30px);">'
+        f'<span style="font-weight:600;font-size:1.05em;'
+        f'overflow:hidden;text-overflow:ellipsis;">{name}</span>'
+        f'{countdown_pill}'
         f'</div>'
     )
 
@@ -687,109 +734,7 @@ def build_card_html(item: dict) -> str:
         )
 
     # --- Chip row ---
-    chips = []
-    is_upcoming = item.get("is_upcoming", False)
-
-    # Distance chip
-    _DIST_ICON = (
-        '<svg width="14" height="14" viewBox="0 0 14 14">'
-        '<line x1="1" y1="7" x2="13" y2="7"'
-        ' stroke="currentColor" stroke-width="1.5"/>'
-        '<line x1="1" y1="5" x2="1" y2="9"'
-        ' stroke="currentColor" stroke-width="1.5"/>'
-        '<line x1="13" y1="5" x2="13" y2="9"'
-        ' stroke="currentColor" stroke-width="1.5"/></svg>'
-    )
-    if item.get("distance_m") is not None:
-        km = item["distance_m"] / 1000
-        chips.append(_chip("distance", _DIST_ICON, f"{km:.0f} km"))
-    elif is_upcoming:
-        chips.append(
-            '<span class="feed-card-chip" style="opacity:0.5;'
-            'display:inline-flex;align-items:center;gap:3px;'
-            'background:var(--secondary-background-color,#f0f2f6);'
-            'padding:2px 8px;border-radius:4px;'
-            'color:var(--text-color,#444);">'
-            '\U0001f4cf -- km</span>'
-        )
-
-    # Elevation chip
-    _ELEV_ICON = (
-        '<svg width="14" height="14" viewBox="0 0 14 14">'
-        '<path d="M1 12 L7 3 L13 12"'
-        ' fill="none" stroke="currentColor" stroke-width="1.5"'
-        ' stroke-linejoin="round"/></svg>'
-    )
-    if item.get("total_gain_m") is not None:
-        chips.append(
-            _chip("elevation", _ELEV_ICON, f"{item['total_gain_m']:.0f}m")
-        )
-    elif is_upcoming:
-        chips.append(
-            '<span class="feed-card-chip" style="opacity:0.5;'
-            'display:inline-flex;align-items:center;gap:3px;'
-            'background:var(--secondary-background-color,#f0f2f6);'
-            'padding:2px 8px;border-radius:4px;'
-            'color:var(--text-color,#444);">'
-            '\u26f0\ufe0f -- m \u2191</span>'
-        )
-
-    # Terrain chip
-    if item.get("course_type"):
-        from raceanalyzer.elevation import course_type_display
-
-        terrain = course_type_display(item["course_type"])
-        chips.append(_chip(
-            "terrain",
-            '<svg width="14" height="14" viewBox="0 0 14 14">'
-            '<path d="M1 11 Q4 5 7 8 Q10 11 13 5"'
-            ' fill="none" stroke="currentColor"'
-            ' stroke-width="1.5"/></svg>',
-            html.escape(terrain),
-        ))
-
-    # Field size chip
-    if item.get("field_size_median"):
-        chips.append(_chip(
-            "field_size",
-            '<svg width="14" height="14" viewBox="0 0 14 14">'
-            '<circle cx="5" cy="5" r="2" fill="currentColor"/>'
-            '<circle cx="10" cy="5" r="2" fill="currentColor"'
-            ' opacity="0.6"/>'
-            '<circle cx="7" cy="10" r="2" fill="currentColor"'
-            ' opacity="0.4"/></svg>',
-            f"{item['field_size_median']} riders",
-        ))
-
-    # Duration chip
-    dur_text = format_duration(
-        item.get("typical_field_duration_min")
-    )
-    if dur_text:
-        chips.append(_chip(
-            "duration",
-            '<svg width="14" height="14" viewBox="0 0 14 14">'
-            '<circle cx="7" cy="7" r="5.5"'
-            ' fill="none" stroke="currentColor"'
-            ' stroke-width="1.2"/>'
-            '<line x1="7" y1="7" x2="7" y2="4"'
-            ' stroke="currentColor" stroke-width="1.2"'
-            ' stroke-linecap="round"/>'
-            '<line x1="7" y1="7" x2="10" y2="7"'
-            ' stroke="currentColor" stroke-width="1"'
-            ' stroke-linecap="round"/></svg>',
-            dur_text,
-        ))
-    elif is_upcoming:
-        chips.append(
-            '<span class="feed-card-chip" style="opacity:0.5;'
-            'display:inline-flex;align-items:center;gap:3px;'
-            'background:var(--secondary-background-color,#f0f2f6);'
-            'padding:2px 8px;border-radius:4px;'
-            'color:var(--text-color,#444);">'
-            '\U0001f550 ~? min</span>'
-        )
-
+    chips = _build_chip_row(item)
     if chips:
         parts.append(
             '<div class="feed-card-chips" style="display:flex;flex-wrap:wrap;gap:6px;'
@@ -828,23 +773,195 @@ def build_card_html(item: dict) -> str:
             '</div>'
         )
 
-    # --- Prediction section ---
-    pred_parts_html = []
-
-    # What to expect
+    # --- "What to expect" one-liner stays above the fold ---
     wte = what_to_expect_text(
         ft if ft != "unknown" else None,
         prediction_source=item.get("prediction_source"),
         race_type=race_type,
     )
     if wte:
-        pred_parts_html.append(
+        parts.append(
             f'<div class="feed-card-prediction" style="margin-top:6px;font-weight:500;'
             f'font-size:0.92em;display:flex;align-items:center;gap:6px;">'
             f'{ft_icon_20}'
             f'<span>{html.escape(wte)}</span>'
             f'</div>'
         )
+
+    parts.append('</div>')  # close feed-card-left
+
+    # === RIGHT COLUMN (CL-01, CL-04) ===
+    if has_visuals:
+        parts.append(
+            '<div class="feed-card-right" style="min-width:130px;display:flex;'
+            'flex-direction:column;align-items:center;gap:6px;'
+            'justify-content:center;">'
+        )
+        if route_html:
+            parts.append(f'<div>{route_html}</div>')
+        if sparkline_html:
+            parts.append(f'<div>{sparkline_html}</div>')
+        parts.append('</div>')  # close feed-card-right
+
+    parts.append('</div>')  # close feed-card-inner (grid)
+
+    # === CL-05: Info icon (HTML <details>) in upper-right ===
+    info_items = _build_info_items(item)
+    if info_items:
+        info_content = "".join(info_items)
+        parts.append(
+            '<details class="feed-card-info" style="position:absolute;top:8px;right:8px;'
+            'z-index:5;">'
+            '<summary style="cursor:pointer;font-size:14px;width:20px;height:20px;'
+            'display:flex;align-items:center;justify-content:center;'
+            'border-radius:50%;background:var(--secondary-background-color,#f0f2f6);'
+            'color:var(--text-color,#666);list-style:none;font-weight:600;">i</summary>'
+            '<div style="position:absolute;right:0;top:24px;background:'
+            'var(--background-color,#fff);border:1px solid '
+            'var(--secondary-background-color,#e0e0e0);'
+            'border-radius:8px;padding:8px 12px;min-width:200px;max-width:300px;'
+            'box-shadow:0 4px 12px rgba(0,0,0,0.1);font-size:0.78em;z-index:10;">'
+            f'{info_content}'
+            '</div></details>'
+        )
+
+    # === CL-03: Prediction details below fold in <details> ===
+    detail_parts = _build_prediction_details(item, ft, drop_pct)
+    if detail_parts:
+        detail_content = "".join(detail_parts)
+        parts.append(
+            '<details class="feed-card-prediction-details" style="margin-top:6px;">'
+            '<summary style="cursor:pointer;font-size:0.82em;'
+            'color:var(--text-color,#888);list-style:none;'
+            'display:flex;align-items:center;gap:4px;">'
+            '<span style="font-size:10px;">&#9654;</span> More details</summary>'
+            f'<div style="margin-top:4px;padding-left:4px;">{detail_content}</div>'
+            '</details>'
+        )
+
+    return "\n".join(parts)
+
+
+def _build_chip_row(item: dict) -> list[str]:
+    """Build the list of chip HTML strings for a feed card."""
+    chips = []
+    is_upcoming = item.get("is_upcoming", False)
+
+    _DIST_ICON = (
+        '<svg width="14" height="14" viewBox="0 0 14 14">'
+        '<line x1="1" y1="7" x2="13" y2="7"'
+        ' stroke="currentColor" stroke-width="1.5"/>'
+        '<line x1="1" y1="5" x2="1" y2="9"'
+        ' stroke="currentColor" stroke-width="1.5"/>'
+        '<line x1="13" y1="5" x2="13" y2="9"'
+        ' stroke="currentColor" stroke-width="1.5"/></svg>'
+    )
+    if item.get("distance_m") is not None:
+        km = item["distance_m"] / 1000
+        chips.append(_chip("distance", _DIST_ICON, f"{km:.0f} km"))
+    elif is_upcoming:
+        chips.append(
+            '<span class="feed-card-chip" style="opacity:0.5;'
+            'display:inline-flex;align-items:center;gap:3px;'
+            'background:var(--secondary-background-color,#f0f2f6);'
+            'padding:2px 8px;border-radius:4px;'
+            'color:var(--text-color,#444);">'
+            '\U0001f4cf -- km</span>'
+        )
+
+    _ELEV_ICON = (
+        '<svg width="14" height="14" viewBox="0 0 14 14">'
+        '<path d="M1 12 L7 3 L13 12"'
+        ' fill="none" stroke="currentColor" stroke-width="1.5"'
+        ' stroke-linejoin="round"/></svg>'
+    )
+    if item.get("total_gain_m") is not None:
+        chips.append(
+            _chip("elevation", _ELEV_ICON, f"{item['total_gain_m']:.0f}m")
+        )
+    elif is_upcoming:
+        chips.append(
+            '<span class="feed-card-chip" style="opacity:0.5;'
+            'display:inline-flex;align-items:center;gap:3px;'
+            'background:var(--secondary-background-color,#f0f2f6);'
+            'padding:2px 8px;border-radius:4px;'
+            'color:var(--text-color,#444);">'
+            '\u26f0\ufe0f -- m \u2191</span>'
+        )
+
+    if item.get("course_type"):
+        from raceanalyzer.elevation import course_type_display
+
+        terrain = course_type_display(item["course_type"])
+        chips.append(_chip(
+            "terrain",
+            '<svg width="14" height="14" viewBox="0 0 14 14">'
+            '<path d="M1 11 Q4 5 7 8 Q10 11 13 5"'
+            ' fill="none" stroke="currentColor"'
+            ' stroke-width="1.5"/></svg>',
+            html.escape(terrain),
+        ))
+
+    if item.get("field_size_median"):
+        chips.append(_chip(
+            "field_size",
+            '<svg width="14" height="14" viewBox="0 0 14 14">'
+            '<circle cx="5" cy="5" r="2" fill="currentColor"/>'
+            '<circle cx="10" cy="5" r="2" fill="currentColor"'
+            ' opacity="0.6"/>'
+            '<circle cx="7" cy="10" r="2" fill="currentColor"'
+            ' opacity="0.4"/></svg>',
+            f"{item['field_size_median']} riders",
+        ))
+
+    dur_text = format_duration(item.get("typical_field_duration_min"))
+    if dur_text:
+        chips.append(_chip(
+            "duration",
+            '<svg width="14" height="14" viewBox="0 0 14 14">'
+            '<circle cx="7" cy="7" r="5.5"'
+            ' fill="none" stroke="currentColor"'
+            ' stroke-width="1.2"/>'
+            '<line x1="7" y1="7" x2="7" y2="4"'
+            ' stroke="currentColor" stroke-width="1.2"'
+            ' stroke-linecap="round"/>'
+            '<line x1="7" y1="7" x2="10" y2="7"'
+            ' stroke="currentColor" stroke-width="1"'
+            ' stroke-linecap="round"/></svg>',
+            dur_text,
+        ))
+    elif is_upcoming:
+        chips.append(
+            '<span class="feed-card-chip" style="opacity:0.5;'
+            'display:inline-flex;align-items:center;gap:3px;'
+            'background:var(--secondary-background-color,#f0f2f6);'
+            'padding:2px 8px;border-radius:4px;'
+            'color:var(--text-color,#444);">'
+            '\U0001f550 ~? min</span>'
+        )
+
+    return chips
+
+
+def _build_info_items(item: dict) -> list[str]:
+    """Build HTML content for the info icon disclosure (CL-05)."""
+    items = []
+    for chip_key, explanation in CHIP_TOOLTIPS.items():
+        if _card_has_chip(item, chip_key):
+            label = chip_key.replace("_", " ").title()
+            items.append(
+                f'<div style="margin-bottom:4px;">'
+                f'<strong>{html.escape(label)}</strong>: '
+                f'{html.escape(explanation)}</div>'
+            )
+    return items
+
+
+def _build_prediction_details(
+    item: dict, ft: str, drop_pct: Optional[float]
+) -> list[str]:
+    """Build prediction detail HTML for the below-fold <details> section (CL-03)."""
+    detail_parts = []
 
     # Confidence indicator
     conf = confidence_text(
@@ -853,26 +970,15 @@ def build_card_html(item: dict) -> str:
         prediction_source=item.get("prediction_source"),
     )
     if conf:
-        pred_parts_html.append(
-            f'<div style="font-size:0.75em;color:var(--text-color,#888);margin-top:2px;">'
+        detail_parts.append(
+            f'<div style="font-size:0.78em;color:var(--text-color,#888);margin-top:2px;">'
             f'{html.escape(conf)}</div>'
         )
 
-    # Pack survival odds
-    survival = pack_survival_text(drop_pct, ft if ft != "unknown" else None)
-    if survival:
-        pred_parts_html.append(
-            f'<div style="font-size:0.8em;color:var(--text-color,#666);margin-top:2px;">'
-            f'{html.escape(survival)}</div>'
-        )
-
-    if pred_parts_html:
-        parts.append("".join(pred_parts_html))
-
-    # --- Beginner-friendly badge ---
+    # Beginner-friendly badge
     friendly, reasons = is_beginner_friendly(item)
     if friendly:
-        parts.append(
+        detail_parts.append(
             '<div style="margin-top:4px;">'
             '<span class="feed-card-beginner"'
             ' style="display:inline-block;background:#E8F5E9;'
@@ -881,18 +987,28 @@ def build_card_html(item: dict) -> str:
             '\u2705 Beginner-friendly</span></div>'
         )
 
-    # --- Who does well here ---
-    racer_label = racer_type_short_label(item.get("course_type"), ft if ft != "unknown" else None)
+    # Pack survival odds
+    survival = pack_survival_text(drop_pct, ft if ft != "unknown" else None)
+    if survival:
+        detail_parts.append(
+            f'<div style="font-size:0.8em;color:var(--text-color,#666);margin-top:2px;">'
+            f'{html.escape(survival)}</div>'
+        )
+
+    # Who does well here
+    racer_label = racer_type_short_label(
+        item.get("course_type"), ft if ft != "unknown" else None
+    )
     if racer_label:
-        parts.append(
+        detail_parts.append(
             '<div style="font-size:0.78em;color:var(--text-color,#888);'
             f'margin-top:2px;">Suits: {html.escape(racer_label)}</div>'
         )
 
-    # --- Climb highlight ---
+    # Climb highlight
     climb_text = item.get("climb_highlight") or extract_key_climb(item.get("climbs_json"))
     if climb_text:
-        parts.append(
+        detail_parts.append(
             '<div style="font-size:0.78em;color:var(--text-color,#666);'
             'margin-top:2px;display:flex;align-items:center;gap:4px;">'
             '<svg width="12" height="12" viewBox="0 0 12 12">'
@@ -901,35 +1017,7 @@ def build_card_html(item: dict) -> str:
             f'{html.escape(climb_text)}</div>'
         )
 
-    # --- Bottom row: sparkline + route trace ---
-    sparkline_html = ""
-    route_html = ""
-    dist_sparkline_html = ""
-
-    profile_points = item.get("elevation_sparkline_points")
-    if profile_points:
-        sparkline_html = render_elevation_sparkline_svg(profile_points)
-
-    encoded_poly = item.get("rwgps_encoded_polyline")
-    if encoded_poly:
-        route_html = render_route_trace_svg(encoded_poly)
-
-    dist_json = item.get("distribution_json")
-    if dist_json:
-        dist_sparkline_html = render_distribution_sparkline(dist_json)
-
-    visuals = [v for v in [sparkline_html, route_html, dist_sparkline_html] if v]
-    if visuals:
-        parts.append(
-            '<div style="display:flex;gap:12px;align-items:center;'
-            'margin-top:6px;flex-wrap:wrap;">'
-            + "".join(f"<div>{v}</div>" for v in visuals)
-            + "</div>"
-        )
-
-    parts.append("</div>")  # close feed-card-inner
-
-    return "\n".join(parts)
+    return detail_parts
 
 
 def _chip(chip_type: str, icon_svg: str, label: str) -> str:
