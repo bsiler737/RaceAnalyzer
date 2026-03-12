@@ -405,16 +405,43 @@ def build_series_cmd(ctx):
 
 
 @main.command("compute-predictions")
+@click.option("--stats", is_flag=True, help="Print before/after coverage stats.")
 @click.pass_context
-def compute_predictions(ctx):
-    """Pre-compute series predictions for the feed (Sprint 011)."""
+def compute_predictions(ctx, stats):
+    """Pre-compute series predictions for the feed (Sprint 011, 012)."""
     settings = ctx.obj["settings"]
 
+    from sqlalchemy import inspect, text
+
     from raceanalyzer.db.engine import get_session, init_db
+    from raceanalyzer.db.models import SeriesPrediction
     from raceanalyzer.precompute import precompute_all
 
     init_db(settings.db_path)
     session = get_session(settings.db_path)
+
+    # Migration: add prediction_source column if missing
+    insp = inspect(session.bind)
+    columns = [c["name"] for c in insp.get_columns("series_predictions")]
+    if "prediction_source" not in columns:
+        session.execute(
+            text("ALTER TABLE series_predictions ADD COLUMN prediction_source VARCHAR")
+        )
+        session.commit()
+        click.echo("Added prediction_source column to series_predictions.")
+
+    # Before stats
+    if stats:
+        before_total = session.query(SeriesPrediction).filter(
+            SeriesPrediction.category.is_(None)
+        ).count()
+        before_known = session.query(SeriesPrediction).filter(
+            SeriesPrediction.category.is_(None),
+            SeriesPrediction.predicted_finish_type != "unknown",
+            SeriesPrediction.predicted_finish_type.isnot(None),
+        ).count()
+        before_pct = (before_known / before_total * 100) if before_total else 0
+        click.echo(f"Before: {before_known}/{before_total} series with known finish type ({before_pct:.0f}%)")
 
     click.echo("Pre-computing series predictions...")
     summary = precompute_all(session)
@@ -422,6 +449,33 @@ def compute_predictions(ctx):
         f"Computed {summary['predictions_count']} predictions "
         f"across {summary['series_count']} series."
     )
+    if summary.get("race_types_inherited"):
+        click.echo(
+            f"Inherited race_type for {summary['race_types_inherited']} upcoming races."
+        )
+
+    # After stats
+    if stats:
+        after_total = session.query(SeriesPrediction).filter(
+            SeriesPrediction.category.is_(None)
+        ).count()
+        after_known = session.query(SeriesPrediction).filter(
+            SeriesPrediction.category.is_(None),
+            SeriesPrediction.predicted_finish_type != "unknown",
+            SeriesPrediction.predicted_finish_type.isnot(None),
+        ).count()
+        after_pct = (after_known / after_total * 100) if after_total else 0
+        click.echo(f"After:  {after_known}/{after_total} series with known finish type ({after_pct:.0f}%)")
+
+        # Source breakdown
+        for source in ("time_gap", "course_profile", "race_type_only"):
+            count = session.query(SeriesPrediction).filter(
+                SeriesPrediction.category.is_(None),
+                SeriesPrediction.prediction_source == source,
+            ).count()
+            if count:
+                click.echo(f"  {source}: {count}")
+
     session.close()
 
 

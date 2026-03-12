@@ -346,6 +346,9 @@ class SeriesPrediction(Base):
     field_size_min = Column(Integer, nullable=True)
     field_size_max = Column(Integer, nullable=True)
 
+    prediction_source = Column(String, nullable=True)
+    # Values: "time_gap", "course_profile", "race_type_only", None
+
     last_computed = Column(DateTime, server_default=func.now())
 
     series = relationship("RaceSeries", backref="predictions")

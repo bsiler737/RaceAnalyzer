@@ -562,6 +562,7 @@ def generate_narrative(
     total_gain_m: Optional[float] = None,
     climbs: Optional[list] = None,
     edition_count: int = 0,
+    prediction_source: Optional[str] = None,
 ) -> str:
     """Generate a template-based 'What to Expect' narrative.
 
@@ -631,16 +632,25 @@ def generate_narrative(
                 f" averaging {grade_str}."
             )
 
-    # 3. History sentence
-    if predicted_finish_type and edition_count > 0:
+    # 3. History / prediction sentence
+    if predicted_finish_type:
         from raceanalyzer.queries import finish_type_display_name
 
         ft_name = finish_type_display_name(predicted_finish_type).lower()
-        sentences.append(
-            f"Based on {edition_count} previous"
-            f" edition{'s' if edition_count != 1 else ''},"
-            f" this race typically ends in a {ft_name}."
-        )
+        if prediction_source == "course_profile":
+            sentences.append(
+                f"The course profile suggests this race likely ends in a {ft_name}."
+            )
+        elif prediction_source == "race_type_only":
+            sentences.append(
+                f"As this race type, it typically ends in a {ft_name}."
+            )
+        elif edition_count > 0:
+            sentences.append(
+                f"Based on {edition_count} previous"
+                f" edition{'s' if edition_count != 1 else ''},"
+                f" this race typically ends in a {ft_name}."
+            )
 
     if drop_rate:
         rate_pct = round(drop_rate["drop_rate"] * 100)
@@ -694,9 +704,12 @@ RACER_TYPE_DESCRIPTIONS: dict[tuple[str, str], str] = {
     ("rolling", "breakaway"): "Strong all-rounders who can attack on the hills thrive.",
     ("rolling", "small_group_sprint"): "Tactical riders who can bridge gaps excel here.",
     ("hilly", "breakaway"): "Pure climbers and aggressive attackers dominate.",
+    ("hilly", "breakaway_selective"): "Strong climbers who can attack on the decisive hills dominate.",
     ("hilly", "gc_selective"): "Pure climbers dominate this race.",
     ("hilly", "reduced_sprint"): "Climbers with a finishing kick do well.",
+    ("hilly", "small_group_sprint"): "Punchy riders who survive the climbs and still have a kick do well.",
     ("mountainous", "gc_selective"): "Only the strongest climbers survive this race.",
+    ("mountainous", "breakaway_selective"): "Pure climbers who can sustain attacks on long climbs thrive.",
 }
 
 

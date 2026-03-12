@@ -760,3 +760,87 @@ class TestClimbContextLine:
             drop_rate={"drop_rate": 0.35},
         )
         assert "sheds riders" in result
+
+
+# --- Sprint 012: Narrative with prediction_source ---
+
+
+class TestNarrativeWithPredictionSource:
+    """Verify hedged language for course-based and race-type-only predictions."""
+
+    def test_time_gap_uses_edition_count(self):
+        narrative = generate_narrative(
+            course_type="flat",
+            predicted_finish_type="bunch_sprint",
+            distance_km=60.0,
+            edition_count=3,
+            prediction_source="time_gap",
+        )
+        assert "3 previous editions" in narrative
+        assert "course profile" not in narrative.lower()
+
+    def test_course_profile_uses_hedged_language(self):
+        narrative = generate_narrative(
+            course_type="hilly",
+            predicted_finish_type="reduced_sprint",
+            distance_km=80.0,
+            total_gain_m=1200,
+            prediction_source="course_profile",
+        )
+        assert "course profile suggests" in narrative.lower()
+        assert "previous edition" not in narrative.lower()
+
+    def test_race_type_only_uses_type_language(self):
+        narrative = generate_narrative(
+            predicted_finish_type="bunch_sprint",
+            prediction_source="race_type_only",
+        )
+        assert "typically ends" in narrative.lower()
+
+    def test_no_source_with_editions_uses_original(self):
+        narrative = generate_narrative(
+            predicted_finish_type="bunch_sprint",
+            edition_count=2,
+            prediction_source=None,
+        )
+        assert "2 previous editions" in narrative
+
+
+class TestRacerTypeDescriptionCoverage:
+    """Sprint 012: New RACER_TYPE_DESCRIPTIONS entries."""
+
+    def test_hilly_breakaway_selective(self):
+        result = racer_type_description("hilly", "breakaway_selective")
+        assert result is not None
+        assert "climber" in result.lower()
+
+    def test_hilly_small_group_sprint(self):
+        result = racer_type_description("hilly", "small_group_sprint")
+        assert result is not None
+        assert "punchy" in result.lower()
+
+    def test_mountainous_breakaway_selective(self):
+        result = racer_type_description("mountainous", "breakaway_selective")
+        assert result is not None
+        assert "climber" in result.lower()
+
+    def test_all_course_predictor_outputs_have_descriptions(self):
+        """Every (course_type, finish_type) the course predictor can produce
+        should have a RACER_TYPE_DESCRIPTIONS entry (or a reasonable fallback)."""
+        from raceanalyzer.predictions import RACER_TYPE_DESCRIPTIONS
+
+        # Combinations the course predictor can produce
+        course_predictor_outputs = [
+            ("flat", "bunch_sprint"),
+            ("rolling", "bunch_sprint"),
+            ("rolling", "reduced_sprint"),
+            ("hilly", "reduced_sprint"),
+            ("hilly", "small_group_sprint"),
+            ("hilly", "breakaway_selective"),
+            ("mountainous", "gc_selective"),
+            ("mountainous", "breakaway_selective"),
+        ]
+        for combo in course_predictor_outputs:
+            assert combo in RACER_TYPE_DESCRIPTIONS, (
+                f"Missing RACER_TYPE_DESCRIPTIONS entry for {combo}"
+            )

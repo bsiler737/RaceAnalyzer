@@ -969,6 +969,25 @@ def finish_type_plain_english(finish_type_value: str) -> str:
     return FINISH_TYPE_TOOLTIPS.get(finish_type_value, "")
 
 
+def finish_type_plain_english_with_source(
+    finish_type: str,
+    prediction_source: Optional[str] = None,
+    race_type: Optional[str] = None,
+) -> Optional[str]:
+    """Return plain English finish description with source-appropriate framing."""
+    base = finish_type_plain_english(finish_type)
+    if not base:
+        return None
+
+    if prediction_source == "course_profile":
+        return f"Course profile suggests: {base[0].lower()}{base[1:]}"
+    elif prediction_source == "race_type_only":
+        rt_display = race_type_display_name(race_type) if race_type else "This race type"
+        return f"{rt_display}s typically end this way: {base[0].lower()}{base[1:]}"
+    else:
+        return base
+
+
 def climb_highlight(climbs: Optional[list]) -> Optional[str]:
     """Return a one-liner about the hardest climb, or None."""
     if not climbs:
@@ -1390,6 +1409,7 @@ def get_feed_items_batch(
         pred = pred_map.get((sid, category)) or pred_map.get((sid, None))
         predicted_ft = pred.predicted_finish_type if pred else None
         confidence = pred.confidence if pred else None
+        prediction_source = getattr(pred, "prediction_source", None) if pred else None
         drop_rate_pct = (
             round(pred.drop_rate * 100)
             if pred and pred.drop_rate is not None
@@ -1436,6 +1456,7 @@ def get_feed_items_batch(
                 else None
             ),
             "confidence": confidence,
+            "prediction_source": prediction_source,
             "course_type": course_type,
             "distance_m": distance_m,
             "total_gain_m": total_gain_m,
@@ -1498,9 +1519,36 @@ def get_feed_item_detail(session, series_id, category=None):
             except (json.JSONDecodeError, TypeError):
                 pass
 
-    # Prediction (for narrative)
-    prediction = predict_series_finish_type(session, series_id, category=category)
-    predicted_ft = prediction["predicted_finish_type"]
+    # Prediction: prefer pre-computed SeriesPrediction (has prediction_source)
+    from raceanalyzer.db.models import SeriesPrediction
+
+    pred_row = (
+        session.query(SeriesPrediction)
+        .filter(
+            SeriesPrediction.series_id == series_id,
+            SeriesPrediction.category == category,
+        )
+        .first()
+    )
+    if not pred_row:
+        pred_row = (
+            session.query(SeriesPrediction)
+            .filter(
+                SeriesPrediction.series_id == series_id,
+                SeriesPrediction.category.is_(None),
+            )
+            .first()
+        )
+
+    if pred_row:
+        predicted_ft = pred_row.predicted_finish_type or "unknown"
+        prediction_source = getattr(pred_row, "prediction_source", None)
+        edition_count = pred_row.edition_count or 0
+    else:
+        prediction = predict_series_finish_type(session, series_id, category=category)
+        predicted_ft = prediction["predicted_finish_type"]
+        prediction_source = None
+        edition_count = prediction["edition_count"]
 
     # Drop rate
     dr = calculate_drop_rate(session, series_id, category=category)
@@ -1520,7 +1568,8 @@ def get_feed_item_detail(session, series_id, category=None):
         distance_km=distance_km,
         total_gain_m=total_gain_m,
         climbs=climbs_data,
-        edition_count=prediction["edition_count"],
+        edition_count=edition_count,
+        prediction_source=prediction_source,
     )
     narrative_snippet = _snippet(narrative, max_sentences=2, max_chars=200)
 
