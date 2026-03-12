@@ -393,11 +393,9 @@ def render_distribution_sparkline(
         if w < 1:
             w = 1
         color = FINISH_TYPE_COLORS.get(ft, "#9E9E9E")
-        ft_display = html.escape(ft.replace("_", " ").title())
         bars += (
             f'<rect x="{x}" y="0" width="{w}" height="{height}" '
-            f'fill="{color}" rx="1">'
-            f"<title>{ft_display}: {count}</title></rect>"
+            f'fill="{color}" rx="1"/>'
         )
         x += w
 
