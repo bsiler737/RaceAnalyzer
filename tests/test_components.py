@@ -119,3 +119,67 @@ class TestFeedCardGracefulDegradation:
         else:
             badge = f"\U0001f465 {len(teammates)} teammates"
         assert "3 teammates" in badge
+
+
+class TestRegisterButtonGuard:
+    """Sprint 012 UP-03: Register button checks for null/empty URLs."""
+
+    def test_null_registration_url(self):
+        item = {"is_upcoming": True, "registration_url": None}
+        reg_url = item.get("registration_url")
+        should_show = item.get("is_upcoming") and reg_url and reg_url.strip()
+        assert not should_show
+
+    def test_empty_registration_url(self):
+        item = {"is_upcoming": True, "registration_url": ""}
+        reg_url = item.get("registration_url")
+        should_show = item.get("is_upcoming") and reg_url and reg_url.strip()
+        assert not should_show
+
+    def test_whitespace_registration_url(self):
+        item = {"is_upcoming": True, "registration_url": "   "}
+        reg_url = item.get("registration_url")
+        should_show = item.get("is_upcoming") and reg_url and reg_url.strip()
+        assert not should_show
+
+    def test_valid_registration_url(self):
+        item = {"is_upcoming": True, "registration_url": "https://bikereg.com/race"}
+        reg_url = item.get("registration_url")
+        should_show = item.get("is_upcoming") and reg_url and reg_url.strip()
+        assert should_show
+
+    def test_not_upcoming(self):
+        item = {"is_upcoming": False, "registration_url": "https://bikereg.com/race"}
+        reg_url = item.get("registration_url")
+        should_show = item.get("is_upcoming") and reg_url and reg_url.strip()
+        assert not should_show
+
+
+class TestPredictionSourceRendering:
+    """Sprint 012: Card rendering with different prediction_source values."""
+
+    def test_time_gap_plain_english(self):
+        from raceanalyzer.queries import finish_type_plain_english_with_source
+
+        result = finish_type_plain_english_with_source(
+            "bunch_sprint", prediction_source="time_gap"
+        )
+        # Time-gap uses definitive language
+        assert "stayed together" in result
+
+    def test_course_profile_plain_english(self):
+        from raceanalyzer.queries import finish_type_plain_english_with_source
+
+        result = finish_type_plain_english_with_source(
+            "bunch_sprint", prediction_source="course_profile"
+        )
+        assert "Course profile suggests" in result
+
+    def test_race_type_only_plain_english(self):
+        from raceanalyzer.queries import finish_type_plain_english_with_source
+
+        result = finish_type_plain_english_with_source(
+            "bunch_sprint", prediction_source="race_type_only",
+            race_type="criterium",
+        )
+        assert "Criteriums" in result

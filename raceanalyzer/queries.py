@@ -377,8 +377,11 @@ def normalize_state(raw: str) -> str:
     return _STATE_NORMALIZE.get(raw, raw)
 
 
+PNW_STATES = {"WA", "OR", "ID", "BC", "MT"}
+
+
 def get_available_states(session: Session) -> list[str]:
-    """Distinct state_province values, normalized and sorted."""
+    """Distinct state_province values, normalized, filtered to PNW, and sorted."""
     rows = (
         session.query(distinct(Race.state_province))
         .filter(Race.state_province.isnot(None))
@@ -386,12 +389,12 @@ def get_available_states(session: Session) -> list[str]:
         .all()
     )
     raw_states = [r[0] for r in rows if r[0]]
-    # Normalize and deduplicate
+    # Normalize, deduplicate, and filter to PNW states
     seen = set()
     result = []
     for s in raw_states:
         norm = normalize_state(s)
-        if norm not in seen:
+        if norm not in seen and norm in PNW_STATES:
             seen.add(norm)
             result.append(norm)
     return sorted(result)

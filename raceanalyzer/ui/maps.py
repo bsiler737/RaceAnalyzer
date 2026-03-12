@@ -111,7 +111,7 @@ def render_course_map(encoded_polyline: str, race_name: str = "", climbs=None):
         [max(c[0] for c in coords), max(c[1] for c in coords)],
     ])
 
-    st_folium(m, use_container_width=True, height=400, returned_objects=[])
+    st_folium(m, use_container_width=True, height=300, returned_objects=[])
 
 
 def render_interactive_course_profile(
@@ -171,7 +171,7 @@ def _render_fallback_profile(
         xaxis_title="Distance (km)",
         yaxis_title="Elevation (m)",
         margin=dict(l=40, r=10, t=10, b=40),
-        height=250,
+        height=400,
         showlegend=False,
     )
     st.plotly_chart(fig, use_container_width=True)

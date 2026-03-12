@@ -243,7 +243,7 @@ def render():
                 source = contenders["source"].iloc[0]
                 source_labels = {
                     "startlist": "From registered riders",
-                    "series_history": "Based on past editions (no startlist available)",
+                    "series_history": "Likely contenders based on past editions",
                     "category": "Top-rated riders in this category",
                 }
                 st.caption(source_labels.get(source, ""))

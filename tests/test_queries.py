@@ -798,3 +798,81 @@ class TestGetTeammatesBySeriesEmpty:
             seeded_series_session, [1], None, ""
         )
         assert result == {}
+
+
+# --- Sprint 012: State filter whitelist ---
+
+
+class TestPNWStateWhitelist:
+    def test_excludes_non_pnw_states(self, session):
+        """States outside PNW should be filtered out."""
+        from raceanalyzer.db.models import Race
+
+        # Add races in Ontario and WA
+        session.add(Race(
+            id=90001, name="Ontario Race", state_province="ON",
+            location="Toronto", is_upcoming=False,
+        ))
+        session.add(Race(
+            id=90002, name="WA Race", state_province="WA",
+            location="Seattle", is_upcoming=False,
+        ))
+        session.commit()
+
+        states = queries.get_available_states(session)
+        assert "WA" in states
+        assert "ON" not in states
+
+    def test_pnw_states_included(self, session):
+        from raceanalyzer.db.models import Race
+
+        for i, (name, state) in enumerate([
+            ("WA Race", "WA"), ("OR Race", "OR"), ("ID Race", "ID"),
+            ("BC Race", "BC"), ("MT Race", "MT"),
+        ]):
+            session.add(Race(
+                id=90010 + i, name=name, state_province=state,
+                location=name, is_upcoming=False,
+            ))
+        session.commit()
+
+        states = queries.get_available_states(session)
+        for s in ["BC", "ID", "MT", "OR", "WA"]:
+            assert s in states
+
+
+# --- Sprint 012: Source-aware plain English ---
+
+
+class TestFinishTypePlainEnglishWithSource:
+    def test_time_gap_returns_base(self):
+        result = queries.finish_type_plain_english_with_source(
+            "bunch_sprint", prediction_source="time_gap"
+        )
+        assert result == queries.finish_type_plain_english("bunch_sprint")
+
+    def test_course_profile_prefix(self):
+        result = queries.finish_type_plain_english_with_source(
+            "bunch_sprint", prediction_source="course_profile"
+        )
+        assert result.startswith("Course profile suggests:")
+
+    def test_race_type_only_prefix(self):
+        result = queries.finish_type_plain_english_with_source(
+            "bunch_sprint", prediction_source="race_type_only",
+            race_type="criterium",
+        )
+        assert "Criteriums" in result
+        assert "typically end" in result
+
+    def test_none_source_returns_base(self):
+        result = queries.finish_type_plain_english_with_source(
+            "bunch_sprint", prediction_source=None
+        )
+        assert result == queries.finish_type_plain_english("bunch_sprint")
+
+    def test_unknown_finish_type_returns_none(self):
+        result = queries.finish_type_plain_english_with_source(
+            "nonexistent_type", prediction_source="time_gap"
+        )
+        assert result is None
