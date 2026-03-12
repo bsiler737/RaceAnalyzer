@@ -652,3 +652,185 @@ class TestMissingDataChips:
         item = self._make_item(is_upcoming=True, distance_m=0)
         card = build_card_html(item)
         assert "0 km" in card
+
+
+# --- Sprint 015: Two-column layout tests ---
+
+
+class TestTwoColumnLayout:
+    """Sprint 015: CL-01 through CL-05."""
+
+    def _make_item(self, **overrides):
+        base = {
+            "display_name": "Test Race",
+            "location": "Portland",
+            "state_province": "OR",
+            "is_upcoming": True,
+            "upcoming_date": None,
+            "days_until": 5,
+            "most_recent_date": None,
+            "race_type": "road_race",
+            "predicted_finish_type": "bunch_sprint",
+            "confidence": "high",
+            "prediction_source": "time_gap",
+            "course_type": "rolling",
+            "distance_m": 85000,
+            "total_gain_m": 850,
+            "drop_rate_pct": 15,
+            "drop_rate_label": "low",
+            "field_size_median": 45,
+            "teammate_names": [],
+            "edition_count": 5,
+            "elevation_sparkline_points": None,
+            "climbs_json": None,
+            "typical_field_duration_min": 120,
+            "rwgps_encoded_polyline": None,
+            "distribution_json": None,
+        }
+        base.update(overrides)
+        return base
+
+    def test_two_column_when_visuals_present(self):
+        """CL-01: Card uses two-column grid when visuals exist."""
+        item = self._make_item(
+            elevation_sparkline_points=[{"e": 100}, {"e": 200}, {"e": 150}],
+        )
+        card = build_card_html(item)
+        assert "grid-template-columns:1fr auto" in card
+        assert "feed-card-left" in card
+        assert "feed-card-right" in card
+
+    def test_single_column_no_visuals(self):
+        """CL-04: Card collapses to single column when no visuals."""
+        item = self._make_item()
+        card = build_card_html(item)
+        assert "grid-template-columns:1fr;" in card
+        assert "feed-card-right" not in card
+
+    def test_countdown_pill_inline_with_name(self):
+        """CL-02: Countdown pill appears inline next to race name."""
+        from datetime import date
+
+        item = self._make_item(
+            is_upcoming=True,
+            upcoming_date=date(2026, 4, 1),
+            days_until=3,
+        )
+        card = build_card_html(item)
+        # Pill should have margin-left (inline with name)
+        assert "margin-left:6px" in card
+        assert "in 3 days" in card
+
+    def test_prediction_details_in_details_element(self):
+        """CL-03: Prediction details are in a <details> element below fold."""
+        item = self._make_item(
+            drop_rate_pct=15,
+            predicted_finish_type="bunch_sprint",
+            course_type="flat",
+            distance_m=30000,
+        )
+        card = build_card_html(item)
+        assert "feed-card-prediction-details" in card
+        assert "<details" in card
+        assert "More details" in card
+
+    def test_prediction_details_not_in_main_card(self):
+        """CL-03: Confidence/beginner-friendly NOT in main card body."""
+        item = self._make_item(
+            drop_rate_pct=10,
+            predicted_finish_type="bunch_sprint",
+            course_type="flat",
+            distance_m=30000,
+        )
+        card = build_card_html(item)
+        # "Beginner-friendly" should only appear inside <details>
+        left_col = card.split("feed-card-prediction-details")[0]
+        assert "Beginner-friendly" not in left_col
+
+    def test_info_icon_present(self):
+        """CL-05: Info icon is an HTML <details> element."""
+        item = self._make_item()
+        card = build_card_html(item)
+        assert "feed-card-info" in card
+        assert "<summary" in card
+
+    def test_responsive_css_in_styles(self):
+        """Sprint 015: Responsive CSS rule exists for mobile collapse."""
+        from pathlib import Path
+
+        card_path = (
+            Path(__file__).parent.parent / "raceanalyzer" / "ui" / "feed_card.py"
+        )
+        source = card_path.read_text()
+        assert "@media (max-width: 480px)" in source
+        assert "grid-template-columns: 1fr !important" in source
+
+
+# --- Sprint 015: resolve_racer_profile tests ---
+
+
+class TestResolveRacerProfile:
+    """Sprint 015: FG-01 through FG-04."""
+
+    SAMPLE_CATS = [
+        "Cat 3",
+        "Cat 3 Women",
+        "Cat 4/5",
+        "Cat 4/5 Women",
+        "Cat 1/2/3 Masters 35+",
+        "Cat 4/5 Masters 35+",
+        "Master 45+",
+        "Men Cat 3",
+        "Women Cat 4",
+    ]
+
+    def test_no_filters_returns_none(self):
+        from raceanalyzer.queries import resolve_racer_profile
+
+        result, exact = resolve_racer_profile(self.SAMPLE_CATS)
+        assert result is None
+        assert exact is True
+
+    def test_cat_level_filter(self):
+        from raceanalyzer.queries import resolve_racer_profile
+
+        result, exact = resolve_racer_profile(self.SAMPLE_CATS, cat_level="3")
+        assert result is not None
+        assert "3" in result
+
+    def test_gender_women_filter(self):
+        from raceanalyzer.queries import resolve_racer_profile
+
+        result, exact = resolve_racer_profile(self.SAMPLE_CATS, gender="W")
+        assert result is not None
+        assert "Women" in result or "women" in result.lower()
+
+    def test_masters_filter(self):
+        from raceanalyzer.queries import resolve_racer_profile
+
+        result, exact = resolve_racer_profile(
+            self.SAMPLE_CATS, masters_on=True, masters_age=45
+        )
+        assert result is not None
+        assert "aster" in result  # "Master" or "Masters"
+
+    def test_combined_cat_and_gender(self):
+        from raceanalyzer.queries import resolve_racer_profile
+
+        result, exact = resolve_racer_profile(
+            self.SAMPLE_CATS, cat_level="3", gender="W"
+        )
+        assert result is not None
+        # Should match "Cat 3 Women"
+        assert "3" in result
+        assert "Women" in result or "women" in result.lower()
+
+    def test_no_match_returns_none(self):
+        from raceanalyzer.queries import resolve_racer_profile
+
+        # Empty category list should return None
+        result, exact = resolve_racer_profile(
+            [], cat_level="5", gender="W"
+        )
+        assert result is None
+        assert exact is False
