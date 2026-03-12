@@ -479,6 +479,12 @@ def inject_feed_styles():
         100% { background: transparent; }
     }
 
+    /* Chip icon sizing (Sprint 014: VR-01, 14->16) */
+    .feed-card-chip svg {
+        width: 16px;
+        height: 16px;
+    }
+
     /* Chip hover */
     .feed-card-chip:hover {
         filter: brightness(0.95);
@@ -684,27 +690,51 @@ def build_card_html(item: dict) -> str:
 
     # --- Chip row ---
     chips = []
+    is_upcoming = item.get("is_upcoming", False)
 
     # Distance chip
-    if item.get("distance_m"):
+    _DIST_ICON = (
+        '<svg width="14" height="14" viewBox="0 0 14 14">'
+        '<line x1="1" y1="7" x2="13" y2="7"'
+        ' stroke="currentColor" stroke-width="1.5"/>'
+        '<line x1="1" y1="5" x2="1" y2="9"'
+        ' stroke="currentColor" stroke-width="1.5"/>'
+        '<line x1="13" y1="5" x2="13" y2="9"'
+        ' stroke="currentColor" stroke-width="1.5"/></svg>'
+    )
+    if item.get("distance_m") is not None:
         km = item["distance_m"] / 1000
-        chips.append(_chip(
-            "distance",
-            '<svg width="14" height="14" viewBox="0 0 14 14"><line x1="1" y1="7" x2="13" y2="7"'
-            ' stroke="currentColor" stroke-width="1.5"/><line x1="1" y1="5" x2="1" y2="9"'
-            ' stroke="currentColor" stroke-width="1.5"/><line x1="13" y1="5" x2="13" y2="9"'
-            ' stroke="currentColor" stroke-width="1.5"/></svg>',
-            f"{km:.0f} km",
-        ))
+        chips.append(_chip("distance", _DIST_ICON, f"{km:.0f} km"))
+    elif is_upcoming:
+        chips.append(
+            '<span class="feed-card-chip" style="opacity:0.5;'
+            'display:inline-flex;align-items:center;gap:3px;'
+            'background:var(--secondary-background-color,#f0f2f6);'
+            'padding:2px 8px;border-radius:4px;'
+            'color:var(--text-color,#444);">'
+            '\U0001f4cf -- km</span>'
+        )
 
     # Elevation chip
-    if item.get("total_gain_m"):
-        chips.append(_chip(
-            "elevation",
-            '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M1 12 L7 3 L13 12"'
-            ' fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
-            f"{item['total_gain_m']:.0f}m",
-        ))
+    _ELEV_ICON = (
+        '<svg width="14" height="14" viewBox="0 0 14 14">'
+        '<path d="M1 12 L7 3 L13 12"'
+        ' fill="none" stroke="currentColor" stroke-width="1.5"'
+        ' stroke-linejoin="round"/></svg>'
+    )
+    if item.get("total_gain_m") is not None:
+        chips.append(
+            _chip("elevation", _ELEV_ICON, f"{item['total_gain_m']:.0f}m")
+        )
+    elif is_upcoming:
+        chips.append(
+            '<span class="feed-card-chip" style="opacity:0.5;'
+            'display:inline-flex;align-items:center;gap:3px;'
+            'background:var(--secondary-background-color,#f0f2f6);'
+            'padding:2px 8px;border-radius:4px;'
+            'color:var(--text-color,#444);">'
+            '\u26f0\ufe0f -- m \u2191</span>'
+        )
 
     # Terrain chip
     if item.get("course_type"):
@@ -713,8 +743,10 @@ def build_card_html(item: dict) -> str:
         terrain = course_type_display(item["course_type"])
         chips.append(_chip(
             "terrain",
-            '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M1 11 Q4 5 7 8 Q10 11 13 5"'
-            ' fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+            '<svg width="14" height="14" viewBox="0 0 14 14">'
+            '<path d="M1 11 Q4 5 7 8 Q10 11 13 5"'
+            ' fill="none" stroke="currentColor"'
+            ' stroke-width="1.5"/></svg>',
             html.escape(terrain),
         ))
 
@@ -722,24 +754,43 @@ def build_card_html(item: dict) -> str:
     if item.get("field_size_median"):
         chips.append(_chip(
             "field_size",
-            '<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="5" cy="5" r="2"'
-            ' fill="currentColor"/><circle cx="10" cy="5" r="2" fill="currentColor" opacity="0.6"/>'
-            '<circle cx="7" cy="10" r="2" fill="currentColor" opacity="0.4"/></svg>',
+            '<svg width="14" height="14" viewBox="0 0 14 14">'
+            '<circle cx="5" cy="5" r="2" fill="currentColor"/>'
+            '<circle cx="10" cy="5" r="2" fill="currentColor"'
+            ' opacity="0.6"/>'
+            '<circle cx="7" cy="10" r="2" fill="currentColor"'
+            ' opacity="0.4"/></svg>',
             f"{item['field_size_median']} riders",
         ))
 
     # Duration chip
-    dur_text = format_duration(item.get("typical_field_duration_min"))
+    dur_text = format_duration(
+        item.get("typical_field_duration_min")
+    )
     if dur_text:
         chips.append(_chip(
             "duration",
-            '<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5"'
-            ' fill="none" stroke="currentColor" stroke-width="1.2"/><line x1="7" y1="7" x2="7"'
-            ' y2="4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>'
-            '<line x1="7" y1="7" x2="10" y2="7" stroke="currentColor" stroke-width="1"'
+            '<svg width="14" height="14" viewBox="0 0 14 14">'
+            '<circle cx="7" cy="7" r="5.5"'
+            ' fill="none" stroke="currentColor"'
+            ' stroke-width="1.2"/>'
+            '<line x1="7" y1="7" x2="7" y2="4"'
+            ' stroke="currentColor" stroke-width="1.2"'
+            ' stroke-linecap="round"/>'
+            '<line x1="7" y1="7" x2="10" y2="7"'
+            ' stroke="currentColor" stroke-width="1"'
             ' stroke-linecap="round"/></svg>',
             dur_text,
         ))
+    elif is_upcoming:
+        chips.append(
+            '<span class="feed-card-chip" style="opacity:0.5;'
+            'display:inline-flex;align-items:center;gap:3px;'
+            'background:var(--secondary-background-color,#f0f2f6);'
+            'padding:2px 8px;border-radius:4px;'
+            'color:var(--text-color,#444);">'
+            '\U0001f550 ~? min</span>'
+        )
 
     if chips:
         parts.append(
@@ -754,21 +805,29 @@ def build_card_html(item: dict) -> str:
     if drop_pct is not None:
         bar_color = _drop_rate_color(drop_pct)
         drop_label = item.get("drop_rate_label", "")
+        bar_bg = (
+            "#E8F5E9"
+            if drop_pct < 15
+            else "var(--secondary-background-color,#e0e0e0)"
+        )
         parts.append(
             '<div style="margin-top:6px;display:flex;align-items:center;'
             'gap:6px;">'
-            f'<span style="font-size:0.78em;color:var(--text-color,#666);min-width:70px;">'
-            f'Drop rate</span>'
+            '<span style="font-size:0.78em;'
+            'color:var(--text-color,#666);min-width:70px;">'
+            'Drop rate</span>'
             '<div style="flex:1;max-width:120px;height:8px;'
-            'background:var(--secondary-background-color,#e0e0e0);'
-            f'border-radius:4px;overflow:hidden;">'
-            f'<div style="width:{min(drop_pct, 100)}%;height:100%;background:{bar_color};'
-            f'border-radius:4px;"></div></div>'
-            f'<span style="font-size:0.78em;font-weight:500;">{drop_pct}%</span>'
+            f'background:{bar_bg};'
+            'border-radius:4px;overflow:hidden;">'
+            f'<div style="width:{min(drop_pct, 100)}%;height:100%;'
+            f'background:{bar_color};'
+            'border-radius:4px;"></div></div>'
+            f'<span style="font-size:0.78em;font-weight:500;">'
+            f'{drop_pct}%</span>'
             '<span style="font-size:0.72em;'
             f'color:var(--text-color,#888);">'
             f'({html.escape(drop_label)})</span>'
-            f'</div>'
+            '</div>'
         )
 
     # --- Prediction section ---

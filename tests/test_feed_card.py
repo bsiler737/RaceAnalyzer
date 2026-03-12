@@ -500,3 +500,155 @@ class TestGenerateShareText:
         }
         text = generate_share_text(item)
         assert "~1h 30m" in text
+
+
+# --- Sprint 014: Chip icon sizing ---
+
+
+class TestChipIconSizing:
+    """Sprint 014: VR-01 chip SVGs sized via CSS at 16px."""
+
+    def test_css_has_16px_chip_svg(self):
+        from pathlib import Path
+
+        card_path = (
+            Path(__file__).parent.parent
+            / "raceanalyzer" / "ui" / "feed_card.py"
+        )
+        source = card_path.read_text()
+        assert ".feed-card-chip svg" in source
+        assert "width: 16px" in source
+        assert "height: 16px" in source
+
+
+# --- Sprint 014: Green drop rate bar ---
+
+
+class TestGreenDropRateBar:
+    def test_low_drop_rate_green_background(self):
+        item = {
+            "display_name": "Easy Race",
+            "location": None,
+            "state_province": None,
+            "is_upcoming": True,
+            "upcoming_date": None,
+            "days_until": 10,
+            "most_recent_date": None,
+            "race_type": "criterium",
+            "predicted_finish_type": "bunch_sprint",
+            "confidence": "high",
+            "prediction_source": "time_gap",
+            "course_type": "flat",
+            "distance_m": 30000,
+            "total_gain_m": 50,
+            "drop_rate_pct": 10,
+            "drop_rate_label": "low",
+            "field_size_median": 40,
+            "teammate_names": [],
+            "edition_count": 3,
+            "elevation_sparkline_points": None,
+            "climbs_json": None,
+            "typical_field_duration_min": 45,
+            "rwgps_encoded_polyline": None,
+            "distribution_json": None,
+        }
+        card = build_card_html(item)
+        assert "#E8F5E9" in card
+
+    def test_high_drop_rate_no_green_background(self):
+        item = {
+            "display_name": "Hard Race",
+            "location": None,
+            "state_province": None,
+            "is_upcoming": True,
+            "upcoming_date": None,
+            "days_until": 10,
+            "most_recent_date": None,
+            "race_type": "road_race",
+            "predicted_finish_type": "gc_selective",
+            "confidence": "high",
+            "prediction_source": "time_gap",
+            "course_type": "hilly",
+            "distance_m": 120000,
+            "total_gain_m": 2000,
+            "drop_rate_pct": 45,
+            "drop_rate_label": "high",
+            "field_size_median": 30,
+            "teammate_names": [],
+            "edition_count": 5,
+            "elevation_sparkline_points": None,
+            "climbs_json": None,
+            "typical_field_duration_min": 180,
+            "rwgps_encoded_polyline": None,
+            "distribution_json": None,
+        }
+        card = build_card_html(item)
+        assert "#E8F5E9" not in card
+
+
+# --- Sprint 014: Missing data chips ---
+
+
+class TestMissingDataChips:
+    def _make_item(self, is_upcoming=True, **overrides):
+        base = {
+            "display_name": "Test Race",
+            "location": None,
+            "state_province": None,
+            "is_upcoming": is_upcoming,
+            "upcoming_date": None,
+            "days_until": 10 if is_upcoming else None,
+            "most_recent_date": None,
+            "race_type": None,
+            "predicted_finish_type": None,
+            "confidence": None,
+            "prediction_source": None,
+            "course_type": None,
+            "distance_m": None,
+            "total_gain_m": None,
+            "drop_rate_pct": None,
+            "drop_rate_label": None,
+            "field_size_median": None,
+            "teammate_names": [],
+            "edition_count": 0,
+            "elevation_sparkline_points": None,
+            "climbs_json": None,
+            "typical_field_duration_min": None,
+            "rwgps_encoded_polyline": None,
+            "distribution_json": None,
+        }
+        base.update(overrides)
+        return base
+
+    def test_upcoming_missing_distance_shows_placeholder(self):
+        item = self._make_item(is_upcoming=True, distance_m=None)
+        card = build_card_html(item)
+        assert "-- km" in card
+
+    def test_upcoming_missing_elevation_shows_placeholder(self):
+        item = self._make_item(is_upcoming=True, total_gain_m=None)
+        card = build_card_html(item)
+        assert "-- m" in card
+
+    def test_upcoming_missing_duration_shows_placeholder(self):
+        item = self._make_item(
+            is_upcoming=True, typical_field_duration_min=None
+        )
+        card = build_card_html(item)
+        assert "~? min" in card
+
+    def test_past_missing_distance_hidden(self):
+        item = self._make_item(is_upcoming=False, distance_m=None)
+        card = build_card_html(item)
+        assert "-- km" not in card
+
+    def test_past_missing_elevation_hidden(self):
+        item = self._make_item(is_upcoming=False, total_gain_m=None)
+        card = build_card_html(item)
+        assert "-- m" not in card
+
+    def test_zero_distance_still_shows(self):
+        """Truthy check fix: distance_m=0 should still render."""
+        item = self._make_item(is_upcoming=True, distance_m=0)
+        card = build_card_html(item)
+        assert "0 km" in card
