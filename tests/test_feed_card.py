@@ -5,12 +5,15 @@ from __future__ import annotations
 import pytest
 
 from raceanalyzer.ui.feed_card import (
+    _card_has_chip,
+    _chip,
     build_card_html,
     confidence_text,
     countdown_pill_style,
     extract_key_climb,
     format_duration,
     generate_ics,
+    generate_share_text,
     is_beginner_friendly,
     pack_survival_text,
     racer_type_short_label,
@@ -381,3 +384,119 @@ class TestGenerateIcs:
         ics = generate_ics("Race; with, special: chars", datetime(2026, 1, 1))
         assert "\\;" in ics
         assert "\\," in ics
+
+
+# --- Sprint 014: No title attributes ---
+
+
+class TestNoTitleAttributes:
+    """Sprint 014: title= must not appear in _chip() output."""
+
+    def test_chip_has_no_title(self):
+        result = _chip("distance", "<svg></svg>", "85 km")
+        assert 'title="' not in result
+        assert "feed-card-chip" in result
+
+    def test_card_html_has_no_title_on_chips(self):
+        item = {
+            "display_name": "Test",
+            "location": None,
+            "state_province": None,
+            "is_upcoming": False,
+            "upcoming_date": None,
+            "days_until": None,
+            "most_recent_date": None,
+            "race_type": None,
+            "predicted_finish_type": "bunch_sprint",
+            "confidence": "high",
+            "prediction_source": "time_gap",
+            "course_type": "flat",
+            "distance_m": 40000,
+            "total_gain_m": 100,
+            "drop_rate_pct": 10,
+            "drop_rate_label": "low",
+            "field_size_median": 40,
+            "teammate_names": [],
+            "edition_count": 3,
+            "elevation_sparkline_points": None,
+            "climbs_json": None,
+            "typical_field_duration_min": 60,
+            "rwgps_encoded_polyline": None,
+            "distribution_json": None,
+        }
+        card = build_card_html(item)
+        assert 'title="' not in card
+
+
+# --- Sprint 014: _card_has_chip helper ---
+
+
+class TestCardHasChip:
+    def test_distance_present(self):
+        assert _card_has_chip({"distance_m": 40000}, "distance") is True
+
+    def test_distance_none(self):
+        assert _card_has_chip({"distance_m": None}, "distance") is False
+
+    def test_distance_zero(self):
+        assert _card_has_chip({"distance_m": 0}, "distance") is True
+
+    def test_drop_rate_present(self):
+        assert _card_has_chip({"drop_rate_pct": 10}, "drop_rate") is True
+
+    def test_drop_rate_none(self):
+        assert _card_has_chip({"drop_rate_pct": None}, "drop_rate") is False
+
+    def test_unknown_chip_type(self):
+        assert _card_has_chip({}, "nonexistent") is False
+
+
+# --- Sprint 014: generate_share_text ---
+
+
+class TestGenerateShareText:
+    def test_includes_name_and_location(self):
+        item = {
+            "display_name": "Banana Belt RR",
+            "location": "Maryhill",
+            "state_province": "WA",
+            "upcoming_date": None,
+            "predicted_finish_type": "bunch_sprint",
+            "race_type": "road_race",
+            "typical_field_duration_min": 120,
+            "series_id": 42,
+        }
+        text = generate_share_text(item, "Cat 4/5")
+        assert "Banana Belt RR" in text
+        assert "Maryhill" in text
+        assert "WA" in text
+        assert "series_id=42" in text
+        assert "Cat 4/5" in text
+
+    def test_includes_prediction(self):
+        item = {
+            "display_name": "Test Race",
+            "location": "Portland",
+            "state_province": "OR",
+            "upcoming_date": None,
+            "predicted_finish_type": "bunch_sprint",
+            "race_type": "road_race",
+            "typical_field_duration_min": None,
+            "series_id": 1,
+        }
+        text = generate_share_text(item)
+        assert "sprint" in text.lower()
+
+    def test_includes_duration(self):
+        item = {
+            "display_name": "Test",
+            "location": None,
+            "state_province": None,
+            "upcoming_date": None,
+            "predicted_finish_type": None,
+            "race_type": None,
+            "typical_field_duration_min": 90,
+            "series_id": 1,
+        }
+        text = generate_share_text(item)
+        assert "~1h 30m" in text

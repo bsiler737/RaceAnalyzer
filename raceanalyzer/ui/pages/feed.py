@@ -15,8 +15,11 @@ from raceanalyzer.ui.components import (
     render_team_setting,
 )
 from raceanalyzer.ui.feed_card import (
+    CHIP_TOOLTIPS,
+    _card_has_chip,
     build_card_html,
     generate_ics,
+    generate_share_text,
     inject_feed_styles,
 )
 
@@ -294,13 +297,23 @@ def _render_filter_chips():
             discipline_filter = [chip_to_value[s] for s in selected if s in chip_to_value]
 
     with col2:
-        can_finish = st.pills(
-            "Approachability",
-            ["Can I finish?"],
-            selection_mode="single",
-            key="filter_can_finish",
-        )
-        can_finish_active = can_finish == "Can I finish?"
+        sub1, sub2 = st.columns([3, 1])
+        with sub1:
+            can_finish = st.pills(
+                "Approachability",
+                ["Can I finish?"],
+                selection_mode="single",
+                key="filter_can_finish",
+            )
+            can_finish_active = can_finish == "Can I finish?"
+        with sub2:
+            with st.popover("\u2139\ufe0f"):
+                st.markdown(
+                    "**Can I finish?** filters to races where:\n"
+                    "- Drop rate \u2264 25%\n"
+                    "- Non-selective finish type\n"
+                    "- Distance \u2264 100 km"
+                )
 
     return discipline_filter, can_finish_active
 
@@ -373,7 +386,19 @@ def _render_container_card(
         card_html = build_card_html(item)
         st.markdown(card_html, unsafe_allow_html=True)
 
-        # --- Action row: Preview (primary) + Register + Calendar + Share + Compare ---
+        # Card info popover (Sprint 014: TT-01)
+        with st.popover(
+            "\u2139\ufe0f Card info",
+            use_container_width=False,
+        ):
+            for chip_key, explanation in CHIP_TOOLTIPS.items():
+                if _card_has_chip(item, chip_key):
+                    st.markdown(
+                        f"**{chip_key.replace('_', ' ').title()}**: "
+                        f"{explanation}"
+                    )
+
+        # --- Action row ---
         _render_action_row(item, session, category, key_prefix, expanded)
 
 
@@ -585,15 +610,29 @@ def _render_compare_column(item):
 
 @st.dialog("Share Race")
 def _show_share_dialog(item, category):
-    """Share deep link dialog (Sprint 013: AP-06)."""
-    series_id = item["series_id"]
-    url_parts = [f"series_id={series_id}"]
-    if category:
-        url_parts.append(f"category={category}")
-    param_str = "&".join(url_parts)
+    """Share deep link dialog (Sprint 014: SH-01, SH-02)."""
+    import json as _json
+
+    share_text = generate_share_text(item, category)
     st.write("Share this race with a friend:")
-    st.code(f"?{param_str}", language=None)
-    st.caption("Copy the link above and share it!")
+    st.code(share_text, language=None)
+
+    # Clipboard copy via JS with toast feedback
+    safe_text = _json.dumps(share_text)
+    copy_js = (
+        f"<script>navigator.clipboard.writeText({safe_text})"
+        ".then(()=>{{}})"
+        ".catch(()=>{{}});</script>"
+    )
+    if st.button(
+        "\U0001f4cb Copy to clipboard",
+        key="share_copy_btn",
+        use_container_width=True,
+    ):
+        import streamlit.components.v1 as components
+
+        components.html(copy_js, height=0)
+        st.toast("Link copied!")
 
 
 render()

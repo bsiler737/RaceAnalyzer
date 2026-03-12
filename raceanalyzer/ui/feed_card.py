@@ -755,8 +755,8 @@ def build_card_html(item: dict) -> str:
         bar_color = _drop_rate_color(drop_pct)
         drop_label = item.get("drop_rate_label", "")
         parts.append(
-            f'<div style="margin-top:6px;display:flex;align-items:center;gap:6px;" '
-            f'title="{html.escape(CHIP_TOOLTIPS["drop_rate"])}">'
+            '<div style="margin-top:6px;display:flex;align-items:center;'
+            'gap:6px;">'
             f'<span style="font-size:0.78em;color:var(--text-color,#666);min-width:70px;">'
             f'Drop rate</span>'
             '<div style="flex:1;max-width:120px;height:8px;'
@@ -815,33 +815,32 @@ def build_card_html(item: dict) -> str:
     # --- Beginner-friendly badge ---
     friendly, reasons = is_beginner_friendly(item)
     if friendly:
-        reasons_text = html.escape(" + ".join(reasons))
         parts.append(
-            f'<div style="margin-top:4px;">'
-            f'<span class="feed-card-beginner" title="{reasons_text}"'
-            f' style="display:inline-block;background:#E8F5E9;color:#2E7D32;'
-            f'padding:2px 8px;border-radius:4px;font-size:0.78em;font-weight:500;">'
-            f'\u2705 Beginner-friendly</span></div>'
+            '<div style="margin-top:4px;">'
+            '<span class="feed-card-beginner"'
+            ' style="display:inline-block;background:#E8F5E9;'
+            'color:#2E7D32;padding:2px 8px;border-radius:4px;'
+            'font-size:0.78em;font-weight:500;">'
+            '\u2705 Beginner-friendly</span></div>'
         )
 
     # --- Who does well here ---
     racer_label = racer_type_short_label(item.get("course_type"), ft if ft != "unknown" else None)
     if racer_label:
         parts.append(
-            f'<div style="font-size:0.78em;color:var(--text-color,#888);margin-top:2px;"'
-            f' title="Who does well here">'
-            f'Suits: {html.escape(racer_label)}</div>'
+            '<div style="font-size:0.78em;color:var(--text-color,#888);'
+            f'margin-top:2px;">Suits: {html.escape(racer_label)}</div>'
         )
 
     # --- Climb highlight ---
     climb_text = item.get("climb_highlight") or extract_key_climb(item.get("climbs_json"))
     if climb_text:
         parts.append(
-            f'<div style="font-size:0.78em;color:var(--text-color,#666);margin-top:2px;'
-            f'display:flex;align-items:center;gap:4px;"'
-            f' title="{html.escape(CHIP_TOOLTIPS["climb"])}">'
-            f'<svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 10 L6 2 L11 10"'
-            f' fill="none" stroke="#F57C00" stroke-width="1.5"/></svg>'
+            '<div style="font-size:0.78em;color:var(--text-color,#666);'
+            'margin-top:2px;display:flex;align-items:center;gap:4px;">'
+            '<svg width="12" height="12" viewBox="0 0 12 12">'
+            '<path d="M1 10 L6 2 L11 10"'
+            ' fill="none" stroke="#F57C00" stroke-width="1.5"/></svg>'
             f'{html.escape(climb_text)}</div>'
         )
 
@@ -865,11 +864,9 @@ def build_card_html(item: dict) -> str:
     visuals = [v for v in [sparkline_html, route_html, dist_sparkline_html] if v]
     if visuals:
         parts.append(
-            '<div style="display:flex;gap:12px;align-items:center;margin-top:6px;flex-wrap:wrap;">'
-            + "".join(
-                f'<div title="{_visual_tooltip(i)}">{v}</div>'
-                for i, v in enumerate(visuals)
-            )
+            '<div style="display:flex;gap:12px;align-items:center;'
+            'margin-top:6px;flex-wrap:wrap;">'
+            + "".join(f"<div>{v}</div>" for v in visuals)
             + "</div>"
         )
 
@@ -878,21 +875,96 @@ def build_card_html(item: dict) -> str:
     return "\n".join(parts)
 
 
-def _visual_tooltip(idx: int) -> str:
-    tooltips = ["Elevation profile", "Route trace", "Finish type history"]
-    return tooltips[idx] if idx < len(tooltips) else ""
-
-
 def _chip(chip_type: str, icon_svg: str, label: str) -> str:
-    """Build a single stat chip with icon + label + tooltip."""
-    tooltip = html.escape(CHIP_TOOLTIPS.get(chip_type, ""))
+    """Build a single stat chip with icon + label (no title tooltip)."""
     return (
-        f'<span class="feed-card-chip" title="{tooltip}"'
+        f'<span class="feed-card-chip"'
         f' style="display:inline-flex;align-items:center;gap:3px;'
-        f'background:var(--secondary-background-color,#f0f2f6);padding:2px 8px;'
+        f'background:var(--secondary-background-color,#f0f2f6);'
+        f'padding:2px 8px;'
         f'border-radius:4px;color:var(--text-color,#444);">'
         f'{icon_svg} {label}</span>'
     )
+
+
+# ============================================================
+# Card chip detection helper (Sprint 014: TT-01)
+# ============================================================
+
+
+def _card_has_chip(item: dict, chip_type: str) -> bool:
+    """Return True if the given chip_type would be rendered for this item."""
+    checks = {
+        "distance": lambda i: i.get("distance_m") is not None,
+        "elevation": lambda i: i.get("total_gain_m") is not None,
+        "terrain": lambda i: bool(i.get("course_type")),
+        "field_size": lambda i: bool(i.get("field_size_median")),
+        "duration": lambda i: bool(
+            format_duration(i.get("typical_field_duration_min"))
+        ),
+        "drop_rate": lambda i: i.get("drop_rate_pct") is not None,
+        "finish_type": lambda i: bool(
+            i.get("predicted_finish_type")
+            and i["predicted_finish_type"] != "unknown"
+        ),
+        "climb": lambda i: bool(
+            i.get("climb_highlight")
+            or extract_key_climb(i.get("climbs_json"))
+        ),
+    }
+    check = checks.get(chip_type)
+    return check(item) if check else False
+
+
+# ============================================================
+# Share text generation (Sprint 014: SH-01)
+# ============================================================
+
+
+def generate_share_text(item: dict, category: Optional[str] = None) -> str:
+    """Build a formatted share summary for a race card."""
+    lines = []
+    lines.append(item.get("display_name", ""))
+
+    # Date + location line
+    date_loc_parts = []
+    if item.get("upcoming_date"):
+        try:
+            date_loc_parts.append(f"{item['upcoming_date']:%b %d, %Y}")
+        except (TypeError, ValueError):
+            pass
+    loc = item.get("location", "")
+    state = item.get("state_province", "")
+    if loc and state:
+        date_loc_parts.append(f"{loc}, {state}")
+    elif loc:
+        date_loc_parts.append(loc)
+    if date_loc_parts:
+        lines.append(" \u00b7 ".join(date_loc_parts))
+
+    # What to expect
+    ft = item.get("predicted_finish_type")
+    wte = what_to_expect_text(
+        ft if ft and ft != "unknown" else None,
+        race_type=item.get("race_type"),
+    )
+    if wte:
+        lines.append(wte)
+
+    # Duration
+    dur = format_duration(item.get("typical_field_duration_min"))
+    if dur:
+        lines.append(f"Duration: {dur}")
+
+    # Deep link
+    series_id = item.get("series_id")
+    if series_id is not None:
+        params = [f"series_id={series_id}"]
+        if category:
+            params.append(f"category={category}")
+        lines.append(f"Link: ?{'&'.join(params)}")
+
+    return "\n".join(lines)
 
 
 # ============================================================
