@@ -235,7 +235,9 @@ def render():
                 f'<div class="feed-month-header" style="position:sticky;top:0;z-index:10;'
                 f'background:var(--background-color,#fff);padding:8px 12px;'
                 f'border-bottom:1px solid var(--secondary-background-color,#e0e0e0);">'
-                f'<span style="font-size:1.1em;font-weight:600;color:var(--text-color,#333);">{html.escape(header)}</span>'
+                f'<span style="font-size:1.1em;font-weight:600;'
+                f'color:var(--text-color,#333);">'
+                f'{html.escape(header)}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
