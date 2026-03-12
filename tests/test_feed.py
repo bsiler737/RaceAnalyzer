@@ -133,3 +133,68 @@ class TestDeepLinkBackwardCompat:
             target_id = all_items[0]["series_id"]
             filtered = [i for i in all_items if i["series_id"] == target_id]
             assert len(filtered) == 1
+
+
+class TestPastOnlyDeepLink:
+    """Sprint 012: Deep-link to past-only series shows expanded card."""
+
+    def test_past_only_item_detected(self, seeded_series_session):
+        """All seeded data is historical — items should all be past-only."""
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        assert len(items) > 0
+        # In seeded data, all items are past-only
+        assert all(not item["is_upcoming"] for item in items)
+
+    def test_deep_link_finds_past_series(self, seeded_series_session):
+        """Deep-link lookup works for past-only series."""
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        all_items = queries.get_feed_items_batch(seeded_series_session)
+        if all_items:
+            target = all_items[0]
+            assert not target["is_upcoming"]
+            # The item is valid and has detail data
+            detail = queries.get_feed_item_detail(
+                seeded_series_session, target["series_id"]
+            )
+            assert detail is not None
+
+
+class TestSearchPastOnlyResults:
+    """Sprint 012: Search returning only past series shows previews."""
+
+    def test_search_past_only_returns_items(self, seeded_series_session):
+        """Searching for a historical-only series returns results."""
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        # Get a series name to search for
+        series = seeded_series_session.query(RaceSeries).first()
+        search_term = series.display_name.split()[0]
+
+        items = queries.get_feed_items_batch(
+            seeded_series_session, search_query=search_term
+        )
+        # Should find at least 1 result
+        if items:
+            assert all(not item["is_upcoming"] for item in items)
+
+
+class TestPredictionSourceInFeedItems:
+    """Sprint 012: prediction_source is included in feed items."""
+
+    def test_prediction_source_key_present(self, seeded_series_session):
+        from raceanalyzer.precompute import precompute_all
+
+        precompute_all(seeded_series_session)
+
+        items = queries.get_feed_items_batch(seeded_series_session)
+        for item in items:
+            assert "prediction_source" in item

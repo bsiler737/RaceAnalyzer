@@ -107,6 +107,33 @@ def render():
     if search_query:
         st.caption(f"Showing all dates for '{search_query}'.")
 
+    # --- Check if all results are past-only ---
+    all_past_only = all(not item["is_upcoming"] for item in items)
+
+    # --- Deep-link to past-only series: render expanded at top level ---
+    if isolated_series_id and all_past_only:
+        for item in items:
+            _render_container_card(
+                item, session, category, key_prefix="deeplink", expanded=True
+            )
+        return
+
+    # --- Search returning only past series: show preview cards ---
+    if search_query and all_past_only and items:
+        st.caption(f"Showing past editions for '{search_query}'")
+        preview_items = items[:3]
+        for item in preview_items:
+            _render_container_card(
+                item, session, category, key_prefix="search_past", expanded=True
+            )
+        if len(items) > 3:
+            with st.expander(f"{len(items) - 3} more results"):
+                for item in items[3:]:
+                    _render_container_card(
+                        item, session, category, key_prefix="search_past_more"
+                    )
+        return
+
     # --- Month-grouped agenda view ---
     month_groups = queries.group_by_month(items)
 
@@ -221,12 +248,18 @@ def _render_container_card(
         if badge_parts:
             st.caption(" \u00b7 ".join(badge_parts))
 
-        # Finish type prediction + race type
+        # Finish type prediction + race type (source-aware language, Sprint 012)
         pred_parts = []
         if item.get("predicted_finish_type"):
-            from raceanalyzer.queries import finish_type_plain_english
+            from raceanalyzer.queries import (
+                finish_type_plain_english_with_source,
+            )
 
-            plain = finish_type_plain_english(item["predicted_finish_type"])
+            plain = finish_type_plain_english_with_source(
+                item["predicted_finish_type"],
+                prediction_source=item.get("prediction_source"),
+                race_type=item.get("race_type"),
+            )
             if plain:
                 pred_parts.append(plain)
 
@@ -257,9 +290,10 @@ def _render_container_card(
                     st.session_state.expanded_ids.add(series_id)
                 st.rerun()
         with cols[1]:
-            if item.get("is_upcoming") and item.get("registration_url"):
+            reg_url = item.get("registration_url")
+            if item.get("is_upcoming") and reg_url and reg_url.strip():
                 st.link_button(
-                    "Register", item["registration_url"], use_container_width=True
+                    "Register", reg_url, use_container_width=True
                 )
         with cols[2]:
             if st.button(
