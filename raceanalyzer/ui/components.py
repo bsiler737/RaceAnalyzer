@@ -793,6 +793,90 @@ def render_feed_filters(session) -> dict:
     }
 
 
+def render_racer_profile_filters(session) -> dict:
+    """Render cohesive racer profile filters in a bordered sidebar container.
+
+    Returns dict with keys: cat_level, gender, masters_on, masters_age.
+    Syncs to URL params: cat, gender, masters, age.
+    """
+    with st.sidebar.container(border=True):
+        # FG-01: Flat category pills
+        current_cat = st.query_params.get("cat")
+        cat_options = ["All", "1", "2", "3", "4", "5"]
+        default_cat = current_cat if current_cat in cat_options else "All"
+        chosen_cat = st.pills(
+            "Category",
+            cat_options,
+            default=default_cat,
+            key="racer_cat_pills",
+        )
+        cat_level = chosen_cat if chosen_cat and chosen_cat != "All" else None
+
+        # Sync cat to URL
+        if cat_level:
+            if st.query_params.get("cat") != cat_level:
+                st.query_params["cat"] = cat_level
+        elif "cat" in st.query_params:
+            del st.query_params["cat"]
+
+        # FG-03: Gender pills
+        current_gender = st.query_params.get("gender")
+        gender_options = ["All", "M", "W"]
+        default_gender = current_gender if current_gender in gender_options else "All"
+        chosen_gender = st.pills(
+            "Gender",
+            gender_options,
+            default=default_gender,
+            key="racer_gender_pills",
+        )
+        gender = chosen_gender if chosen_gender and chosen_gender != "All" else None
+
+        # Sync gender to URL
+        if gender:
+            if st.query_params.get("gender") != gender:
+                st.query_params["gender"] = gender
+        elif "gender" in st.query_params:
+            del st.query_params["gender"]
+
+        # FG-02: Masters toggle + age
+        current_masters = st.query_params.get("masters") == "1"
+        masters_on = st.toggle("Masters", value=current_masters, key="racer_masters_toggle")
+
+        masters_age = None
+        if masters_on:
+            current_age = None
+            try:
+                current_age = int(st.query_params.get("age", ""))
+            except (ValueError, TypeError):
+                pass
+            masters_age = st.number_input(
+                "Age",
+                min_value=30,
+                max_value=99,
+                value=current_age or 45,
+                key="racer_masters_age",
+            )
+
+        # Sync masters/age to URL
+        if masters_on:
+            if st.query_params.get("masters") != "1":
+                st.query_params["masters"] = "1"
+            if masters_age and st.query_params.get("age") != str(masters_age):
+                st.query_params["age"] = str(masters_age)
+        else:
+            if "masters" in st.query_params:
+                del st.query_params["masters"]
+            if "age" in st.query_params:
+                del st.query_params["age"]
+
+    return {
+        "cat_level": cat_level,
+        "gender": gender,
+        "masters_on": masters_on,
+        "masters_age": masters_age,
+    }
+
+
 def render_team_setting() -> str | None:
     """Render team name input in sidebar. Returns team name or None."""
     st.sidebar.markdown("---")
@@ -802,7 +886,7 @@ def render_team_setting() -> str | None:
     team_name = st.sidebar.text_input(
         "Team name",
         value=current,
-        placeholder="e.g. Audi Cycling",
+        placeholder="e.g. Hagens Berman",
         key="team_name_input",
     )
 

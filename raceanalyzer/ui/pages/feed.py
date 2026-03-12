@@ -11,7 +11,7 @@ from raceanalyzer.ui.components import (
     render_empty_state,
     render_feed_card,
     render_feed_filters,
-    render_global_category_filter,
+    render_racer_profile_filters,
     render_team_setting,
 )
 from raceanalyzer.ui.feed_card import (
@@ -40,9 +40,34 @@ def render():
         except (ValueError, TypeError):
             isolated_series_id = None
 
-    # --- Sidebar: global category, feed filters, team setting ---
-    render_global_category_filter(session)
+    # --- Sidebar: racer profile filters, feed filters, team setting ---
+    # FG-01..FG-04: Cohesive racer profile filters
+    racer_profile = {}
+    if not isolated_series_id:
+        racer_profile = render_racer_profile_filters(session)
+
+    # Resolve racer profile to a category string (backward-compat with global_category)
     category = st.session_state.get("global_category")
+    if racer_profile and any(
+        racer_profile.get(k) for k in ("cat_level", "gender", "masters_on")
+    ):
+        all_cats = queries.get_categories(session)
+        resolved_cat, is_exact = queries.resolve_racer_profile(
+            all_cats,
+            cat_level=racer_profile.get("cat_level"),
+            gender=racer_profile.get("gender"),
+            masters_on=racer_profile.get("masters_on", False),
+            masters_age=racer_profile.get("masters_age"),
+        )
+        if resolved_cat:
+            category = resolved_cat
+        else:
+            category = None
+    elif not category:
+        # FG-06: Legacy category deep-link param support
+        legacy_cat = st.query_params.get("category")
+        if legacy_cat:
+            category = legacy_cat
 
     filters = {}
     team_name = None

@@ -35,9 +35,27 @@ def main():
     preview_page = st.Page("pages/race_preview.py", title="Race Preview", icon="\U0001f52e")
     dashboard_page = st.Page("pages/dashboard.py", title="Finish Type Dashboard", icon="\U0001f4ca")
 
-    pg = st.navigation([
+    all_pages = [
         feed_page, calendar_page, series_page, detail_page, preview_page, dashboard_page,
-    ])
+    ]
+
+    # NS-01: Hide default nav, use custom breadcrumbs
+    try:
+        pg = st.navigation(all_pages, position="hidden")
+    except TypeError:
+        # Fallback if position="hidden" unsupported in this Streamlit version
+        pg = st.navigation(all_pages)
+        # Hide auto-generated nav entries via CSS
+        st.markdown(
+            '<style>[data-testid="stSidebarNav"] { display: none; }</style>',
+            unsafe_allow_html=True,
+        )
+
+    # NS-02: Custom sidebar breadcrumbs
+    st.sidebar.page_link(feed_page, label="Race Feed", icon="\U0001f3c1")
+    if pg != feed_page:
+        st.sidebar.page_link(pg, label=f"  \u21b3 {pg.title}")
+
     pg.run()
 
 

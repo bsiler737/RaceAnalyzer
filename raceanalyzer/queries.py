@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import enum
 import logging
+import re as _re
 import time
 from datetime import date, datetime
 from itertools import groupby
@@ -349,6 +350,99 @@ def get_categories(session: Session) -> list[str]:
         .all()
     )
     return [r[0] for r in rows if r[0]]
+
+
+# Masters age bracket lower bounds (USAC standard)
+_MASTERS_BRACKETS = [35, 40, 45, 50, 55, 60, 65, 70, 75, 80]
+
+
+def resolve_racer_profile(
+    all_categories: list[str],
+    cat_level: Optional[str] = None,
+    gender: Optional[str] = None,
+    masters_on: bool = False,
+    masters_age: Optional[int] = None,
+) -> tuple[Optional[str], bool]:
+    """Map racer profile filters to the best-matching category string.
+
+    Returns (category_string, is_exact_match).
+    When no match is possible, returns (None, False) — the UI should show all.
+    """
+    if not cat_level and not gender and not masters_on:
+        return (None, True)
+
+    candidates = list(all_categories)
+
+    # Filter by cat level (e.g., "3" matches "Cat 3", "CAT 3-4", "cat 1/2/3")
+    if cat_level:
+        level_filtered = []
+        for c in candidates:
+            c_lower = c.lower()
+            # Match "cat X" patterns — the level must appear as a standalone number
+            # near "cat" keyword
+            if _re.search(r'cat\w*\s*' + cat_level, c_lower):
+                level_filtered.append(c)
+            elif _re.search(r'\b' + cat_level + r'\b', c_lower) and 'cat' in c_lower:
+                level_filtered.append(c)
+        if level_filtered:
+            candidates = level_filtered
+
+    # Filter by gender
+    if gender == "W":
+        gender_filtered = [
+            c for c in candidates
+            if _re.search(r'\bwom[ae]n\b', c, _re.IGNORECASE)
+        ]
+        if gender_filtered:
+            candidates = gender_filtered
+    elif gender == "M":
+        # Prefer explicit "Men" categories, but also accept categories without gender
+        men_filtered = [
+            c for c in candidates
+            if _re.search(r'\bmen\b', c, _re.IGNORECASE)
+            and not _re.search(r'\bwom[ae]n\b', c, _re.IGNORECASE)
+        ]
+        if men_filtered:
+            candidates = men_filtered
+        else:
+            # Exclude women-only categories
+            candidates = [
+                c for c in candidates
+                if not _re.search(r'\bwom[ae]n\b', c, _re.IGNORECASE)
+            ]
+
+    # Filter by masters
+    if masters_on:
+        if masters_age:
+            # Find tightest bracket: largest lower bound <= age
+            bracket = max(
+                (b for b in _MASTERS_BRACKETS if b <= masters_age),
+                default=35,
+            )
+        else:
+            bracket = 35
+
+        masters_filtered = [
+            c for c in candidates
+            if _re.search(r'master', c, _re.IGNORECASE)
+        ]
+        # Prefer bracket-specific matches
+        bracket_str = f"{bracket}+"
+        bracket_specific = [
+            c for c in masters_filtered if bracket_str in c
+        ]
+        if bracket_specific:
+            candidates = bracket_specific
+        elif masters_filtered:
+            candidates = masters_filtered
+
+    if not candidates:
+        return (None, False)
+
+    # Return best match: prefer shortest (most specific) category string
+    best = min(candidates, key=len)
+    is_exact = len(candidates) == 1
+    return (best, is_exact)
 
 
 def get_available_years(session: Session) -> list[int]:
@@ -1712,6 +1806,16 @@ def compute_similarity(series_a, series_b):
     ):
         score += 10
     return score
+
+
+def get_latest_race_for_series(session: Session, series_id: int) -> Optional[Race]:
+    """Return the most recent Race row for a series, or None."""
+    return (
+        session.query(Race)
+        .filter(Race.series_id == series_id)
+        .order_by(Race.date.desc())
+        .first()
+    )
 
 
 def get_similar_series(session, series_id, all_items=None, top_n=3, min_score=50):
