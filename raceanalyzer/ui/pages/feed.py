@@ -191,7 +191,7 @@ def render():
             'background:linear-gradient(90deg, #FFF3E0, transparent);'
             'padding:8px 12px;border-radius:8px;margin-bottom:8px;'
             'border-left:4px solid #FF6F00;">'
-            '<span style="font-weight:600;font-size:1.05em;">Racing Soon</span>'
+            '<span style="font-weight:600;font-size:1.05em;color:#BF360C;">Racing Soon</span>'
             f' <span style="font-size:0.85em;color:#E65100;">'
             f'{len(racing_soon)} race{"s" if len(racing_soon) != 1 else ""} this week</span>'
             '</div>',
@@ -230,9 +230,9 @@ def render():
             # Sticky month header (Sprint 013: FO-02)
             st.markdown(
                 f'<div class="feed-month-header" style="position:sticky;top:0;z-index:10;'
-                f'background:var(--background-color,#fff);padding:8px 0;'
+                f'background:var(--background-color,#fff);padding:8px 12px;'
                 f'border-bottom:1px solid var(--secondary-background-color,#e0e0e0);">'
-                f'<span style="font-size:1.1em;font-weight:600;">{html.escape(header)}</span>'
+                f'<span style="font-size:1.1em;font-weight:600;color:var(--text-color,#333);">{html.escape(header)}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -326,7 +326,9 @@ def _render_summary_stats(items, team_name):
     from raceanalyzer.ui.feed_card import is_beginner_friendly
 
     upcoming_count = sum(1 for i in items if i["is_upcoming"])
-    friendly_count = sum(1 for i in items if is_beginner_friendly(i)[0])
+    friendly_count = sum(
+        1 for i in items if i["is_upcoming"] and is_beginner_friendly(i)[0]
+    )
     teammate_count = sum(1 for i in items if i.get("teammate_names"))
 
     parts = []
@@ -376,7 +378,7 @@ def _render_container_card(
 
 
 def _render_action_row(item, session, category, key_prefix, expanded):
-    """Render action buttons below the card HTML."""
+    """Render action buttons below the card HTML (Sprint 014: overflow menu)."""
     series_id = item["series_id"]
 
     # Initialize expanded state
@@ -387,9 +389,9 @@ def _render_action_row(item, session, category, key_prefix, expanded):
 
     is_expanded = series_id in st.session_state.expanded_ids or expanded
 
-    cols = st.columns([2, 1, 1, 1, 1, 1])
+    cols = st.columns([2, 1, 1])
 
-    # Preview — primary CTA (Sprint 013: AP-01)
+    # Preview — primary CTA
     with cols[0]:
         if st.button(
             "Preview",
@@ -399,7 +401,7 @@ def _render_action_row(item, session, category, key_prefix, expanded):
         ):
             _show_race_detail(series_id, session, category)
 
-    # Register — secondary
+    # Register — secondary (hidden when not applicable)
     with cols[1]:
         reg_url = item.get("registration_url")
         if item.get("is_upcoming") and reg_url and reg_url.strip():
@@ -407,66 +409,81 @@ def _render_action_row(item, session, category, key_prefix, expanded):
                 "Register", reg_url, use_container_width=True
             )
 
-    # Calendar export (Sprint 013: AP-02)
+    # Overflow menu — "⋯" popover
     with cols[2]:
-        if item.get("is_upcoming") and item.get("upcoming_date"):
-            loc = item.get("location", "")
-            state = item.get("state_province", "")
-            full_loc = f"{loc}, {state}" if state else loc
-            duration = int(item.get("typical_field_duration_min") or 120)
-            ics = generate_ics(
-                item["display_name"],
-                item["upcoming_date"],
-                location=full_loc,
-                duration_minutes=duration,
-            )
-            safe_name = item["display_name"].replace(" ", "_")[:30]
-            try:
-                date_str = item["upcoming_date"].strftime("%Y-%m-%d")
-            except Exception:
-                date_str = "race"
-            st.download_button(
-                "Cal",
-                data=ics,
-                file_name=f"{safe_name}-{date_str}.ics",
-                mime="text/calendar",
-                key=f"{key_prefix}_cal_{series_id}",
+        with st.popover("⋯", use_container_width=True):
+            # Calendar export
+            if item.get("is_upcoming") and item.get("upcoming_date"):
+                loc = item.get("location", "")
+                state = item.get("state_province", "")
+                full_loc = f"{loc}, {state}" if state else loc
+                duration = int(
+                    item.get("typical_field_duration_min") or 120
+                )
+                ics = generate_ics(
+                    item["display_name"],
+                    item["upcoming_date"],
+                    location=full_loc,
+                    duration_minutes=duration,
+                )
+                safe_name = item["display_name"].replace(" ", "_")[:30]
+                try:
+                    date_str = item["upcoming_date"].strftime("%Y-%m-%d")
+                except Exception:
+                    date_str = "race"
+                st.download_button(
+                    "\U0001f4c5 Add to calendar",
+                    data=ics,
+                    file_name=f"{safe_name}-{date_str}.ics",
+                    mime="text/calendar",
+                    key=f"{key_prefix}_cal_{series_id}",
+                    use_container_width=True,
+                )
+
+            # Share
+            if st.button(
+                "\U0001f517 Share",
+                key=f"{key_prefix}_share_{series_id}",
                 use_container_width=True,
+            ):
+                _show_share_dialog(item, category)
+
+            # Compare
+            is_compared = series_id in st.session_state.compare_ids
+            cmp_label = (
+                "\u2696\ufe0f Compare \u2713"
+                if is_compared
+                else "\u2696\ufe0f Compare"
             )
+            if st.button(
+                cmp_label,
+                key=f"{key_prefix}_compare_{series_id}",
+                use_container_width=True,
+            ):
+                if is_compared:
+                    st.session_state.compare_ids.discard(series_id)
+                elif len(st.session_state.compare_ids) < 3:
+                    st.session_state.compare_ids.add(series_id)
+                else:
+                    st.toast("Compare limit: 3 races maximum")
+                st.rerun()
 
-    # Share (Sprint 013: AP-06)
-    with cols[3]:
-        if st.button(
-            "Share",
-            key=f"{key_prefix}_share_{series_id}",
-            use_container_width=True,
-        ):
-            _show_share_dialog(item, category)
-
-    # Compare checkbox (Sprint 013: AP-04)
-    with cols[4]:
-        is_compared = series_id in st.session_state.compare_ids
-        if st.button(
-            "Cmp" if not is_compared else "Cmp ✓",
-            key=f"{key_prefix}_cmp_{series_id}",
-            use_container_width=True,
-        ):
-            if is_compared:
-                st.session_state.compare_ids.discard(series_id)
-            elif len(st.session_state.compare_ids) < 3:
-                st.session_state.compare_ids.add(series_id)
-            st.rerun()
-
-    # Details toggle
-    with cols[5]:
-        detail_key = f"{key_prefix}_detail_{series_id}"
-        btn_label = "Less" if is_expanded else "More"
-        if st.button(btn_label, key=detail_key, use_container_width=True):
-            if is_expanded:
-                st.session_state.expanded_ids.discard(series_id)
-            else:
-                st.session_state.expanded_ids.add(series_id)
-            st.rerun()
+            # More/Less details
+            detail_label = (
+                "\U0001f4c4 Less details"
+                if is_expanded
+                else "\U0001f4c4 More details"
+            )
+            if st.button(
+                detail_label,
+                key=f"{key_prefix}_detail_{series_id}",
+                use_container_width=True,
+            ):
+                if is_expanded:
+                    st.session_state.expanded_ids.discard(series_id)
+                else:
+                    st.session_state.expanded_ids.add(series_id)
+                st.rerun()
 
     # Tier 2 content (on demand)
     if is_expanded:

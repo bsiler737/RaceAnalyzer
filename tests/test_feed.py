@@ -231,3 +231,23 @@ class TestPredictionSourceInFeedItems:
         items = queries.get_feed_items_batch(seeded_series_session)
         for item in items:
             assert "prediction_source" in item
+
+
+class TestActionRowNoAbbreviations:
+    """Sprint 014: Action row no longer uses abbreviated labels."""
+
+    def test_no_abbreviated_labels_in_action_row_source(self):
+        """Assert _render_action_row source has no abbreviated 'Cmp' or 'Cal' labels."""
+        from pathlib import Path
+
+        feed_path = Path(__file__).parent.parent / "raceanalyzer" / "ui" / "pages" / "feed.py"
+        source = feed_path.read_text()
+        # Should not contain abbreviated button labels
+        assert '"Cmp"' not in source
+        assert '"Cal"' not in source
+        # Should contain full labels
+        assert "Compare" in source
+        assert "Add to calendar" in source
+        assert "More details" in source
+        assert "Less details" in source
+        assert "Share" in source
