@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
-import pytest
-
 from raceanalyzer.db.models import Race, RaceSeries
 from raceanalyzer.series import build_series, normalize_race_name, pick_display_name
 

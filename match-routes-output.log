@@ -1,0 +1,423 @@
+/Users/ben.siler/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Found 722 series without routes.
+  Sublime Sublimity Circuit Race -> no match
+  Banana Belt Series: Banana Belt 1 -> no match
+  Banana Belt Series: Banana Belt 2 -> no match
+  Jack Frost Time Trial: 14 Miles -> no match
+  As the Raven Flies TT -> None (score: 0.28, id: None)
+  Cherry Pie -> Cherry Pie Hill Double (score: 0.41, id: 53315129)
+    Cached polyline (3586 chars)
+  Banana Belt Series: Banana Belt 3 -> no match
+  High Desert Omnium: Road Race -> no match
+  Banana Belt Series -> 2025 Banana Belt Option  (score: 0.55, id: 49424977)
+    Cached polyline (6799 chars)
+  Banana Belt Series #2 -> no match
+  Banana Belt Series #3 -> no match
+  Piece of Cake Road Race -> None (score: 0.28, id: None)
+  Cherry Blossom Classic Stage Race: Cherry City Criterium -> no match
+  Cherry Blossom Classic Stage Race: Columbia Gorge Road Race -> no match
+  King's Valley Road Race presented by Hop Valley Brewing Co -> no match
+  Eugene Roubaix -> Eugene Roubaix recon (score: 0.79, id: 2320209)
+    Cached polyline (3884 chars)
+  Table Rock Road Race -> Short Table Rock Loop (score: 0.57, id: 54197937)
+    Cached polyline (7204 chars)
+  Silverton Road Race -> SR (Tues): Shobrooke-Silverton-Pinhoe (45km) (score: 0.43, id: 54114379)
+    Cached polyline (3296 chars)
+  Rehearsal Road Race -> rehearsal commute  (score: 0.57, id: 54187488)
+    Cached polyline (9531 chars)
+  OBRA Road Race/OBRA Championship -> no match
+  Mount Hood Cycling Classic: Prologue -> no match
+  Mount Hood Cycling Classic: Cooper Spur Circuit Road Race -> no match
+  Salem Fairview Circuit Race -> None (score: 0.28, id: None)
+  Mt. Tabor Series #1 -> None (score: 0.28, id: None)
+  Mt. Tabor Series #2 -> None (score: 0.28, id: None)
+  Mt. Tabor Series #3 -> None (score: 0.28, id: None)
+  Mt. Tabor Series #4 -> None (score: 0.28, id: None)
+  Mt. Tabor Series #5 -> no match
+  Mt. Tabor Series #6 -> no match
+  Poplollies Women's Crit Series #1 -> no match
+  Poplollies Women's Crit Series #2 -> no match
+  Poplollies Women's Crit Series #3 -> no match
+  Southern OR Champion Thursdays -> no match
+  Monday PIR #1 -> no match
+  Monday PIR #2 -> Mellow Monday Group Ride #2.  (score: 0.53, id: 50413047)
+    Cached polyline (1703 chars)
+  Monday PIR #3 -> None (score: 0.28, id: None)
+  Monday PIR #4 -> no match
+  Monday PIR June #1 -> no match
+  Monday PIR June #2 -> no match
+  Monday PIR June #3 -> no match
+  Monday PIR June #4 -> no match
+  Monday PIR July #1 -> no match
+  Monday PIR July #2 -> no match
+  Monday PIR July #3 -> no match
+  Monday PIR July #4 -> no match
+  Monday PIR August #1 -> no match
+  Monday PIR August #2 -> no match
+  Monday PIR August #3 -> no match
+  Monday PIR August #4 -> no match
+  Monday PIR August #5 -> no match
+  Tuesday PIR April #1 -> no match
+  Tuesday PIR April #2 -> no match
+  Tuesday PIR April #3 -> no match
+  Tuesday PIR April #4 -> no match
+  Tuesday PIR May #1 -> no match
+  Tuesday PIR May #2 -> no match
+  Tuesday PIR May #3 -> no match
+  Tuesday PIR May #4 -> no match
+  Tuesday PIR June #1 -> no match
+  Tuesday PIR June #2 -> no match
+  Tuesday PIR June #3 -> no match
+  Tuesday PIR June #4 -> no match
+  Tuesday PIR June #5 -> no match
+  Tuesday PIR July #1 -> no match
+  Tuesday PIR July #2 -> no match
+  Tuesday PIR July #3 -> no match
+  Tuesday PIR July #4 -> no match
+  Tuesday PIR August #1 -> no match
+  Tuesday PIR August #2 -> no match
+  Tuesday PIR August #3 -> no match
+  Tuesday PIR August #4 -> no match
+  Icebreaker Criterium -> IceBreaker (score: 0.72, id: 54018764)
+    Cached polyline (6013 chars)
+  Cirque du Cycling Criterium -> Cirque du Cycling (score: 0.72, id: 2887418)
+    Cached polyline (62 chars)
+  NWX Criterium -> None (score: 0.28, id: None)
+  Swan Island Criterium -> 10K Swan Island Loop (score: 0.72, id: 53566161)
+    Cached polyline (729 chars)
+  Firecracker Tandem Crit Champs -> no match
+  Firecracker Criterium -> Firecracker 5 Mile (score: 0.62, id: 54064522)
+    Cached polyline (1096 chars)
+  Vancouver Courthouse Criterium -> Vancouver Courthouse Criterium (score: 0.78, id: 40307570)
+    Cached polyline (104 chars)
+  Portland Twilight Criterium -> no match
+  Gresham Criterium -> None (score: 0.28, id: None)
+  OBRA Criterium Championships -> 2023 OBRA TT Championships 20km Route (score: 0.58, id: 43259687)
+    Cached polyline (865 chars)
+  Renegade Criterium Win & Out -> no match
+  Co-Motion Criterium -> Co-Motion Test Loop (score: 0.67, id: 44657501)
+    Cached polyline (3061 chars)
+  High Desert Omnium: Criterium -> no match
+  High Desert Omnium: Time Trial -> no match
+  Elkhorn Classic Stage Race: Dooley Mountain Road Race -> no match
+  So. Oregon TT -> None (score: 0.28, id: None)
+  Piece of Cake -> None (score: 0.28, id: None)
+  Port of Hood River Criterium -> Bend > Hood River > Portland  (score: 0.50, id: 46752977)
+    Cached polyline (31831 chars)
+  Willamette University Capitol Criterium -> no match
+  Hutch's Twilight Hillclimb Series -> no match
+  Hutch's Twilight Hillclimb Series #2 -> no match
+  Port of Hood River Criterium #2 -> no match
+  King's Valley -> King's Valley Loop (score: 0.65, id: 49207649)
+    Cached polyline (1487 chars)
+  Beautiful Estacada TT Series: Beautiful Estacada TT 1 -> no match
+  Tuesday PIR #3 -> no match
+  Hutch's Twilight Hillclimb Series #3 -> no match
+  Cherry Blossom Classic Stage Race: Columbia Hills Road Race -> no match
+  Cherry Blossom Classic Stage Race: Eight Mile Time Trial -> no match
+  Mount Hood Cycling Classic: Scenic Gorge Time Trial -> no match
+  Mount Hood Cycling Classic: Hood River Criterium -> no match
+  Elkhorn Classic Stage Race: Gold Rush Criterium -> no match
+  Elkhorn Classic Stage Race: Pleasant Valley Time Trial -> no match
+  Cascade Cycling Classic: Smith Rock Road Race -> no match
+  Cascade Cycling Classic: Three Creeks Road Race -> no match
+  Cascade Cycling Classic: Skyliners Time Trial -> no match
+  Cascade Cycling Classic: Cascade Lakes Road Race -> no match
+  Cherry Blossom Cycling Classic: Columbia Hills Road Race -> no match
+  Cherry Blossom Cycling Classic: Orchard Run Circuit Race -> no match
+  Cherry Blossom Cycling Classic: 8-mile Time Trial -> no match
+  Tuesday PIR #4 -> no match
+  Cherry Blossom Cycling Classic: Cherry City Criterium -> no match
+  Port of Hood River Criterium #3 -> no match
+  Eugene Celebration Stage Race: Celebration Criterium -> no match
+  Eugene Celebration Stage Race: Coburg TT -> no match
+  Eugene Celebration Stage Race: Maxon Road Race -> no match
+  Mount Hood Cycling Classic: Wy'East Road Race -> no match
+  Tuesday PIR #5 -> no match
+  Tuesday PIR #6 -> no match
+  Bend Don't Brake -> Bend Don't Brake (score: 0.82, id: 60968)
+    Cached polyline (266 chars)
+  Umpqua RR -> Umpqua Uplander (score: 0.53, id: 52866324)
+    Cached polyline (15561 chars)
+  Tuesday PIR #7 -> no match
+  Tuesday PIR #8 -> no match
+  Monday PIR #5 -> no match
+  Monday PIR #6 -> no match
+  Monday PIR #7 -> no match
+  Champion Thursday #1 -> Walking Stick Thursday  Idea #1 (score: 0.50, id: 39381324)
+    Cached polyline (4550 chars)
+  Champion Thursday #2 -> Walking Stick Idea Thursday idea #2 (score: 0.50, id: 39381371)
+    Cached polyline (5673 chars)
+  Tuesday PIR #9 -> no match
+  Mt. Tabor Circuit Race -> None (score: 0.28, id: None)
+  Umpqua Criterium -> Umpqua Uplander (score: 0.53, id: 52866324)
+    Cached polyline (15561 chars)
+  Port of Hood River Criterium #4 -> no match
+  Mt Hood Cycling Classic:Prologue -> no match
+  Mt Hood Cycling Classic: Mt Tabor Criterium -> no match
+  Mt Hood Cycling Classic: Mt Adams Road Race -> no match
+  Mt Hood Cycling Classic: Scenic Gorge Time Trial -> no match
+  Mt Hood Cycling Classic: Wy'East Road Race -> no match
+  Mt Hood Cycling Classic: Hood River Criterium -> no match
+  Tuesday PIR #10 -> no match
+  Monday PIR #8 -> no match
+  Cirque du Cycling -> Cirque du Cycling (score: 0.85, id: 2887418)
+    Cached polyline (62 chars)
+  Hutch's Twilight Crit Series #3 -> no match
+  Hutch's Twilight Crit Series #4 -> no match
+  Hutch's Twilight Crit Series -> no match
+  Hutch's Twilight Crit Series #1 -> no match
+  Central Oregon Crit Series #1 -> no match
+  Elkhorn Classic Stage Race-Oregon Trail Road Race -> no match
+  Elkhorn Classic Stage Race-Pleasant Valley ITT -> no match
+  Elkhorn Classic Stage Race-Gold Rush Crit -> no match
+  Elkhorn Classic Stage Race-Dooley Mountain Road Race -> no match
+  Tuesday PIR #11 -> no match
+  Tuesday PIR -> TTE Tuesday Shop Ride (score: 0.56, id: 52941830)
+    Cached polyline (3274 chars)
+  Monday PIR #9 -> no match
+  Monday PIR #10 -> no match
+  Champion Thursday #3 -> Walking Stick Thursday Idea #3 (score: 0.51, id: 39381393)
+    Cached polyline (5166 chars)
+  Champion Thursday #4 -> Walking Stick Idea Thursday #4 (score: 0.53, id: 39381467)
+    Cached polyline (4408 chars)
+  Central Oregon Crit Series #2 -> no match
+  Hutch's Twilight Crit Series #5 -> no match
+  Central Oregon Crit Series #3 -> no match
+  Salem Fairview -> Fairview 3Mi (score: 0.55, id: 13215402)
+    Cached polyline (412 chars)
+  Champion Thursday #5 -> Walking Stick Thursday #5 (score: 0.54, id: 39413510)
+    Cached polyline (4131 chars)
+  Champion Thursday #6 -> Walking Stick Thursday #6 (score: 0.54, id: 41324465)
+    Cached polyline (4026 chars)
+  Monday PIR #11 -> no match
+  Tuesday PIR #13 -> no match
+  Cascade Cycling Classic: Prologue-Old Mill -> no match
+  Cascade Cycling Classic: McKenzie Pass Road Race -> no match
+  Cascade Cycling Classic: Downtown Criterium -> no match
+  Cascade Cycling Classic: Awbrey Butte Circuit Race -> no match
+  Champion Thursday #7 -> no match
+  Champion Thursday #8 -> no match
+  Champion Thursday #9 -> no match
+  Monday PIR #12 -> no match
+  Monday PIR #13 -> no match
+  Monday PIR #14 -> no match
+  Monday PIR #15 -> no match
+  Tuesday PIR #14 -> no match
+  Tuesday PIR #15 -> no match
+  Tuesday PIR #16 -> no match
+  Tuesday PIR #17 -> no match
+  Cherry Pie Road Race -> Cherry Pie Hill Double (score: 0.56, id: 53315129)
+    Cached polyline (3586 chars)
+  Cherry Blossom Cycling Classic: Columbia Hills Race -> no match
+  Cherry Blossom Cycling Classic: Dufur TT -> no match
+  Kings Valley Road Race -> kingsvalley-99-elkins (score: 0.66, id: 54114938)
+    Cached polyline (3300 chars)
+  Silverton RR Champs -> no match
+  Mt. Hood Cycling Classic: Three Summits Road Race -> no match
+  Vanport Kermesse -> no match
+  Mt. Hood Cycling Classic: Hood River Criterium -> no match
+  Mt. Hood Cycling Classic: Trout Lake Time Trial -> no match
+  Sublime Sublimity -> Sublime Sublimity (score: 0.72, id: 31314471)
+    Cached polyline (3720 chars)
+  Pringle Creek Circuit Race -> Pringle Creek Circuit Race (score: 0.72, id: 33587245)
+    Cached polyline (143 chars)
+  Elkhorn Classic-The Gold Rush Criterium -> no match
+  Elkhorn Classic-The Oregon Trail Road Race -> no match
+  Elkhorn Classic-The Pleasant Valley Time Trial -> no match
+  Elkhorn Classic-The Dooley Mountain Road Race -> no match
+  Willamette Capitol Cup Criterium -> no match
+  Hammer Velo Criterium -> 001: Lillehammer – Hamar (DEVELOPED_WITH_SIGNS) (score: 0.30, id: 53858087)
+    Cached polyline (16801 chars)
+  Cirque Criterium -> cirque (score: 0.72, id: 53808739)
+    Cached polyline (5378 chars)
+  Franz Criterium -> None (score: 0.28, id: None)
+  Swan Island Rose Festival Criterium -> no match
+  Twilight Criterium -> Twilight 2026 - https://ridewithgps.com/routes/53991705 (score: 0.39, id: 53991705)
+    Cached polyline (3156 chars)
+  Central Oregon Crit -> Central Oregon Backcountry Explorer  (score: 0.53, id: 53956280)
+    Cached polyline (20435 chars)
+  Ironclad Criterium -> Ironclad Half (score: 0.62, id: 52335363)
+    Cached polyline (1087 chars)
+  Cascade Cycling Classic-Wells Fargo Prologue -> no match
+  Cascade Cycling Classic-Les Schwab McKenzie Pass Road Race -> no match
+  Cascade Cycling Classic-Hutch's Bicycles Time Trial -> no match
+  Cascade Cycling Classic-Pacific Power Cascade Lake Road Race -> no match
+  Cascade Cycling Classic-Desert Orthopedist &amp; Rebound Physical Therapy Twilight Downtown Criterium -> no match
+  Cascade Cycling Classic-Deschutes Brewery Aubrey Butte Circuit Race -> no match
+  Vancouver Criterium -> None (score: 0.28, id: None)
+  Albany Criterium -> None (score: 0.28, id: None)
+  Longview Criterium -> None (score: 0.28, id: None)
+  OBRA Criterium -> Cobra (score: 0.52, id: 54199522)
+    Cached polyline (7369 chars)
+  OBRA Uphill TT -> OBRA UPHILL TT (score: 0.67, id: 572826)
+    Cached polyline (630 chars)
+  Giro di Portland -> Giro PDX - Le Foglie Morte di Sud Portlandia (score: 0.66, id: 45919937)
+    Cached polyline (9216 chars)
+  Tigard Criterium -> None (score: 0.28, id: None)
+  Rolf Prima Main Street Criterium -> no match
+  Eugene Celebration-Briggs Hill Road Race -> no match
+  Eugene Celebration-McBeth Prologue -> no match
+  Eugene Celebration-Coburg Time Trial -> no match
+  Eugene Celebration-Celebration Criterium -> no match
+  Keller Rohrback Road Race -> no match
+  Ice Breaker TT -> Ice breaker (score: 0.57, id: 53626262)
+    Cached polyline (7587 chars)
+  Tour de Dung #1 -> None (score: 0.28, id: None)
+  FareStart Time Trial -> no match
+  Tour de Dung #2 -> Tour De Dung #2 (score: 0.84, id: 27036161)
+    Cached polyline (731 chars)
+  Team Group Health Independence Valley Road Race -> no match
+  Northshore Road Race -> Northshore to park (score: 0.72, id: 54124370)
+    Cached polyline (3132 chars)
+  Ronde van Palouse -> Ronde van Palouse (score: 0.83, id: 4391638)
+    Cached polyline (4729 chars)
+  Northshore Hill Climb TT -> Northshore Hill Climb TT (score: 0.70, id: 980001)
+    Cached polyline (150 chars)
+  Tour of Walla Walla - Time Trial -> Route of the Hiawatha Day 3 Wallace to Enaville (score: 0.32, id: 47707886)
+    Cached polyline (3380 chars)
+  Tour of Walla Walla - Criterium -> Route of the Hiawatha Day 3 Wallace to Enaville (score: 0.32, id: 47707886)
+    Cached polyline (3380 chars)
+  Banana Belt #1 -> None (score: 0.28, id: None)
+  Banana Belt #2 -> None (score: 0.28, id: None)
+  Banana Belt #3 -> None (score: 0.28, id: None)
+  Beautiful Estacada Time Trial -> no match
+  Olympic View Road Race -> MN-Loop from Olympic View Rd. (score: 0.39, id: 53436837)
+    Cached polyline (1369 chars)
+  Tour of Walla Walla - Waitsburg RR -> None (score: 0.28, id: None)
+  Tour of Walla Walla - Road Race -> Route of the Hiawatha Day 3 Wallace to Enaville (score: 0.32, id: 47707886)
+    Cached polyline (3380 chars)
+  Vance Creek Road Race -> Vance Creek (score: 0.65, id: 51961724)
+    Cached polyline (21571 chars)
+  Liberty Road Race -> E Liberty, McKeesport, GAP (score: 0.47, id: 54198027)
+    Cached polyline (5550 chars)
+  Montinore Road Race -> Montinore  (score: 0.83, id: 29746111)
+    Cached polyline (393 chars)
+  OBRA RR Championships Day 1 -> no match
+  Nampa Belle District Criterium -> no match
+  Ravensdale Road Race -> Ravensdale (score: 0.73, id: 53908537)
+    Cached polyline (6932 chars)
+  Second Ascent Ballard Criterium -> no match
+  Idaho State RR Championships -> no match
+  Cheney-Rock Lake Road Race -> Cheney-Rock Lake Road Race (score: 0.62, id: 450191)
+    Cached polyline (2841 chars)
+  Washington State Individual Time Trial Championship -> no match
+  Menomonee Park Criterium by Velo Trocadero -> no match
+  Longbranch Road Race -> Longbranch (score: 0.72, id: 49140298)
+    Cached polyline (983 chars)
+  Whitworth Criterium -> Don't Forget Your Halo! 50km Audax (PERM) (autotraced) (score: 0.35, id: 54162740)
+    Cached polyline (3708 chars)
+  Mutual of Enumclaw - TT -> Mutual of Enumclaw TT (score: 0.69, id: 27461065)
+    Cached polyline (618 chars)
+  Mutual of Enumclaw - Crit -> Mutual of Enumclaw TT (score: 0.69, id: 27461065)
+    Cached polyline (618 chars)
+  Mutual of Enumclaw - RR -> Mutual of Enumclaw TT (score: 0.69, id: 27461065)
+    Cached polyline (618 chars)
+  Redmond Derby Days -> The Jerry Baker Velodrome to Derby Days (and back) (score: 0.49, id: 43120900)
+    Cached polyline (770 chars)
+  Washington State Criterium Championships -> None (score: 0.28, id: None)
+  Brad Lewis Memorial Criterium -> no match
+  37th Annual Joe Matava Memorial Criterium Classic -> no match
+  Tacoma Twilight Criterium -> None (score: 0.28, id: None)
+  Boston Harbor Circuit Race -> Boston Harbor Circuit Race (score: 0.81, id: 554829)
+    Cached polyline (220 chars)
+  Ronde Ohop p/b Herriott Sports Performance -> no match
+  Crystal Mountain Hill Climb Time Trial -> no match
+  Lake Washington Velo Gig Harbor CR -> no match
+  Mount Spokane Hill Climb -> None (score: 0.28, id: None)
+  Masters Road Nationals -> 2023 Masters and Para Road Nationals-Road Race Loop (score: 0.55, id: 47667718)
+    Cached polyline (1515 chars)
+  Masters Road Nationals Day 2 -> no match
+  Masters Road Nationals Day 3 -> no match
+  Masters Road Nationals Day 4 -> no match
+  Masters Road Nationals Day 5 -> no match
+  Lilac City Twilight Criterium -> no match
+  Mason Lake Road Race Series -> no match
+  Carnation Frostbite Time Trial -> no match
+  University of Washington Omnium - Crit -> no match
+  Volunteer Park Criterium -> Volunteer park (score: 0.83, id: 53350279)
+    Cached polyline (1694 chars)
+  Mutual of Enumclaw Stage Race - Crit -> 
+   Mutual of Enumclaw Stage Race Road Race
+   (score: 0.76, id: 7931408)
+    Cached polyline (716 chars)
+  Mutual of Enumclaw Stage Race - TT -> 
+   Mutual of Enumclaw Stage Race Road Race
+   (score: 0.76, id: 7931408)
+    Cached polyline (716 chars)
+  Mutual of Enumclaw Stage Race - RR -> 
+   Mutual of Enumclaw Stage Race Road Race
+   (score: 0.76, id: 7931408)
+    Cached polyline (716 chars)
+  Mutual of Enumclaw Stage Race - GC -> no match
+  Mt. Hood Cycling Classic - Stage 1 -> no match
+  Mt. Hood Cycling Classic - Stage 2 -> no match
+  Mt. Hood Cycling Classic -> Mt. Hood Cycling Classic (Wy'East Road Race) (score: 0.61, id: 33491148)
+    Cached polyline (15252 chars)
+  Mt. Hood Cycling Classic - Stage 3 -> no match
+  Mt. Hood Cycling Classic - GC -> no match
+  Long Branch Senior State Championship -> no match
+  Tour D' Bloom - TT -> None (score: 0.28, id: None)
+  Tour D' Bloom - Crit -> None (score: 0.28, id: None)
+  Tour D' Bloom - RR -> None (score: 0.28, id: None)
+  Tour D' Bloom - GC -> no match
+  Georgetown Criterium -> None (score: 0.28, id: None)
+  Deer Park Time Trial -> deer park sky lagunitas (score: 0.38, id: 54183795)
+    Cached polyline (2237 chars)
+  WSBA Individual Time Trial Championship -> no match
+  Northwest Juniors Classic Stage Race - TT -> no match
+  Northwest Juniors Classic Stage Race - Crit -> no match
+  Northwest Juniors Classic Stage Race - RR -> no match
+  Northwest Juniors Classic Stage Race - GC -> no match
+  Pacific Raceways Kermesse -> None (score: 0.28, id: None)
+  Mashel Nisqually Kermesse -> 2016 Mashel Nisqually Gravel Kermesse (score: 0.76, id: 14108440)
+    Cached polyline (1176 chars)
+  12th Annual Ronde Ohop -> no match
+  Gig Harbor Circuit Race -> no match
+  USA Cycling Masters Criterium Nationals -> 2024 USA Cycling Masters / Juniors Road Nationals-Criterium (score: 0.42, id: 42841626)
+    Cached polyline (104 chars)
+  USA Cycling Masters Road Nationals -> 2024 USA Cycling Masters / Juniors Road Nationals-Criterium (score: 0.45, id: 42841626)
+    Cached polyline (104 chars)
+  Redmond Derby Days Criterium -> The Jerry Baker Velodrome to Derby Days (and back) (score: 0.63, id: 43120900)
+    Cached polyline (770 chars)
+  Icebreaker Time Trial -> IceBreaker (score: 0.57, id: 54018764)
+    Cached polyline (6013 chars)
+  Tour of Walla Walla - GC -> no match
+  Tour D' Bloom Hill Climb -> no match
+  Tour D' Bloom Criterium -> None (score: 0.28, id: None)
+  Tour D' Bloom Road Race -> None (score: 0.28, id: None)
+  Long Branch Road Race -> Tate City loop along Charlie's creek to Tate Branch (score: 0.28, id: 54126886)
+    Cached polyline (1045 chars)
+  Green Bluff Circuit Race -> no match
+  Sumner Buckley Kermesse -> no match
+  Capital Stage Race - TT -> Capital Stage Race TT (score: 0.83, id: 7966567)
+    Cached polyline (642 chars)
+  Capital Stage Race - Crit -> Capital Stage Race TT (score: 0.83, id: 7966567)
+    Cached polyline (642 chars)
+  Capital Stage Race - RR -> Capital Stage Race TT (score: 0.83, id: 7966567)
+    Cached polyline (642 chars)
+  39th Annual Joe Matava Memorial Classic Criterium -> no match
+  Global Relay Gastown Grand -> no match
+  Cascade Cycling Classic Stage 1 -> 2017 Cascade Cycling Classic Stage #2 Time Trial (score: 0.74, id: 23096699)
+    Cached polyline (839 chars)
+  Cascade Cycling Classic Stage 2 -> 2017 Cascade Cycling Classic Stage #2 Time Trial (score: 0.75, id: 23096699)
+    Cached polyline (839 chars)
+  Cascade Cycling Classic Stage 3 -> 2017 Cascade Cycling Classic Stage #2 Time Trial (score: 0.74, id: 23096699)
+    Cached polyline (839 chars)
+  Cascade Cycling Classic Stage 4 -> 2017 Cascade Cycling Classic Stage #2 Time Trial (score: 0.74, id: 23096699)
+    Cached polyline (839 chars)
+  Cascade Cycling Classic Stage 5 -> 2017 Cascade Cycling Classic Stage #2 Time Trial (score: 0.74, id: 23096699)
+    Cached polyline (839 chars)
+  Cascade Cycling Classic Amateur TT -> Cascade Cycling Classic Amateur TT (score: 0.83, id: 15294912)
+    Cached polyline (571 chars)
+  Cascade Cycling Classic Stage 6 -> 2017 Cascade Cycling Classic Stage #2 Time Trial (score: 0.74, id: 23096699)
+    Cached polyline (839 chars)
+  Cascade Cycling Classic Overall -> no match
+  Washington State Road Race Championships -> None (score: 0.28, id: None)
+  Ronde Ohop (Vintage) -> no match
+  Stumptown Criterium -> stumptown (score: 0.57, id: 53974286)
+    Cached polyline (290 chars)
+  Jack Frost Time Trial -> None (score: 0.28, id: None)
+  So Oregon Time Trial -> Missoula to Florence Oregon (score: 0.35, id: 54000225)
+    Cached polyline (89599 chars)

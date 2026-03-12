@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from raceanalyzer.db.models import Race, RaceSeries
 
-
 # Suffix normalization: abbreviation -> canonical form
 _SUFFIX_MAP = {
     "rr": "road race",

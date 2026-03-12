@@ -704,12 +704,18 @@ RACER_TYPE_DESCRIPTIONS: dict[tuple[str, str], str] = {
     ("rolling", "breakaway"): "Strong all-rounders who can attack on the hills thrive.",
     ("rolling", "small_group_sprint"): "Tactical riders who can bridge gaps excel here.",
     ("hilly", "breakaway"): "Pure climbers and aggressive attackers dominate.",
-    ("hilly", "breakaway_selective"): "Strong climbers who can attack on the decisive hills dominate.",
+    ("hilly", "breakaway_selective"): (
+        "Strong climbers who can attack on the decisive hills dominate."
+    ),
     ("hilly", "gc_selective"): "Pure climbers dominate this race.",
     ("hilly", "reduced_sprint"): "Climbers with a finishing kick do well.",
-    ("hilly", "small_group_sprint"): "Punchy riders who survive the climbs and still have a kick do well.",
+    ("hilly", "small_group_sprint"): (
+        "Punchy riders who survive the climbs and still have a kick do well."
+    ),
     ("mountainous", "gc_selective"): "Only the strongest climbers survive this race.",
-    ("mountainous", "breakaway_selective"): "Pure climbers who can sustain attacks on long climbs thrive.",
+    ("mountainous", "breakaway_selective"): (
+        "Pure climbers who can sustain attacks on long climbs thrive."
+    ),
 }
 
 

@@ -441,7 +441,10 @@ def compute_predictions(ctx, stats):
             SeriesPrediction.predicted_finish_type.isnot(None),
         ).count()
         before_pct = (before_known / before_total * 100) if before_total else 0
-        click.echo(f"Before: {before_known}/{before_total} series with known finish type ({before_pct:.0f}%)")
+        click.echo(
+            f"Before: {before_known}/{before_total} series"
+            f" with known finish type ({before_pct:.0f}%)"
+        )
 
     click.echo("Pre-computing series predictions...")
     summary = precompute_all(session)
@@ -465,7 +468,10 @@ def compute_predictions(ctx, stats):
             SeriesPrediction.predicted_finish_type.isnot(None),
         ).count()
         after_pct = (after_known / after_total * 100) if after_total else 0
-        click.echo(f"After:  {after_known}/{after_total} series with known finish type ({after_pct:.0f}%)")
+        click.echo(
+            f"After:  {after_known}/{after_total} series"
+            f" with known finish type ({after_pct:.0f}%)"
+        )
 
         # Source breakdown
         for source in ("time_gap", "course_profile", "race_type_only"):

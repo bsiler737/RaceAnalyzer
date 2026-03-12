@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from raceanalyzer.rwgps import MIN_MATCH_SCORE, _clean_search_name, _haversine, score_route
+from raceanalyzer.rwgps import _clean_search_name, _haversine, score_route
 
 
 class TestCleanSearchName:

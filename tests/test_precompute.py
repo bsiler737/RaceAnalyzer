@@ -8,7 +8,6 @@ from raceanalyzer.db.models import (
     Course,
     CourseType,
     Race,
-    RaceClassification,
     RaceSeries,
     RaceType,
     SeriesPrediction,

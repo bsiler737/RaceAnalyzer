@@ -233,7 +233,10 @@ def predict_finish_type_from_course(
             finish_type=FinishType.BUNCH_SPRINT,
             confidence=0.55,
             source="course_profile",
-            reasoning=f"Rolling course ({m_per_km_str}) — most rolling races still end in a group sprint.",
+            reasoning=(
+                f"Rolling course ({m_per_km_str})"
+                " — most rolling races still end in a group sprint."
+            ),
         )
 
     # --- Rule 8: Flat terrain ---

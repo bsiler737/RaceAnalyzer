@@ -2,13 +2,7 @@
 
 import json
 
-import pytest
-
 from raceanalyzer.classification.course_predictor import (
-    CoursePrediction,
-    LONG_CLIMB_M,
-    LONG_ROAD_RACE_M,
-    STEEP_CLIMB_GRADE,
     _resolve_course_character,
     predict_finish_type_from_course,
 )
