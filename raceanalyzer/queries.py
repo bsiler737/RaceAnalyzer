@@ -1435,17 +1435,29 @@ def get_feed_items_batch(
         if state_filter and norm_state not in state_filter:
             continue
 
-        # Course data
+        # Course data (expanded for Sprint 013)
         course_row = course_map.get(sid)
         course_type = None
         distance_m = None
         total_gain_m = None
+        elevation_sparkline_points = None
+        climbs_json = None
         if course_row:
             course_type = (
                 course_row.course_type.value if course_row.course_type else None
             )
             distance_m = course_row.distance_m
             total_gain_m = course_row.total_gain_m
+            # Sparkline points (~20 downsampled) for collapsed card
+            if course_row.profile_json:
+                try:
+                    import json as _json
+                    profile = _json.loads(course_row.profile_json)
+                    elevation_sparkline_points = _downsample_profile(profile, target=20)
+                except (ValueError, TypeError):
+                    pass
+            # Climbs JSON for key climb teaser
+            climbs_json = course_row.climbs_json
 
         # Predictions from pre-computed table
         pred = pred_map.get((sid, category)) or pred_map.get((sid, None))
@@ -1476,12 +1488,19 @@ def get_feed_items_batch(
 
         race_type_str = race_type_val.value if race_type_val else None
 
+        # Sprint 013: additional Tier 1 fields
+        field_size_median = pred.field_size_median if pred else None
+        typical_field_duration = pred.typical_field_duration_min if pred else None
+        distribution_json_val = pred.distribution_json if pred else None
+        edition_count = pred.edition_count if pred else len(races)
+        encoded_polyline = series.rwgps_encoded_polyline
+
         item = {
             "series_id": sid,
             "display_name": series.display_name,
             "location": most_recent.location,
             "state_province": most_recent.state_province,
-            "edition_count": len(races),
+            "edition_count": edition_count,
             "is_upcoming": is_upcoming,
             "upcoming_date": upcoming_race.date if upcoming_race else None,
             "days_until": days_until,
@@ -1505,7 +1524,14 @@ def get_feed_items_batch(
             "drop_rate_pct": drop_rate_pct,
             "drop_rate_label": drop_rate_label_val,
             "field_size_display": field_size_display,
+            "field_size_median": field_size_median,
             "teammate_names": teammate_names,
+            # Sprint 013 new Tier 1 fields
+            "elevation_sparkline_points": elevation_sparkline_points,
+            "climbs_json": climbs_json,
+            "typical_field_duration_min": typical_field_duration,
+            "rwgps_encoded_polyline": encoded_polyline,
+            "distribution_json": distribution_json_val,
         }
         items.append(item)
 

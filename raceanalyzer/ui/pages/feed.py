@@ -1,6 +1,8 @@
-"""Unified Race Feed -- the primary entry point for RaceAnalyzer (Sprint 011)."""
+"""Unified Race Feed -- Sprint 013: Feed UX Overhaul."""
 
 from __future__ import annotations
+
+import html
 
 import streamlit as st
 
@@ -12,12 +14,20 @@ from raceanalyzer.ui.components import (
     render_global_category_filter,
     render_team_setting,
 )
+from raceanalyzer.ui.feed_card import (
+    build_card_html,
+    generate_ics,
+    inject_feed_styles,
+)
 
 FEED_PAGE_SIZE = 20
 
 
 def render():
     session = st.session_state.db_session
+
+    # Inject CSS once at top
+    inject_feed_styles()
 
     # --- Deep-link isolation: ?series_id=N ---
     isolated_series_id = st.query_params.get("series_id")
@@ -26,6 +36,16 @@ def render():
             isolated_series_id = int(isolated_series_id)
         except (ValueError, TypeError):
             isolated_series_id = None
+
+    # --- Sidebar: global category, feed filters, team setting ---
+    render_global_category_filter(session)
+    category = st.session_state.get("global_category")
+
+    filters = {}
+    team_name = None
+    if not isolated_series_id:
+        filters = render_feed_filters(session)
+        team_name = render_team_setting()
 
     # --- Search bar ---
     search_query = st.query_params.get("q", "")
@@ -43,17 +63,18 @@ def render():
             elif "q" in st.query_params:
                 del st.query_params["q"]
 
-    # --- Sidebar: global category, feed filters, team setting ---
-    render_global_category_filter(session)
-    category = st.session_state.get("global_category")
-
-    filters = {}
-    team_name = None
+    # --- Filter chips (Sprint 013: FO-03, FO-04) ---
+    chip_discipline = None
+    can_finish_filter = False
     if not isolated_series_id:
-        filters = render_feed_filters(session)
-        team_name = render_team_setting()
+        chip_discipline, can_finish_filter = _render_filter_chips()
 
     # --- Fetch feed items (batch) ---
+    # Merge chip filters with sidebar filters
+    discipline_filter = filters.get("discipline")
+    if chip_discipline:
+        discipline_filter = chip_discipline
+
     if isolated_series_id:
         all_items = queries.get_feed_items_batch(
             session, category=category, team_name=team_name
@@ -67,11 +88,17 @@ def render():
             session,
             category=category,
             search_query=search_query or None,
-            discipline_filter=filters.get("discipline"),
+            discipline_filter=discipline_filter,
             race_type_filter=filters.get("race_type"),
             state_filter=filters.get("states"),
             team_name=team_name,
         )
+
+    # Apply "Can I finish?" filter
+    if can_finish_filter:
+        from raceanalyzer.ui.feed_card import is_beginner_friendly
+
+        items = [i for i in items if is_beginner_friendly(i)[0]]
 
     if not items:
         if search_query:
@@ -80,6 +107,8 @@ def render():
                 if "q" in st.query_params:
                     del st.query_params["q"]
                 st.rerun()
+        elif can_finish_filter:
+            st.info("No beginner-friendly races found with current filters.")
         elif any(
             filters.get(k) is not None for k in ("discipline", "race_type", "states")
         ):
@@ -96,6 +125,19 @@ def render():
                 "No races found. Run `raceanalyzer scrape` to import data."
             )
         return
+
+    # --- View toggle: List / Map (Sprint 013: FO-05) ---
+    view_mode = "List"
+    if not isolated_series_id:
+        view_mode = _render_view_toggle()
+
+    if view_mode == "Map":
+        _render_map_view(items)
+        return
+
+    # --- Summary stats header (Sprint 013: FO-08) ---
+    if not isolated_series_id:
+        _render_summary_stats(items, team_name)
 
     # --- "Show all races" button for deep-link isolation ---
     if isolated_series_id:
@@ -134,15 +176,42 @@ def render():
                     )
         return
 
+    # --- "Racing Soon" section (Sprint 013: FO-01) ---
+    racing_soon = [
+        i for i in items
+        if i["is_upcoming"]
+        and i.get("days_until") is not None
+        and i["days_until"] <= 7
+    ]
+    remaining_items = [i for i in items if i not in racing_soon]
+
+    if racing_soon:
+        st.markdown(
+            '<div class="feed-racing-soon-header" style="'
+            'background:linear-gradient(90deg, #FFF3E0, transparent);'
+            'padding:8px 12px;border-radius:8px;margin-bottom:8px;'
+            'border-left:4px solid #FF6F00;">'
+            '<span style="font-weight:600;font-size:1.05em;">Racing Soon</span>'
+            f' <span style="font-size:0.85em;color:#E65100;">'
+            f'{len(racing_soon)} race{"s" if len(racing_soon) != 1 else ""} this week</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        for item in racing_soon:
+            expanded = isolated_series_id is not None
+            _render_container_card(
+                item, session, category, key_prefix="soon", expanded=expanded
+            )
+
     # --- Month-grouped agenda view ---
-    month_groups = queries.group_by_month(items)
+    month_groups = queries.group_by_month(remaining_items)
 
     # Pagination state
     if "feed_page_size" not in st.session_state:
         st.session_state.feed_page_size = FEED_PAGE_SIZE
     visible_count = st.session_state.feed_page_size
 
-    rendered = 0
+    rendered = len(racing_soon)
     for header, group_items in month_groups:
         if rendered >= visible_count:
             break
@@ -158,7 +227,15 @@ def render():
                     )
                     rendered += 1
         else:
-            st.subheader(header)
+            # Sticky month header (Sprint 013: FO-02)
+            st.markdown(
+                f'<div class="feed-month-header" style="position:sticky;top:0;z-index:10;'
+                f'background:var(--background-color,#fff);padding:8px 0;'
+                f'border-bottom:1px solid var(--secondary-background-color,#e0e0e0);">'
+                f'<span style="font-size:1.1em;font-weight:600;">{html.escape(header)}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
             for item in group_items:
                 if rendered >= visible_count:
                     break
@@ -169,12 +246,116 @@ def render():
                 rendered += 1
 
     # Show more button
-    total_items = sum(len(g[1]) for g in month_groups)
+    total_items = len(racing_soon) + sum(len(g[1]) for g in month_groups)
     if visible_count < total_items:
         remaining = total_items - visible_count
         if st.button(f"Show more ({remaining} remaining)"):
             st.session_state.feed_page_size = visible_count + FEED_PAGE_SIZE
             st.rerun()
+
+    # --- Compare mode floating button (Sprint 013: AP-04) ---
+    compare_ids = st.session_state.get("compare_ids", set())
+    if len(compare_ids) >= 2:
+        if st.button(f"Compare {len(compare_ids)} races", type="primary"):
+            _show_comparison(compare_ids, items, session, category)
+
+
+def _render_filter_chips():
+    """Render filter chips above feed using st.pills (Sprint 013: FO-03, FO-04)."""
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        # Read current from query params
+        current_disc = st.query_params.get("chip_discipline", "").split(",")
+        current_disc = [d for d in current_disc if d]
+
+        disc_options = ["Criterium", "Road Race", "Gravel", "TT", "Hill Climb"]
+        selected = st.pills(
+            "Filter by type",
+            disc_options,
+            selection_mode="multi",
+            default=(
+                current_disc
+                if current_disc and all(d in disc_options for d in current_disc)
+                else None
+            ),
+            key="filter_chips_discipline",
+        )
+
+        # Map display names to query values
+        chip_to_value = {
+            "Criterium": "criterium",
+            "Road Race": "road_race",
+            "Gravel": "gravel",
+            "TT": "time_trial",
+            "Hill Climb": "hill_climb",
+        }
+        discipline_filter = None
+        if selected:
+            discipline_filter = [chip_to_value[s] for s in selected if s in chip_to_value]
+
+    with col2:
+        can_finish = st.pills(
+            "Approachability",
+            ["Can I finish?"],
+            selection_mode="single",
+            key="filter_can_finish",
+        )
+        can_finish_active = can_finish == "Can I finish?"
+
+    return discipline_filter, can_finish_active
+
+
+def _render_view_toggle():
+    """Render List/Map toggle (Sprint 013: FO-05)."""
+    current = st.query_params.get("view", "list").title()
+    if current not in ("List", "Map"):
+        current = "List"
+    view = st.segmented_control(
+        "View",
+        ["List", "Map"],
+        default=current,
+        key="feed_view_toggle",
+    )
+    if view and view.lower() != st.query_params.get("view", "list"):
+        st.query_params["view"] = view.lower()
+    return view or "List"
+
+
+def _render_summary_stats(items, team_name):
+    """Render feed summary stats header (Sprint 013: FO-08)."""
+    from raceanalyzer.ui.feed_card import is_beginner_friendly
+
+    upcoming_count = sum(1 for i in items if i["is_upcoming"])
+    friendly_count = sum(1 for i in items if is_beginner_friendly(i)[0])
+    teammate_count = sum(1 for i in items if i.get("teammate_names"))
+
+    parts = []
+    if upcoming_count:
+        parts.append(f"{upcoming_count} upcoming")
+    else:
+        parts.append(f"{len(items)} races")
+    if friendly_count:
+        parts.append(f"{friendly_count} beginner-friendly")
+    if teammate_count and team_name:
+        parts.append(f"{teammate_count} with teammates")
+
+    joined = " \u00b7 ".join(parts)
+    st.markdown(
+        f'<div style="font-size:0.9em;color:var(--text-color,#666);'
+        f'padding:4px 0;margin-bottom:8px;">{joined}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_map_view(items):
+    """Render feed map view with Folium (Sprint 013: FO-05)."""
+    try:
+        from raceanalyzer.ui.maps import render_feed_map
+
+        render_feed_map(items)
+    except Exception as e:
+        st.warning(f"Map view unavailable: {e}")
+        st.info("Showing list view instead.")
 
 
 def _render_container_card(
@@ -184,134 +365,218 @@ def _render_container_card(
     key_prefix: str = "feed",
     expanded: bool = False,
 ):
-    """Render a single feed card as st.container(border=True)."""
+    """Render a single feed card with HTML content + action buttons."""
+    with st.container(border=True):
+        # Single HTML block for all card content (Sprint 013 architecture)
+        card_html = build_card_html(item)
+        st.markdown(card_html, unsafe_allow_html=True)
+
+        # --- Action row: Preview (primary) + Register + Calendar + Share + Compare ---
+        _render_action_row(item, session, category, key_prefix, expanded)
+
+
+def _render_action_row(item, session, category, key_prefix, expanded):
+    """Render action buttons below the card HTML."""
     series_id = item["series_id"]
 
-    with st.container(border=True):
-        # Header: name + date + location + countdown
-        header_parts = [f"**{item['display_name']}**"]
+    # Initialize expanded state
+    if "expanded_ids" not in st.session_state:
+        st.session_state.expanded_ids = set()
+    if "compare_ids" not in st.session_state:
+        st.session_state.compare_ids = set()
 
-        if item["is_upcoming"] and item.get("upcoming_date"):
-            date_str = f"{item['upcoming_date']:%b %d, %Y}"
-            countdown = item.get("countdown_label", "")
-            if countdown:
-                header_parts.append(f"{date_str} ({countdown})")
-            else:
-                header_parts.append(date_str)
-        elif item.get("most_recent_date"):
-            header_parts.append(f"last raced {item['most_recent_date']:%b %Y}")
+    is_expanded = series_id in st.session_state.expanded_ids or expanded
 
-        loc_parts = []
-        if item.get("location"):
-            loc_parts.append(item["location"])
-        if item.get("state_province") and item["state_province"] not in item.get("location", ""):
-            loc_parts.append(item["state_province"])
-        if loc_parts:
-            header_parts.append(", ".join(loc_parts))
+    cols = st.columns([2, 1, 1, 1, 1, 1])
 
-        st.markdown(" \u2014 ".join(header_parts))
+    # Preview — primary CTA (Sprint 013: AP-01)
+    with cols[0]:
+        if st.button(
+            "Preview",
+            key=f"{key_prefix}_preview_{series_id}",
+            use_container_width=True,
+            type="primary",
+        ):
+            _show_race_detail(series_id, session, category)
 
-        # Quick-scan badges row
-        badge_parts = []
-
-        # Teammate badge
-        teammates = item.get("teammate_names", [])
-        if teammates:
-            if len(teammates) <= 2:
-                badge_parts.append(f"Teammates: {', '.join(teammates)}")
-            else:
-                badge_parts.append(f"{len(teammates)} teammates")
-
-        # Terrain + distance + gain
-        if item.get("course_type"):
-            from raceanalyzer.elevation import course_type_display
-
-            terrain = course_type_display(item["course_type"])
-            badge_parts.append(terrain)
-
-        if item.get("distance_m"):
-            badge_parts.append(f"{item['distance_m'] / 1000:.0f} km")
-
-        if item.get("total_gain_m"):
-            badge_parts.append(f"{item['total_gain_m']:.0f}m gain")
-
-        # Field size
-        if item.get("field_size_display"):
-            badge_parts.append(item["field_size_display"])
-
-        # Drop rate
-        if item.get("drop_rate_pct") is not None and item.get("drop_rate_label"):
-            badge_parts.append(
-                f"{item['drop_rate_pct']}% drop rate ({item['drop_rate_label']})"
+    # Register — secondary
+    with cols[1]:
+        reg_url = item.get("registration_url")
+        if item.get("is_upcoming") and reg_url and reg_url.strip():
+            st.link_button(
+                "Register", reg_url, use_container_width=True
             )
 
-        if badge_parts:
-            st.caption(" \u00b7 ".join(badge_parts))
-
-        # Finish type prediction + race type (source-aware language, Sprint 012)
-        pred_parts = []
-        if item.get("predicted_finish_type"):
-            from raceanalyzer.queries import (
-                finish_type_plain_english_with_source,
+    # Calendar export (Sprint 013: AP-02)
+    with cols[2]:
+        if item.get("is_upcoming") and item.get("upcoming_date"):
+            loc = item.get("location", "")
+            state = item.get("state_province", "")
+            full_loc = f"{loc}, {state}" if state else loc
+            duration = int(item.get("typical_field_duration_min") or 120)
+            ics = generate_ics(
+                item["display_name"],
+                item["upcoming_date"],
+                location=full_loc,
+                duration_minutes=duration,
             )
-
-            plain = finish_type_plain_english_with_source(
-                item["predicted_finish_type"],
-                prediction_source=item.get("prediction_source"),
-                race_type=item.get("race_type"),
-            )
-            if plain:
-                pred_parts.append(plain)
-
-        if item.get("race_type"):
-            from raceanalyzer.queries import race_type_display_name
-
-            pred_parts.append(race_type_display_name(item["race_type"]))
-
-        if pred_parts:
-            st.write(" \u00b7 ".join(pred_parts))
-
-        # Action row: Details toggle + Register + Preview
-        detail_key = f"{key_prefix}_detail_{series_id}"
-
-        # Initialize expanded state
-        if "expanded_ids" not in st.session_state:
-            st.session_state.expanded_ids = set()
-
-        is_expanded = series_id in st.session_state.expanded_ids or expanded
-
-        cols = st.columns([1, 1, 1, 3])
-        with cols[0]:
-            btn_label = "Less" if is_expanded else "Details"
-            if st.button(btn_label, key=detail_key, use_container_width=True):
-                if is_expanded:
-                    st.session_state.expanded_ids.discard(series_id)
-                else:
-                    st.session_state.expanded_ids.add(series_id)
-                st.rerun()
-        with cols[1]:
-            reg_url = item.get("registration_url")
-            if item.get("is_upcoming") and reg_url and reg_url.strip():
-                st.link_button(
-                    "Register", reg_url, use_container_width=True
-                )
-        with cols[2]:
-            if st.button(
-                "Preview",
-                key=f"{key_prefix}_preview_{series_id}",
+            safe_name = item["display_name"].replace(" ", "_")[:30]
+            try:
+                date_str = item["upcoming_date"].strftime("%Y-%m-%d")
+            except Exception:
+                date_str = "race"
+            st.download_button(
+                "Cal",
+                data=ics,
+                file_name=f"{safe_name}-{date_str}.ics",
+                mime="text/calendar",
+                key=f"{key_prefix}_cal_{series_id}",
                 use_container_width=True,
-            ):
-                st.session_state["preview_series_id"] = series_id
-                st.query_params["series_id"] = str(series_id)
-                st.switch_page("pages/race_preview.py")
-
-        # Tier 2 content (on demand)
-        if is_expanded:
-            detail = queries.get_feed_item_detail(
-                session, series_id, category=category
             )
-            if detail:
-                render_feed_card(detail)
+
+    # Share (Sprint 013: AP-06)
+    with cols[3]:
+        if st.button(
+            "Share",
+            key=f"{key_prefix}_share_{series_id}",
+            use_container_width=True,
+        ):
+            _show_share_dialog(item, category)
+
+    # Compare checkbox (Sprint 013: AP-04)
+    with cols[4]:
+        is_compared = series_id in st.session_state.compare_ids
+        if st.button(
+            "Cmp" if not is_compared else "Cmp ✓",
+            key=f"{key_prefix}_cmp_{series_id}",
+            use_container_width=True,
+        ):
+            if is_compared:
+                st.session_state.compare_ids.discard(series_id)
+            elif len(st.session_state.compare_ids) < 3:
+                st.session_state.compare_ids.add(series_id)
+            st.rerun()
+
+    # Details toggle
+    with cols[5]:
+        detail_key = f"{key_prefix}_detail_{series_id}"
+        btn_label = "Less" if is_expanded else "More"
+        if st.button(btn_label, key=detail_key, use_container_width=True):
+            if is_expanded:
+                st.session_state.expanded_ids.discard(series_id)
+            else:
+                st.session_state.expanded_ids.add(series_id)
+            st.rerun()
+
+    # Tier 2 content (on demand)
+    if is_expanded:
+        detail = queries.get_feed_item_detail(
+            session, series_id, category=category
+        )
+        if detail:
+            render_feed_card(detail)
+
+
+# --- Dialogs (Sprint 013: AP-03, AP-04, AP-06) ---
+
+
+@st.dialog("Race Details", width="large")
+def _show_race_detail(series_id, session, category):
+    """Bottom sheet / dialog with full Tier 2 content (Sprint 013: AP-03)."""
+    detail = queries.get_feed_item_detail(session, series_id, category=category)
+    if not detail:
+        st.warning("Race details not available.")
+        return
+
+    render_feed_card(detail)
+
+    # Previous editions timeline (Sprint 013: AP-05)
+    editions = detail.get("editions_summary", [])
+    if editions and len(editions) > 1:
+        st.markdown("**Previous editions**")
+        from raceanalyzer.ui.components import render_finish_pattern
+
+        render_finish_pattern(editions)
+
+    # Course map (if available)
+    if detail.get("elevation_sparkline_points"):
+        from raceanalyzer.ui.components import render_elevation_sparkline
+
+        st.markdown("**Elevation profile**")
+        render_elevation_sparkline(detail["elevation_sparkline_points"])
+
+
+@st.dialog("Compare Races", width="large")
+def _show_comparison(compare_ids, all_items, session, category):
+    """Side-by-side race comparison (Sprint 013: AP-04)."""
+    selected = [i for i in all_items if i["series_id"] in compare_ids]
+    if not selected:
+        st.warning("No races selected for comparison.")
+        return
+
+    cols = st.columns(len(selected))
+    for col, item in zip(cols, selected):
+        with col:
+            _render_compare_column(item)
+
+    if st.button("Clear comparison"):
+        st.session_state.compare_ids = set()
+        st.rerun()
+
+
+def _render_compare_column(item):
+    """Render a single column in comparison view."""
+    from raceanalyzer.ui.feed_card import (
+        format_duration,
+        is_beginner_friendly,
+        pack_survival_text,
+        what_to_expect_text,
+    )
+
+    st.markdown(f"**{html.escape(item['display_name'])}**")
+    if item.get("location"):
+        st.caption(html.escape(item["location"]))
+
+    # Key stats
+    if item.get("distance_m"):
+        st.write(f"Distance: {item['distance_m'] / 1000:.0f} km")
+    if item.get("total_gain_m"):
+        st.write(f"Elevation: {item['total_gain_m']:.0f}m")
+    if item.get("drop_rate_pct") is not None:
+        st.write(f"Drop rate: {item['drop_rate_pct']}%")
+    if item.get("field_size_median"):
+        st.write(f"Field size: {item['field_size_median']} riders")
+
+    dur = format_duration(item.get("typical_field_duration_min"))
+    if dur:
+        st.write(f"Duration: {dur}")
+
+    ft = item.get("predicted_finish_type")
+    if ft:
+        wte = what_to_expect_text(ft)
+        if wte:
+            st.write(wte)
+
+    survival = pack_survival_text(item.get("drop_rate_pct"), ft)
+    if survival:
+        st.caption(survival)
+
+    friendly, reasons = is_beginner_friendly(item)
+    if friendly:
+        st.success("Beginner-friendly")
+
+
+@st.dialog("Share Race")
+def _show_share_dialog(item, category):
+    """Share deep link dialog (Sprint 013: AP-06)."""
+    series_id = item["series_id"]
+    url_parts = [f"series_id={series_id}"]
+    if category:
+        url_parts.append(f"category={category}")
+    param_str = "&".join(url_parts)
+    st.write("Share this race with a friend:")
+    st.code(f"?{param_str}", language=None)
+    st.caption("Copy the link above and share it!")
 
 
 render()
