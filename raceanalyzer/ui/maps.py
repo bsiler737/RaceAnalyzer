@@ -74,7 +74,10 @@ def render_course_map(encoded_polyline: str, race_name: str = "", climbs=None):
         return
 
     center = coords[len(coords) // 2]
-    m = folium.Map(location=center, zoom_start=13, tiles="CartoDB positron")
+    m = folium.Map(
+        location=center, zoom_start=13, tiles="CartoDB positron",
+        scrollWheelZoom=False,
+    )
     folium.PolyLine(
         coords, color="#FC4C02", weight=4, opacity=0.8, tooltip=race_name,
     ).add_to(m)

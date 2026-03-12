@@ -249,12 +249,15 @@ def render():
                 st.caption(source_labels.get(source, ""))
 
                 for _, rider in contenders.iterrows():
+                    rider_name = rider.get("name", "")
+                    if not rider_name or rider_name.strip() in ("", "?", "? ?"):
+                        continue
                     with st.container():
                         col1, col2 = st.columns([3, 1])
                         team_str = (
                             f" -- {rider['team']}" if rider.get("team") else ""
                         )
-                        col1.write(f"**{rider['name']}**{team_str}")
+                        col1.write(f"**{rider_name}**{team_str}")
                         pts = rider.get("carried_points", 0)
                         col2.write(f"{pts:.0f} pts" if pts else "")
             else:

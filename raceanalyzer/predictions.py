@@ -803,9 +803,13 @@ def climb_context_line(
     avg_grade = climb.get("avg_grade", 0)
     max_grade = climb.get("max_grade", 0)
 
-    # Basic stats
+    # Basic stats — use 1 decimal when start/end round to the same integer
     end_km = start_km + length_km
-    stats = f"Km {start_km:.0f}\u2013{end_km:.0f}: {length_km:.1f} km at {avg_grade:.1f}% avg"
+    if round(start_km) == round(end_km):
+        km_range = f"Km {start_km:.1f}\u2013{end_km:.1f}"
+    else:
+        km_range = f"Km {start_km:.0f}\u2013{end_km:.0f}"
+    stats = f"{km_range}: {length_km:.1f} km at {avg_grade:.1f}% avg"
     if max_grade and max_grade > avg_grade + 2:
         stats += f" (max {max_grade:.0f}%)"
     parts.append(stats)
