@@ -856,10 +856,47 @@ def get_race_preview(
             "course_type": course_row.course_type.value if course_row.course_type else "unknown",
         }
 
-    # Prediction
-    prediction = predict_series_finish_type(session, series_id, category=category)
-    if prediction["predicted_finish_type"] == "unknown":
-        prediction = None
+    # Prediction: prefer pre-computed SeriesPrediction (has prediction_source)
+    from raceanalyzer.db.models import SeriesPrediction
+
+    pred_row = (
+        session.query(SeriesPrediction)
+        .filter(
+            SeriesPrediction.series_id == series_id,
+            SeriesPrediction.category == category,
+        )
+        .first()
+    )
+    if not pred_row:
+        pred_row = (
+            session.query(SeriesPrediction)
+            .filter(
+                SeriesPrediction.series_id == series_id,
+                SeriesPrediction.category.is_(None),
+            )
+            .first()
+        )
+
+    if pred_row and pred_row.predicted_finish_type and pred_row.predicted_finish_type != "unknown":
+        import json as _json
+
+        prediction = {
+            "predicted_finish_type": pred_row.predicted_finish_type,
+            "confidence": pred_row.confidence,
+            "edition_count": pred_row.edition_count or 0,
+            "distribution": (
+                _json.loads(pred_row.distribution_json)
+                if pred_row.distribution_json
+                else {}
+            ),
+            "prediction_source": getattr(pred_row, "prediction_source", None),
+        }
+    else:
+        prediction = predict_series_finish_type(session, series_id, category=category)
+        if prediction["predicted_finish_type"] == "unknown":
+            prediction = None
+        else:
+            prediction["prediction_source"] = None
 
     # Categories across all editions
     all_categories = sorted(set(
@@ -923,6 +960,7 @@ def get_race_preview(
     ct = course_row.course_type.value if course_row and course_row.course_type else None
     pred_ft = prediction["predicted_finish_type"] if prediction else None
     edition_count = prediction["edition_count"] if prediction else 0
+    pred_source = prediction.get("prediction_source") if prediction else None
     narrative = generate_narrative(
         course_type=ct,
         predicted_finish_type=pred_ft,
@@ -932,6 +970,7 @@ def get_race_preview(
         total_gain_m=total_gain_m,
         climbs=climbs,
         edition_count=edition_count,
+        prediction_source=pred_source,
     )
 
     return {

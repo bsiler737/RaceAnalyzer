@@ -622,7 +622,7 @@ class TestRacerTypeDescription:
         assert "climber" in result.lower()
 
     def test_unknown_combination(self):
-        result = racer_type_description("flat", "gc_selective")
+        result = racer_type_description("flat", "individual_tt")
         assert result is None
 
     def test_none_inputs(self):

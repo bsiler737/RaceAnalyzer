@@ -716,6 +716,22 @@ RACER_TYPE_DESCRIPTIONS: dict[tuple[str, str], str] = {
     ("mountainous", "breakaway_selective"): (
         "Pure climbers who can sustain attacks on long climbs thrive."
     ),
+    ("mountainous", "reduced_sprint"): (
+        "Strong climbers with enough sprint to finish off a reduced group."
+    ),
+    ("rolling", "gc_selective"): "Strong all-rounders who can grind down rivals.",
+    ("rolling", "breakaway_selective"): (
+        "Aggressive riders who can exploit rolling terrain to break away."
+    ),
+    ("flat", "gc_selective"): (
+        "Time trialists and echelon specialists who can gain time on flat roads."
+    ),
+    ("hilly", "bunch_sprint"): (
+        "Riders who can survive the climbs and still have a sprint at the end."
+    ),
+    ("mountainous", "bunch_sprint"): (
+        "Rare on mountain courses — expect a chaotic sprint from a tired field."
+    ),
 }
 
 

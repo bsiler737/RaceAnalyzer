@@ -118,7 +118,6 @@ def render_interactive_course_profile(
     profile_points: list[dict],
     climbs: list[dict],
     race_name: str = "",
-    height: int = 700,
 ):
     """Render course map + Plotly elevation chart.
 
