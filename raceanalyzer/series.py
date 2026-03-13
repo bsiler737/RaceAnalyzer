@@ -38,6 +38,10 @@ _ROMAN_RE = re.compile(
     r"X|IX|VIII|VII|VI|V|IV|III|II|I)\b"
 )
 
+# Edition digit stripping: "Mason Lake 1" → "Mason Lake", "Mason Lake 1 and 2" → "Mason Lake"
+_COMPOUND_EDITION_RE = re.compile(r"\s+\d{1,2}\s*(?:and|&)\s*\d{1,2}\s*$", re.IGNORECASE)
+_EDITION_DIGIT_RE = re.compile(r"\s+\d{1,2}\s*$")
+
 
 @lru_cache(maxsize=2048)
 def normalize_race_name(name: str) -> str:
@@ -64,6 +68,16 @@ def normalize_race_name(name: str) -> str:
 
     # Strip sponsor noise
     s = _NOISE_RE.sub("", s)
+
+    # Strip compound edition markers first ("Mason Lake 1 and 2"), then trailing digits
+    # Guardrail: only apply if result still has ≥2 whitespace-separated tokens
+    compound_candidate = _COMPOUND_EDITION_RE.sub("", s).strip()
+    if compound_candidate != s.strip() and len(compound_candidate.split()) >= 2:
+        s = compound_candidate
+    else:
+        digit_candidate = _EDITION_DIGIT_RE.sub("", s).strip()
+        if digit_candidate != s.strip() and len(digit_candidate.split()) >= 2:
+            s = digit_candidate
 
     # Lowercase for suffix matching
     s = s.lower().strip()

@@ -19,7 +19,15 @@ from sqlalchemy import distinct, extract, func
 from sqlalchemy.orm import Session
 
 from raceanalyzer.config import Settings
-from raceanalyzer.db.models import Course, Race, RaceClassification, RaceSeries, RaceType, Result
+from raceanalyzer.db.models import (
+    Course,
+    Race,
+    RaceClassification,
+    RaceSeries,
+    RaceType,
+    Result,
+    Startlist,
+)
 
 logger = logging.getLogger("raceanalyzer")
 
@@ -624,22 +632,99 @@ def get_race_tiles(
 def get_scary_racers(
     session: Session,
     race_id: int,
-    category: str,
+    category: Optional[str] = None,
     *,
-    top_n: int = 5,
+    top_n: int = 10,
 ) -> pd.DataFrame:
     """Return top predicted performers for a race + category.
 
-    Ranks riders by their carried_points (road-results Elo-like system).
-    Only considers riders who have results in this category.
-    Columns: name, team, carried_points, wins.
+    Strategy:
+    1. If a startlist exists for this race, return only registered riders
+       ranked by their carried_points (lower = stronger).
+    2. If no startlist, fall back to historical performers from past
+       editions of the same series.
+
+    Columns: name, team, carried_points, wins, source.
     """
+    empty = pd.DataFrame(
+        columns=["name", "team", "carried_points", "wins", "source"],
+    )
     race = session.get(Race, race_id)
     if race is None:
-        return pd.DataFrame(columns=["name", "team", "carried_points", "wins"])
+        return empty
 
-    # Find riders with results in this category, get their best carried_points
-    rider_results = (
+    # --- Strategy 1: Startlist-based scary riders ---
+    sl_q = session.query(
+        Startlist.rider_name,
+        Startlist.team,
+        Startlist.carried_points,
+        Startlist.rider_id,
+    ).filter(Startlist.race_id == race_id)
+
+    if category:
+        exact = sl_q.filter(Startlist.category == category).all()
+        if exact:
+            sl_rows = exact
+        else:
+            sl_rows = sl_q.filter(
+                Startlist.category.ilike(f"%{category}%"),
+            ).all()
+    else:
+        sl_rows = sl_q.all()
+
+    if sl_rows:
+        # Cross-reference with historical wins from this series
+        series_race_ids = [
+            r[0] for r in session.query(Race.id)
+            .filter(Race.series_id == race.series_id)
+            .all()
+        ]
+        # Build a rider_id -> win count map
+        win_counts: dict[int, int] = {}
+        if series_race_ids:
+            wins_q = (
+                session.query(Result.rider_id, func.count())
+                .filter(
+                    Result.race_id.in_(series_race_ids),
+                    Result.rider_id.isnot(None),
+                    Result.place == 1,
+                )
+                .group_by(Result.rider_id)
+                .all()
+            )
+            win_counts = {rid: cnt for rid, cnt in wins_q}
+
+        rows = []
+        for rname, team, points, rider_id in sl_rows:
+            if points is None:
+                continue
+            rows.append({
+                "name": rname,
+                "team": team or "",
+                "carried_points": points,
+                "wins": win_counts.get(rider_id, 0) if rider_id else 0,
+                "source": "startlist",
+            })
+        if rows:
+            df = pd.DataFrame(rows)
+            df = (
+                df.sort_values("carried_points", ascending=True)
+                .drop_duplicates(subset=["name"], keep="first")
+                .head(top_n)
+                .reset_index(drop=True)
+            )
+            return df
+
+    # --- Strategy 2: Historical fallback ---
+    series_race_ids = [
+        r[0] for r in session.query(Race.id)
+        .filter(Race.series_id == race.series_id)
+        .all()
+    ]
+    if not series_race_ids:
+        return empty
+
+    q = (
         session.query(
             Result.rider_id,
             Result.name,
@@ -648,32 +733,42 @@ def get_scary_racers(
             Result.place,
         )
         .filter(
-            Result.race_category_name == category,
+            Result.race_id.in_(series_race_ids),
             Result.rider_id.isnot(None),
             Result.dnf.is_(False),
             Result.place.isnot(None),
         )
-        .all()
     )
 
-    if not rider_results:
-        return pd.DataFrame(columns=["name", "team", "carried_points", "wins"])
+    if category:
+        exact = q.filter(Result.race_category_name == category).all()
+        if exact:
+            rider_results = exact
+        else:
+            rider_results = q.filter(
+                Result.race_category_name.ilike(f"%{category}%"),
+            ).all()
+    else:
+        rider_results = q.all()
 
-    # Aggregate per rider: max carried_points, count wins
+    if not rider_results:
+        return empty
+
     rider_stats: dict[int, dict] = {}
     for rider_id, name, team, points, place in rider_results:
         if rider_id not in rider_stats:
             rider_stats[rider_id] = {
                 "name": name,
                 "team": team or "",
-                "carried_points": 0.0,
+                "carried_points": float("inf"),
                 "wins": 0,
+                "source": "history",
             }
         stats = rider_stats[rider_id]
         stats["name"] = name
         if team:
             stats["team"] = team
-        if points is not None and points > stats["carried_points"]:
+        if points is not None and points < stats["carried_points"]:
             stats["carried_points"] = points
         if place == 1:
             stats["wins"] += 1
@@ -681,9 +776,13 @@ def get_scary_racers(
     rows = list(rider_stats.values())
     df = pd.DataFrame(rows)
     if df.empty:
-        return df
+        return empty
 
-    df = df.sort_values("carried_points", ascending=False).head(top_n).reset_index(drop=True)
+    df = (
+        df.sort_values("carried_points", ascending=True)
+        .head(top_n)
+        .reset_index(drop=True)
+    )
     return df
 
 
@@ -1408,6 +1507,97 @@ def _snippet(text: str, max_sentences: int = 2, max_chars: int = 200) -> str:
     return result
 
 
+# --- Sprint 017: Feed item expansion ---
+
+
+def _expand_feed_items(
+    items: list[dict],
+    races_by_series: dict,
+) -> list[dict]:
+    """Expand multi-edition and stage race entries into occurrence-level feed items.
+
+    Processing order per item:
+    1. Stage races (YAML match) → one item per stage
+    2. Multi-edition (≥2 upcoming Race rows) → one item per upcoming race
+    3. Passthrough → original item with occurrence_key added
+
+    Pure Python — no DB queries. Returns new list; input list is not mutated.
+    """
+    from raceanalyzer.stages import load_stage_schedule
+
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    expanded = []
+
+    for item in items:
+        sid = item["series_id"]
+        rt = item.get("race_type")
+
+        # 1. Stage race expansion
+        if rt == "stage_race":
+            # Derive normalized name for YAML lookup
+            display = item.get("display_name", "")
+            norm_name = display.lower().strip()
+            stages = load_stage_schedule(norm_name)
+            if stages and item.get("upcoming_date") is not None:
+                for stage in stages:
+                    child = dict(item)  # shallow copy
+                    stage_name = stage.name
+                    if stage.elites_only:
+                        stage_name = f"{stage_name} (Elites)"
+                    child["display_name"] = f"{display}: {stage_name}"
+                    child["upcoming_date"] = datetime.combine(
+                        stage.date, datetime.min.time()
+                    )
+                    days = (child["upcoming_date"] - today).days
+                    child["days_until"] = days
+                    child["countdown_label"] = countdown_label(days)
+                    child["race_type"] = stage.race_type
+                    child["discipline"] = discipline_for_race_type(
+                        RaceType(stage.race_type)
+                    ).value
+                    child["is_upcoming"] = days >= 0
+                    child["occurrence_key"] = f"{sid}:stage:{stage.number}"
+                    child["occurrence_kind"] = "stage"
+                    child["source_race_id"] = None
+                    expanded.append(child)
+                continue
+            else:
+                if stages is None:
+                    logger.debug(
+                        "No YAML schedule for stage race '%s', rendering as single card",
+                        display,
+                    )
+
+        # 2. Multi-edition expansion
+        races = races_by_series.get(sid, [])
+        upcoming_races = [
+            r for r in races
+            if r.date and r.date >= today
+        ]
+        if len(upcoming_races) >= 2:
+            for race in sorted(upcoming_races, key=lambda r: r.date):
+                child = dict(item)
+                child["display_name"] = race.name
+                child["upcoming_date"] = race.date
+                days = (race.date - today).days
+                child["days_until"] = days
+                child["countdown_label"] = countdown_label(days)
+                child["is_upcoming"] = True
+                child["occurrence_key"] = f"{sid}:edition:{race.id}"
+                child["occurrence_kind"] = "edition"
+                child["source_race_id"] = race.id
+                expanded.append(child)
+            continue
+
+        # 3. Passthrough
+        child = dict(item)
+        child["occurrence_key"] = f"{sid}:series"
+        child["occurrence_kind"] = "series"
+        expanded.append(child)
+
+    return expanded
+
+
 # --- Sprint 011: Batch feed queries ---
 
 
@@ -1516,14 +1706,9 @@ def get_feed_items_batch(
         if upcoming_race and upcoming_race.date:
             days_until = (upcoming_race.date - today).days
 
-        # Apply filters — pass through races with unknown type/discipline
+        # Pre-expansion filters: state only (race_type/discipline moved to post-expansion)
         race_type_val = most_recent.race_type
         disc = discipline_for_race_type(race_type_val)
-        if discipline_filter and disc != Discipline.UNKNOWN and disc.value not in discipline_filter:
-            continue
-        if race_type_filter and race_type_val is not None:
-            if race_type_val.value not in race_type_filter:
-                continue
         raw_st = most_recent.state_province
         norm_state = normalize_state(raw_st) if raw_st else None
         if state_filter and norm_state not in state_filter:
@@ -1628,6 +1813,26 @@ def get_feed_items_batch(
             "distribution_json": distribution_json_val,
         }
         items.append(item)
+
+    # Sprint 017: Expand multi-edition and stage race items
+    items = _expand_feed_items(items, races_by_series)
+
+    # Post-expansion filters: race_type and discipline (now see expanded stage types)
+    if race_type_filter or discipline_filter:
+        filtered = []
+        for item in items:
+            rt_val = item.get("race_type")
+            item_disc = discipline_for_race_type(
+                RaceType(rt_val) if rt_val else None
+            )
+            if discipline_filter and item_disc != Discipline.UNKNOWN:
+                if item_disc.value not in discipline_filter:
+                    continue
+            if race_type_filter and rt_val is not None:
+                if rt_val not in race_type_filter:
+                    continue
+            filtered.append(item)
+        items = filtered
 
     # Sort: upcoming by date asc, then historical by most_recent desc
     def sort_key(item):

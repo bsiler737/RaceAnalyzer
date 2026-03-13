@@ -21,6 +21,11 @@ from raceanalyzer.ui.feed_card import (
     inject_feed_styles,
 )
 
+
+def feed_item_key(item: dict) -> str:
+    """Unique widget key for a feed item (supports expanded stage/edition items)."""
+    return item.get("occurrence_key") or f"{item['series_id']}:series"
+
 FEED_PAGE_SIZE = 20
 
 
@@ -29,6 +34,12 @@ def render():
 
     # Inject CSS once at top
     inject_feed_styles()
+
+    st.markdown(
+        '<h1 style="font-size:2.4rem;font-weight:800;margin:0 0 0.3rem 0;">'
+        "🚴 PNW Bike Races</h1>",
+        unsafe_allow_html=True,
+    )
 
     # --- Deep-link isolation: ?series_id=N ---
     isolated_series_id = st.query_params.get("series_id")
@@ -223,11 +234,11 @@ def render():
             '</div>',
             unsafe_allow_html=True,
         )
-        for item in racing_soon:
-            expanded = isolated_series_id is not None
-            _render_container_card(
-                item, session, category, key_prefix="soon", expanded=expanded
-            )
+        _render_card_pairs(
+            racing_soon, session, category,
+            key_prefix="soon",
+            expanded=isolated_series_id is not None,
+        )
 
     # --- Month-grouped agenda view ---
     month_groups = queries.group_by_month(remaining_items)
@@ -264,14 +275,17 @@ def render():
                 f'</div>',
                 unsafe_allow_html=True,
             )
+            batch = []
             for item in group_items:
                 if rendered >= visible_count:
                     break
-                expanded = isolated_series_id is not None
-                _render_container_card(
-                    item, session, category, key_prefix="feed", expanded=expanded
-                )
+                batch.append(item)
                 rendered += 1
+            _render_card_pairs(
+                batch, session, category,
+                key_prefix="feed",
+                expanded=isolated_series_id is not None,
+            )
 
     # Show more button
     total_items = len(racing_soon) + sum(len(g[1]) for g in month_groups)
@@ -326,15 +340,15 @@ def _render_filter_chips():
         with sub1:
             can_finish = st.pills(
                 "Approachability",
-                ["Can I finish?"],
+                ["Beginner-friendly"],
                 selection_mode="single",
                 key="filter_can_finish",
             )
-            can_finish_active = can_finish == "Can I finish?"
+            can_finish_active = can_finish == "Beginner-friendly"
         with sub2:
             with st.popover("\u2139\ufe0f"):
                 st.markdown(
-                    "**Can I finish?** filters to races where:\n"
+                    "**Beginner-friendly** filters to races where:\n"
                     "- Drop rate \u2264 25%\n"
                     "- Non-selective finish type\n"
                     "- Distance \u2264 100 km"
@@ -398,6 +412,37 @@ def _render_map_view(items):
         st.info("Showing list view instead.")
 
 
+def _render_card_pairs(
+    items: list,
+    session,
+    category,
+    key_prefix: str = "feed",
+    expanded: bool = False,
+):
+    """Render cards in two-column pairs when viewport allows."""
+    for i in range(0, len(items), 2):
+        pair = items[i:i + 2]
+        if len(pair) == 2:
+            col1, col2 = st.columns(2)
+            with col1:
+                _render_container_card(
+                    pair[0], session, category,
+                    key_prefix=key_prefix, expanded=expanded,
+                )
+            with col2:
+                _render_container_card(
+                    pair[1], session, category,
+                    key_prefix=key_prefix, expanded=expanded,
+                )
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                _render_container_card(
+                    pair[0], session, category,
+                    key_prefix=key_prefix, expanded=expanded,
+                )
+
+
 def _render_container_card(
     item: dict,
     session,
@@ -418,6 +463,7 @@ def _render_container_card(
 def _render_action_row(item, session, category, key_prefix, expanded):
     """Render action buttons below the card HTML (Sprint 014: overflow menu)."""
     series_id = item["series_id"]
+    item_key = feed_item_key(item)
 
     # Initialize expanded state
     if "expanded_ids" not in st.session_state:
@@ -430,16 +476,16 @@ def _render_action_row(item, session, category, key_prefix, expanded):
     cols = st.columns([2, 1, 1])
 
     # Preview — primary CTA (Sprint 015: RP-01 navigate to full page)
+    # Always uses series_id for shared predictions across expanded cards
     with cols[0]:
         if st.button(
             "Preview",
-            key=f"{key_prefix}_preview_{series_id}",
+            key=f"{key_prefix}_preview_{item_key}",
             use_container_width=True,
             type="primary",
         ):
             st.session_state["preview_series_id"] = series_id
             st.query_params["series_id"] = str(series_id)
-            # Track feed scroll position for restoration
             st.session_state["feed_scroll_index"] = st.session_state.get(
                 "feed_page_size", 20
             )
@@ -480,19 +526,19 @@ def _render_action_row(item, session, category, key_prefix, expanded):
                     data=ics,
                     file_name=f"{safe_name}-{date_str}.ics",
                     mime="text/calendar",
-                    key=f"{key_prefix}_cal_{series_id}",
+                    key=f"{key_prefix}_cal_{item_key}",
                     use_container_width=True,
                 )
 
             # Share
             if st.button(
                 "\U0001f517 Share",
-                key=f"{key_prefix}_share_{series_id}",
+                key=f"{key_prefix}_share_{item_key}",
                 use_container_width=True,
             ):
                 _show_share_dialog(item, category)
 
-            # Compare
+            # Compare (uses series_id for shared prediction data)
             is_compared = series_id in st.session_state.compare_ids
             cmp_label = (
                 "\u2696\ufe0f Compare \u2713"
@@ -501,7 +547,7 @@ def _render_action_row(item, session, category, key_prefix, expanded):
             )
             if st.button(
                 cmp_label,
-                key=f"{key_prefix}_compare_{series_id}",
+                key=f"{key_prefix}_compare_{item_key}",
                 use_container_width=True,
             ):
                 if is_compared:
@@ -520,7 +566,7 @@ def _render_action_row(item, session, category, key_prefix, expanded):
             )
             if st.button(
                 detail_label,
-                key=f"{key_prefix}_detail_{series_id}",
+                key=f"{key_prefix}_detail_{item_key}",
                 use_container_width=True,
             ):
                 if is_expanded:

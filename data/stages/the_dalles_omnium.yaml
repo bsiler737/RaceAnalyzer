@@ -1,0 +1,12 @@
+name: "The Dalles Omnium"
+stages:
+  - stage: 1
+    name: "Road Race"
+    race_type: "road_race"
+    date: "2026-06-13"
+    rwgps_route_id: 53981534
+  - stage: 2
+    name: "Time Trial"
+    race_type: "time_trial"
+    date: "2026-06-14"
+    rwgps_route_id: 53981321

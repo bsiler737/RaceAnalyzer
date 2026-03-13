@@ -58,6 +58,38 @@ class TestNormalizeRaceName:
         """Mason Lake I and Mason Lake II should normalize to the same key."""
         assert normalize_race_name("Mason Lake I") == normalize_race_name("Mason Lake II")
 
+    # --- Edition digit stripping (Sprint 017: SN-01..SN-03) ---
+
+    def test_strips_trailing_edition_digit(self):
+        assert normalize_race_name("Mason Lake 1") == "mason lake"
+
+    def test_strips_trailing_edition_digit_2(self):
+        assert normalize_race_name("Mason Lake 2") == "mason lake"
+
+    def test_mason_lake_arabic_editions_same(self):
+        assert normalize_race_name("Mason Lake 1") == normalize_race_name("Mason Lake 2")
+
+    def test_strips_compound_edition_marker(self):
+        assert normalize_race_name("Mason Lake 1 and 2") == "mason lake"
+
+    def test_banana_belt_unchanged(self):
+        assert normalize_race_name("2024 Banana Belt RR") == "banana belt road race"
+
+    def test_i5_criterium_not_stripped(self):
+        """I-5 has a hyphenated digit — not a trailing standalone digit."""
+        result = normalize_race_name("I-5 Criterium")
+        assert "5" in result or "i-5" in result
+
+    def test_stage_3_guardrail(self):
+        """Stripping '3' from 'Stage 3' leaves 1 token — guardrail prevents."""
+        result = normalize_race_name("Stage 3")
+        assert "3" in result
+
+    def test_route_66_not_stripped(self):
+        """'66' is mid-string, not trailing after suffix normalization."""
+        result = normalize_race_name("Route 66 Road Race")
+        assert "66" in result
+
     def test_empty_string(self):
         result = normalize_race_name("")
         assert result == ""
