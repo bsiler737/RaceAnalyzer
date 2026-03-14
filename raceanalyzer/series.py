@@ -53,6 +53,9 @@ _SERIES_SUFFIX_RE = re.compile(r"\s+series\s*$", re.IGNORECASE)
 _ALIAS_MAP = {
     "mason lake road race": "mason lake",
     "breakfast at boston harbor": "boston harbor circuit race",
+    "ravensdale spring classic": "ravensdale road race",
+    "ravensdale spring classic: wsba state road championships": "ravensdale road race",
+    "full speed ahead ravensdale spring classic": "ravensdale road race",
 }
 
 
