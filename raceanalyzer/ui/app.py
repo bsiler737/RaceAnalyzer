@@ -23,6 +23,14 @@ def main():
         st.session_state.db_session = get_session(settings.db_path)
         st.session_state.settings = settings
 
+    # Sprint 018: Hide toolbar in production
+    if os.environ.get("RACEANALYZER_PROD"):
+        st.markdown(
+            '<style>[data-testid="stToolbar"] { display: none; }'
+            '[data-testid="stDecoration"] { display: none; }</style>',
+            unsafe_allow_html=True,
+        )
+
     # Seed global session state from query params (Sprint 010)
     st.session_state.setdefault("global_category", st.query_params.get("category"))
     st.session_state.setdefault("search_query", st.query_params.get("q", ""))
