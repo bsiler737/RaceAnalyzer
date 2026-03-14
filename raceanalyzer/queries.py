@@ -1014,6 +1014,7 @@ def get_race_preview(
     session: Session,
     series_id: int,
     category: Optional[str] = None,
+    matched_categories: Optional[list[str]] = None,
 ) -> Optional[dict]:
     """Assemble all data for the Race Preview page.
 
@@ -1218,6 +1219,41 @@ def get_race_preview(
         else _format_time_range(_pred_map, series_id, category)
     )
 
+    # Sprint 019: Category-aware AI context and field forecasts
+    from raceanalyzer.predictions import finish_type_teaser
+
+    # Build pred_map for _select_feed_prediction_context
+    preview_pred_map = {(p.series_id, p.category): p for p in series_preds}
+    ai_context = _select_feed_prediction_context(
+        preview_pred_map, series_id,
+        matched_categories=matched_categories or [],
+        course_type=ct,
+    )
+
+    # Build field_forecasts for multi-match preview
+    field_forecasts = []
+    if matched_categories:
+        for cat in matched_categories:
+            cat_pred = preview_pred_map.get((series_id, cat))
+            if (
+                cat_pred
+                and cat_pred.predicted_finish_type
+                and cat_pred.predicted_finish_type != "unknown"
+            ):
+                field_forecasts.append({
+                    "category": cat,
+                    "finish_type": cat_pred.predicted_finish_type,
+                    "teaser": finish_type_teaser(
+                        cat_pred.predicted_finish_type,
+                        prediction_source=getattr(cat_pred, "prediction_source", None),
+                        race_type=(
+                            race_type_val.value if race_type_val else None
+                        ),
+                        course_type=ct,
+                    ),
+                    "confidence": cat_pred.confidence,
+                })
+
     return {
         "series": series_dict,
         "course": course_dict,
@@ -1237,6 +1273,9 @@ def get_race_preview(
         "distance_range": distance_range,
         "estimated_time_range": est_time_range,
         "hide_estimated_time": hide_est_time,
+        # Sprint 019
+        "ai_context": ai_context,
+        "field_forecasts": field_forecasts,
     }
 
 

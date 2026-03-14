@@ -46,19 +46,33 @@ def render():
         render_empty_state("No series selected for preview.")
         return
 
-    # Sprint 018: Resolve category from racer profile session state
+    # Sprint 018/019: Resolve category + matched categories from racer profile
     selected_cat = st.query_params.get("category")
     if not selected_cat:
         selected_cat = st.session_state.get("global_category")
-    # If still no explicit category, try resolving from racer profile
+    matched_categories = []
     if not selected_cat:
         all_cats = queries.get_categories(session)
         if all_cats:
-            resolved, _ = resolve_effective_category(all_cats)
-            if resolved:
-                selected_cat = resolved
+            matched_categories = queries.resolve_racer_profile_matches(
+                all_cats,
+                cat_level=st.session_state.get("cat_level"),
+                gender=st.session_state.get("gender"),
+                masters_on=st.session_state.get("masters_on", False),
+                masters_age=st.session_state.get("masters_age"),
+            )
+            if matched_categories:
+                selected_cat = min(matched_categories, key=len)
+            else:
+                resolved, _ = resolve_effective_category(all_cats)
+                if resolved:
+                    selected_cat = resolved
 
-    preview = queries.get_race_preview(session, int(series_id), category=selected_cat)
+    preview = queries.get_race_preview(
+        session, int(series_id),
+        category=selected_cat,
+        matched_categories=matched_categories or None,
+    )
     if preview is None:
         render_empty_state("Series not found.")
         return
@@ -85,7 +99,7 @@ def render():
             st.query_params["category"] = chosen_cat or ""
             st.rerun()
 
-    # --- Sprint 018: Restructured layout ---
+    # --- Sprint 018/019: Restructured layout ---
     profile_points = preview.get("profile_points")
     climbs = preview.get("climbs")
     pred = preview["prediction"]
@@ -93,13 +107,39 @@ def render():
     drop_rate = preview.get("drop_rate")
     typical_speed = preview.get("typical_speed")
     narrative = preview.get("narrative", "")
+    ai_context = preview.get("ai_context", {})
+    field_forecasts = preview.get("field_forecasts", [])
 
     # === 1. Two-column: What to Expect + Predicted Finish Type summary ===
     col_wte, col_pft = st.columns(2)
     with col_wte:
         with st.container(border=True):
             st.subheader("What to Expect")
-            if narrative:
+
+            # Sprint 019: Category-aware narrative rendering
+            mode = ai_context.get("mode", "overall") if ai_context else "overall"
+            if mode == "single_match" and ai_context.get("best_category"):
+                if narrative:
+                    st.markdown(
+                        f"**For {ai_context['best_category']}:** {narrative}"
+                    )
+            elif mode == "multi_match":
+                if narrative:
+                    st.write(narrative)
+                if field_forecasts:
+                    finish_types = {f["finish_type"] for f in field_forecasts}
+                    if len(finish_types) == 1:
+                        st.markdown(
+                            "Your matched fields all point to the same outcome."
+                        )
+                    else:
+                        st.markdown("**Field-specific forecasts:**")
+                        for forecast in field_forecasts:
+                            st.markdown(
+                                f"- **{forecast['category']}**: "
+                                f"{forecast['teaser']}"
+                            )
+            elif narrative:
                 st.write(narrative)
 
             from raceanalyzer.predictions import racer_type_long_form
