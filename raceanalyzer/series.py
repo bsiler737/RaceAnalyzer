@@ -52,6 +52,7 @@ _SERIES_SUFFIX_RE = re.compile(r"\s+series\s*$", re.IGNORECASE)
 # Key = normalized form that should be collapsed, value = canonical form.
 _ALIAS_MAP = {
     "mason lake road race": "mason lake",
+    "breakfast at boston harbor": "boston harbor circuit race",
 }
 
 
