@@ -365,20 +365,20 @@ def get_categories(session: Session) -> list[str]:
 _MASTERS_BRACKETS = [35, 40, 45, 50, 55, 60, 65, 70, 75, 80]
 
 
-def resolve_racer_profile(
+def resolve_racer_profile_matches(
     all_categories: list[str],
     cat_level: Optional[str] = None,
     gender: Optional[str] = None,
     masters_on: bool = False,
     masters_age: Optional[int] = None,
-) -> tuple[Optional[str], bool]:
-    """Map racer profile filters to the best-matching category string.
+) -> list[str]:
+    """Return all category strings compatible with the current racer profile.
 
-    Returns (category_string, is_exact_match).
-    When no match is possible, returns (None, False) — the UI should show all.
+    Returns empty list if no filters are set or no matches found.
+    Results are sorted alphabetically for stable ordering.
     """
     if not cat_level and not gender and not masters_on:
-        return (None, True)
+        return []
 
     candidates = list(all_categories)
 
@@ -387,8 +387,6 @@ def resolve_racer_profile(
         level_filtered = []
         for c in candidates:
             c_lower = c.lower()
-            # Match "cat X" patterns — the level must appear as a standalone number
-            # near "cat" keyword
             if _re.search(r'cat\w*\s*' + cat_level, c_lower):
                 level_filtered.append(c)
             elif _re.search(r'\b' + cat_level + r'\b', c_lower) and 'cat' in c_lower:
@@ -405,7 +403,6 @@ def resolve_racer_profile(
         if gender_filtered:
             candidates = gender_filtered
     elif gender == "M":
-        # Prefer explicit "Men" categories, but also accept categories without gender
         men_filtered = [
             c for c in candidates
             if _re.search(r'\bmen\b', c, _re.IGNORECASE)
@@ -414,7 +411,6 @@ def resolve_racer_profile(
         if men_filtered:
             candidates = men_filtered
         else:
-            # Exclude women-only categories
             candidates = [
                 c for c in candidates
                 if not _re.search(r'\bwom[ae]n\b', c, _re.IGNORECASE)
@@ -423,7 +419,6 @@ def resolve_racer_profile(
     # Filter by masters
     if masters_on:
         if masters_age:
-            # Find tightest bracket: largest lower bound <= age
             bracket = max(
                 (b for b in _MASTERS_BRACKETS if b <= masters_age),
                 default=35,
@@ -435,7 +430,6 @@ def resolve_racer_profile(
             c for c in candidates
             if _re.search(r'master', c, _re.IGNORECASE)
         ]
-        # Prefer bracket-specific matches
         bracket_str = f"{bracket}+"
         bracket_specific = [
             c for c in masters_filtered if bracket_str in c
@@ -445,12 +439,36 @@ def resolve_racer_profile(
         elif masters_filtered:
             candidates = masters_filtered
 
-    if not candidates:
+    return sorted(candidates)
+
+
+def resolve_racer_profile(
+    all_categories: list[str],
+    cat_level: Optional[str] = None,
+    gender: Optional[str] = None,
+    masters_on: bool = False,
+    masters_age: Optional[int] = None,
+) -> tuple[Optional[str], bool]:
+    """Map racer profile filters to the best-matching category string.
+
+    Returns (category_string, is_exact_match).
+    Thin wrapper over resolve_racer_profile_matches() for backward compat.
+    """
+    if not cat_level and not gender and not masters_on:
+        return (None, True)
+
+    matches = resolve_racer_profile_matches(
+        all_categories,
+        cat_level=cat_level,
+        gender=gender,
+        masters_on=masters_on,
+        masters_age=masters_age,
+    )
+    if not matches:
         return (None, False)
 
-    # Return best match: prefer shortest (most specific) category string
-    best = min(candidates, key=len)
-    is_exact = len(candidates) == 1
+    best = min(matches, key=len)
+    is_exact = len(matches) == 1
     return (best, is_exact)
 
 
@@ -1576,12 +1594,11 @@ def _expand_feed_items(
         sid = item["series_id"]
         rt = item.get("race_type")
 
-        # 1. Stage race expansion
-        if rt == "stage_race":
-            # Derive normalized name for YAML lookup
-            display = item.get("display_name", "")
-            norm_name = display.lower().strip()
-            stages = load_stage_schedule(norm_name)
+        # 1. Stage race expansion (race_type match OR YAML file exists)
+        display = item.get("display_name", "")
+        norm_name = display.lower().strip()
+        stages = load_stage_schedule(norm_name)
+        if rt == "stage_race" or stages:
             if stages and item.get("upcoming_date") is not None:
                 for stage in stages:
                     child = dict(item)  # shallow copy
@@ -1787,10 +1804,13 @@ def _format_time_range(
         return None
 
     # No category: range across all predictions for this series
+    # Filter out implausibly short durations (< 30 min) — likely bad data
+    _MIN_PLAUSIBLE_DURATION = 30.0
     durations = []
     for (sid, _cat), pred in pred_map.items():
         if sid == series_id and pred.typical_field_duration_min:
-            durations.append(pred.typical_field_duration_min)
+            if pred.typical_field_duration_min >= _MIN_PLAUSIBLE_DURATION:
+                durations.append(pred.typical_field_duration_min)
     if not durations:
         return None
     lo = min(durations)
@@ -1800,6 +1820,168 @@ def _format_time_range(
     return f"{_fmt_duration(lo)} - {_fmt_duration(hi)}"
 
 
+# --- Sprint 019: Category-aware prediction context ---
+
+_CONFIDENCE_RANK = {"high": 3, "moderate": 2, "low": 1, None: 0}
+
+
+def _prediction_sort_key(pred):
+    """Deterministic ranking: edition_count then confidence."""
+    return (pred.edition_count or 0, _CONFIDENCE_RANK.get(pred.confidence, 0))
+
+
+def _select_feed_prediction_context(
+    pred_map: dict,
+    series_id: int,
+    matched_categories: list[str],
+    course_type: Optional[str] = None,
+) -> dict:
+    """Build an ai_context dict for a feed item.
+
+    Four modes:
+    - overall: no category context
+    - single_match: one matched category with a prediction
+    - multi_match: multiple matched categories
+    - fallback: no usable prediction rows
+    """
+    from raceanalyzer.predictions import build_ai_sez_text
+
+    null_pred = pred_map.get((series_id, None))
+
+    if not matched_categories:
+        # Overall mode
+        pred = null_pred
+        if not pred:
+            # Find any prediction for this series
+            for (sid, cat), p in pred_map.items():
+                if sid == series_id:
+                    if pred is None or _prediction_sort_key(p) > _prediction_sort_key(pred):
+                        pred = p
+        if pred and pred.predicted_finish_type and pred.predicted_finish_type != "unknown":
+            ctx = {
+                "mode": "overall",
+                "selected_category": None,
+                "matched_categories": [],
+                "best_category": None,
+                "best_finish_type": pred.predicted_finish_type,
+                "overall_finish_type": pred.predicted_finish_type,
+                "prediction_source": getattr(pred, "prediction_source", None),
+                "course_type": course_type,
+                "ai_sez_text": "",
+            }
+            ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+            return ctx
+        return _fallback_context(course_type=course_type)
+
+    # Find predictions for matched categories
+    cat_preds = {}
+    for cat in matched_categories:
+        p = pred_map.get((series_id, cat))
+        if p and p.predicted_finish_type and p.predicted_finish_type != "unknown":
+            cat_preds[cat] = p
+
+    overall_pred = null_pred
+    overall_ft = (
+        overall_pred.predicted_finish_type
+        if overall_pred and overall_pred.predicted_finish_type != "unknown"
+        else None
+    )
+    overall_source = (
+        getattr(overall_pred, "prediction_source", None)
+        if overall_pred
+        else None
+    )
+
+    if len(matched_categories) == 1:
+        cat = matched_categories[0]
+        if cat in cat_preds:
+            pred = cat_preds[cat]
+            ctx = {
+                "mode": "single_match",
+                "selected_category": cat,
+                "matched_categories": matched_categories,
+                "best_category": cat,
+                "best_finish_type": pred.predicted_finish_type,
+                "overall_finish_type": overall_ft,
+                "prediction_source": getattr(pred, "prediction_source", None),
+                "course_type": course_type,
+                "ai_sez_text": "",
+            }
+            ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+            return ctx
+        # Single match but no category-specific prediction — fall back to overall
+        if overall_ft:
+            ctx = {
+                "mode": "overall",
+                "selected_category": cat,
+                "matched_categories": matched_categories,
+                "best_category": None,
+                "best_finish_type": overall_ft,
+                "overall_finish_type": overall_ft,
+                "prediction_source": overall_source,
+                "course_type": course_type,
+                "ai_sez_text": "",
+            }
+            ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+            return ctx
+        return _fallback_context(
+            selected_category=cat,
+            matched_categories=matched_categories,
+            course_type=course_type,
+        )
+
+    # Multi-match: use overall prediction for feed summary
+    if overall_ft or cat_preds:
+        best_ft = overall_ft
+        best_source = overall_source
+        if not best_ft and cat_preds:
+            # Pick best from category predictions
+            best_cat_pred = max(cat_preds.values(), key=_prediction_sort_key)
+            best_ft = best_cat_pred.predicted_finish_type
+            best_source = getattr(best_cat_pred, "prediction_source", None)
+
+        selected_cat_label = matched_categories[0] if matched_categories else ""
+        ctx = {
+            "mode": "multi_match",
+            "selected_category": selected_cat_label,
+            "matched_categories": matched_categories,
+            "best_category": None,
+            "best_finish_type": best_ft,
+            "overall_finish_type": best_ft,
+            "prediction_source": best_source,
+            "course_type": course_type,
+            "ai_sez_text": "",
+        }
+        ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+        return ctx
+
+    return _fallback_context(
+        selected_category=matched_categories[0] if matched_categories else None,
+        matched_categories=matched_categories,
+        course_type=course_type,
+    )
+
+
+def _fallback_context(
+    selected_category: Optional[str] = None,
+    matched_categories: Optional[list[str]] = None,
+    course_type: Optional[str] = None,
+) -> dict:
+    """Build a fallback ai_context when no predictions exist."""
+    ctx = {
+        "mode": "fallback",
+        "selected_category": selected_category,
+        "matched_categories": matched_categories or [],
+        "best_category": None,
+        "best_finish_type": None,
+        "overall_finish_type": None,
+        "prediction_source": None,
+        "course_type": course_type,
+        "ai_sez_text": "",
+    }
+    return ctx
+
+
 # --- Sprint 011: Batch feed queries ---
 
 
@@ -1807,6 +1989,7 @@ def get_feed_items_batch(
     session,
     *,
     category=None,
+    matched_categories=None,
     search_query=None,
     discipline_filter=None,
     race_type_filter=None,
@@ -1861,12 +2044,20 @@ def get_feed_items_batch(
         )
     course_map = {c.series_id: c for c in courses}
 
-    # Query 4: Pre-computed predictions (batch)
+    # Query 4: Pre-computed predictions (batch) — widened for field matching
     with PerfTimer("Q4: predictions"):
         pred_query = session.query(SeriesPrediction).filter(
             SeriesPrediction.series_id.in_(series_ids)
         )
-        if category:
+        if matched_categories:
+            from sqlalchemy import or_
+            pred_query = pred_query.filter(
+                or_(
+                    SeriesPrediction.category.in_(matched_categories),
+                    SeriesPrediction.category.is_(None),
+                )
+            )
+        elif category:
             pred_query = pred_query.filter(
                 (SeriesPrediction.category == category)
                 | (SeriesPrediction.category.is_(None))
@@ -2048,6 +2239,15 @@ def get_feed_items_batch(
             "estimated_time_range": est_time_range,
             "hide_estimated_time": hide_est_time,
         }
+
+        # Sprint 019: Category-aware AI context
+        ai_context = _select_feed_prediction_context(
+            pred_map, sid,
+            matched_categories=matched_categories or [],
+            course_type=course_type,
+        )
+        item["ai_context"] = ai_context
+
         items.append(item)
 
     # Build route_id → polyline map for per-stage polyline lookups

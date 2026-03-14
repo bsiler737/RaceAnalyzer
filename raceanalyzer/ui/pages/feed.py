@@ -55,21 +55,22 @@ def render():
     if not isolated_series_id:
         racer_profile = render_racer_profile_filters(session)
 
-    # Resolve racer profile to a category string (backward-compat with global_category)
+    # Resolve racer profile to category string + matched categories
     category = st.session_state.get("global_category")
+    matched_categories = []
     if racer_profile and any(
         racer_profile.get(k) for k in ("cat_level", "gender", "masters_on")
     ):
         all_cats = queries.get_categories(session)
-        resolved_cat, is_exact = queries.resolve_racer_profile(
+        matched_categories = queries.resolve_racer_profile_matches(
             all_cats,
             cat_level=racer_profile.get("cat_level"),
             gender=racer_profile.get("gender"),
             masters_on=racer_profile.get("masters_on", False),
             masters_age=racer_profile.get("masters_age"),
         )
-        if resolved_cat:
-            category = resolved_cat
+        if matched_categories:
+            category = min(matched_categories, key=len)
         else:
             category = None
     elif not category:
@@ -106,7 +107,9 @@ def render():
     # --- Fetch feed items (batch) ---
     if isolated_series_id:
         all_items = queries.get_feed_items_batch(
-            session, category=category, team_name=team_name
+            session, category=category,
+            matched_categories=matched_categories or None,
+            team_name=team_name,
         )
         items = [i for i in all_items if i["series_id"] == isolated_series_id]
         if not items:
@@ -116,6 +119,7 @@ def render():
         items = queries.get_feed_items_batch(
             session,
             category=category,
+            matched_categories=matched_categories or None,
             search_query=search_query or None,
             discipline_filter=chip_discipline,
             state_filter=state_filter,
