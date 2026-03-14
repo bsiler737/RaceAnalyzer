@@ -692,6 +692,159 @@ def generate_narrative(
     return " ".join(sentences)
 
 
+# --- Sprint 019: Category-aware AI sez text ---
+
+_HEDGED_COURSE: dict[str, dict[str, str]] = {
+    "mountainous": {
+        "breakaway_selective": "big climbs might drive attrition",
+        "gc_selective": "the sustained climbing should be selective",
+    },
+    "hilly": {
+        "breakaway_selective": "the late climbs could shatter the field",
+        "reduced_sprint": "the hills will probably thin the pack",
+        "small_group_sprint": (
+            "repeated climbs might whittle it down to a small group sprint"
+        ),
+    },
+    "rolling": {
+        "bunch_sprint": "rolling terrain usually stays together for a sprint",
+        "reduced_sprint": "the long distance might thin things out",
+    },
+    "flat": {
+        "bunch_sprint": "flat course likely means a field sprint",
+    },
+}
+
+_RACE_TYPE_INSIGHT: dict[str, str] = {
+    "criterium": "crits usually end in a sprint",
+    "road_race": "road races can go several ways",
+    "hill_climb": "hill climbs reward pure climbing power",
+    "time_trial": "solo effort against the clock",
+    "gravel": "gravel races tend to be attritional",
+    "stage_race": "stage races reward consistency",
+}
+
+# Confident teaser lines (used for time_gap predictions or when no hedging needed)
+_CONFIDENT_TEASERS: dict[str, str] = {
+    "bunch_sprint": "The group will stay together for a field sprint",
+    "small_group_sprint": "A select group will contest the sprint",
+    "breakaway": "An early move will likely stay away",
+    "breakaway_selective": "The climbs will shatter the field \u2014 only the strong survive",
+    "reduced_sprint": "Attrition will thin the pack before a reduced sprint",
+    "gc_selective": "Expect a war of attrition on the hardest terrain",
+    "individual_tt": "Solo effort against the clock",
+    "mixed": "This race could go several ways \u2014 come prepared for anything",
+}
+
+
+def _lowercase_lead(text: str) -> str:
+    """Lowercase the first character for safe sentence-casing after a prefix."""
+    if not text:
+        return text
+    return text[0].lower() + text[1:]
+
+
+def finish_type_teaser(
+    finish_type: Optional[str],
+    prediction_source: Optional[str] = None,
+    race_type: Optional[str] = None,
+    course_type: Optional[str] = None,
+) -> str:
+    """Generate a one-liner teaser for a finish type prediction.
+
+    Handles hedged text for course_profile and race_type_only sources.
+    Returns empty string if no suitable text.
+    """
+    if not finish_type or finish_type == "unknown":
+        if race_type == "criterium":
+            return "Fast laps on a short circuit \u2014 expect close racing"
+        if race_type == "time_trial":
+            return "Solo effort against the clock"
+        return ""
+
+    if prediction_source == "course_profile":
+        # Hedged: "Hard to say since this is the first edition — {insight}"
+        insight = ""
+        if course_type and course_type in _HEDGED_COURSE:
+            insight = _HEDGED_COURSE[course_type].get(finish_type, "")
+        if not insight:
+            # Fallback to confident teaser lowercased
+            base = _CONFIDENT_TEASERS.get(finish_type, "")
+            insight = _lowercase_lead(base) if base else ""
+        if insight:
+            return f"Hard to say since this is the first edition \u2014 {insight}"
+        return ""
+
+    if prediction_source == "race_type_only":
+        # Lighter hedge: "No course data yet, but {race_type_insight}"
+        insight = _RACE_TYPE_INSIGHT.get(race_type or "", "")
+        if not insight:
+            base = _CONFIDENT_TEASERS.get(finish_type, "")
+            insight = _lowercase_lead(base) if base else ""
+        if insight:
+            return f"No course data yet, but {insight}"
+        return ""
+
+    # time_gap or default: confident text
+    return _CONFIDENT_TEASERS.get(finish_type, "")
+
+
+def build_ai_sez_text(ai_context: dict, race_type: Optional[str] = None) -> str:
+    """Generate the full AI sez text from an ai_context dict.
+
+    Handles all modes: overall, single_match, multi_match, fallback.
+    """
+    mode = ai_context.get("mode", "overall")
+    best_ft = ai_context.get("best_finish_type")
+    overall_ft = ai_context.get("overall_finish_type")
+    prediction_source = ai_context.get("prediction_source")
+    best_category = ai_context.get("best_category")
+    course_type = ai_context.get("course_type")
+
+    if mode == "single_match" and best_category and best_ft:
+        teaser = finish_type_teaser(
+            best_ft,
+            prediction_source=prediction_source,
+            race_type=race_type,
+            course_type=course_type,
+        )
+        if teaser:
+            return f"For {best_category}: {_lowercase_lead(teaser)}"
+        return ""
+
+    if mode == "multi_match":
+        selected_cat = ai_context.get("selected_category", "")
+        teaser = finish_type_teaser(
+            overall_ft or best_ft,
+            prediction_source=prediction_source,
+            race_type=race_type,
+            course_type=course_type,
+        )
+        cat_label = selected_cat or "Your profile"
+        if teaser:
+            return (
+                f"{cat_label} matches multiple fields. "
+                f"Overall, {_lowercase_lead(teaser)}"
+            )
+        return f"{cat_label} matches multiple fields"
+
+    if mode == "fallback":
+        return finish_type_teaser(
+            best_ft or overall_ft,
+            prediction_source=prediction_source,
+            race_type=race_type,
+            course_type=course_type,
+        )
+
+    # overall mode (default)
+    return finish_type_teaser(
+        overall_ft or best_ft,
+        prediction_source=prediction_source,
+        race_type=race_type,
+        course_type=course_type,
+    )
+
+
 # --- Racer type description (Sprint 010) ---
 
 RACER_TYPE_DESCRIPTIONS: dict[tuple[str, str], str] = {

@@ -155,25 +155,18 @@ def what_to_expect_text(
     prediction_source: Optional[str] = None,
     race_type: Optional[str] = None,
 ) -> str:
-    """Return a future-tense one-liner (<=120 chars) for the collapsed card."""
-    if not finish_type or finish_type == "unknown":
-        if race_type == "criterium":
-            return "Fast laps on a short circuit — expect close racing"
-        if race_type == "time_trial":
-            return "Solo effort against the clock"
-        return ""
+    """Return a future-tense one-liner (<=120 chars) for the collapsed card.
 
-    lines = {
-        "bunch_sprint": "The group will stay together for a field sprint",
-        "small_group_sprint": "A select group will contest the sprint",
-        "breakaway": "An early move will likely stay away",
-        "breakaway_selective": "The climbs will shatter the field — only the strong survive",
-        "reduced_sprint": "Attrition will thin the pack before a reduced sprint",
-        "gc_selective": "Expect a war of attrition on the hardest terrain",
-        "individual_tt": "Solo effort against the clock",
-        "mixed": "This race could go several ways — come prepared for anything",
-    }
-    return lines.get(finish_type, "")
+    Thin wrapper over predictions.finish_type_teaser() for backward
+    compatibility (used by generate_share_text etc).
+    """
+    from raceanalyzer.predictions import finish_type_teaser
+
+    return finish_type_teaser(
+        finish_type,
+        prediction_source=prediction_source,
+        race_type=race_type,
+    )
 
 
 # --- Racer type short label ---
