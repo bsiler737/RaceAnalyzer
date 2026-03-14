@@ -426,18 +426,39 @@ def resolve_racer_profile_matches(
         else:
             bracket = 35
 
+        # Masters racer can race both non-masters AND age-eligible masters fields
+        non_masters = [
+            c for c in candidates
+            if not _re.search(r'master', c, _re.IGNORECASE)
+        ]
         masters_filtered = [
             c for c in candidates
             if _re.search(r'master', c, _re.IGNORECASE)
         ]
-        bracket_str = f"{bracket}+"
-        bracket_specific = [
-            c for c in masters_filtered if bracket_str in c
+        # Filter masters to age-eligible brackets (bracket+ means age >= bracket)
+        age_eligible = []
+        for c in masters_filtered:
+            # Find all age numbers in the category string
+            ages = _re.findall(r'(\d{2})\+', c)
+            if ages:
+                # Eligible if racer meets the youngest bracket requirement
+                min_required = min(int(a) for a in ages)
+                if masters_age and masters_age >= min_required:
+                    age_eligible.append(c)
+                elif not masters_age:
+                    # No age specified, include all masters
+                    age_eligible.append(c)
+            else:
+                # Masters field with no age bracket (e.g., "Masters Open")
+                age_eligible.append(c)
+
+        candidates = non_masters + age_eligible
+    else:
+        # Non-masters racer: exclude masters-only fields
+        candidates = [
+            c for c in candidates
+            if not _re.search(r'master', c, _re.IGNORECASE)
         ]
-        if bracket_specific:
-            candidates = bracket_specific
-        elif masters_filtered:
-            candidates = masters_filtered
 
     return sorted(candidates)
 
@@ -1940,12 +1961,15 @@ def _select_feed_prediction_context(
             return ctx
         return _fallback_context(course_type=course_type)
 
-    # Find predictions for matched categories
+    # Find predictions for matched categories that exist for THIS series
     cat_preds = {}
     for cat in matched_categories:
         p = pred_map.get((series_id, cat))
         if p and p.predicted_finish_type and p.predicted_finish_type != "unknown":
             cat_preds[cat] = p
+
+    # The real set of fields the user can race in this specific event
+    race_fields = sorted(cat_preds.keys())
 
     overall_pred = null_pred
     overall_ft = (
@@ -1959,50 +1983,29 @@ def _select_feed_prediction_context(
         else None
     )
 
-    if len(matched_categories) == 1:
-        cat = matched_categories[0]
-        if cat in cat_preds:
-            pred = cat_preds[cat]
-            ctx = {
-                "mode": "single_match",
-                "selected_category": cat,
-                "matched_categories": matched_categories,
-                "best_category": cat,
-                "best_finish_type": pred.predicted_finish_type,
-                "overall_finish_type": overall_ft,
-                "prediction_source": getattr(pred, "prediction_source", None),
-                "course_type": course_type,
-                "ai_sez_text": "",
-            }
-            ctx["ai_sez_text"] = build_ai_sez_text(ctx)
-            return ctx
-        # Single match but no category-specific prediction — fall back to overall
-        if overall_ft:
-            ctx = {
-                "mode": "overall",
-                "selected_category": cat,
-                "matched_categories": matched_categories,
-                "best_category": None,
-                "best_finish_type": overall_ft,
-                "overall_finish_type": overall_ft,
-                "prediction_source": overall_source,
-                "course_type": course_type,
-                "ai_sez_text": "",
-            }
-            ctx["ai_sez_text"] = build_ai_sez_text(ctx)
-            return ctx
-        return _fallback_context(
-            selected_category=cat,
-            matched_categories=matched_categories,
-            course_type=course_type,
-        )
+    if len(race_fields) == 1:
+        # Single field for this race — show field-specific prediction
+        cat = race_fields[0]
+        pred = cat_preds[cat]
+        ctx = {
+            "mode": "single_match",
+            "selected_category": cat,
+            "matched_categories": race_fields,
+            "best_category": cat,
+            "best_finish_type": pred.predicted_finish_type,
+            "overall_finish_type": overall_ft,
+            "prediction_source": getattr(pred, "prediction_source", None),
+            "course_type": course_type,
+            "ai_sez_text": "",
+        }
+        ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+        return ctx
 
-    # Multi-match: use overall prediction for feed summary
-    if overall_ft or cat_preds:
+    if len(race_fields) > 1:
+        # Multiple fields for this race — show count + overall prediction
         best_ft = overall_ft
         best_source = overall_source
-        if not best_ft and cat_preds:
-            # Pick best from category predictions
+        if not best_ft:
             best_cat_pred = max(cat_preds.values(), key=_prediction_sort_key)
             best_ft = best_cat_pred.predicted_finish_type
             best_source = getattr(best_cat_pred, "prediction_source", None)
@@ -2010,7 +2013,7 @@ def _select_feed_prediction_context(
         ctx = {
             "mode": "multi_match",
             "selected_category": racer_profile_label or "",
-            "matched_categories": matched_categories,
+            "matched_categories": race_fields,
             "best_category": None,
             "best_finish_type": best_ft,
             "overall_finish_type": best_ft,
@@ -2021,11 +2024,23 @@ def _select_feed_prediction_context(
         ctx["ai_sez_text"] = build_ai_sez_text(ctx)
         return ctx
 
-    return _fallback_context(
-        selected_category=matched_categories[0] if matched_categories else None,
-        matched_categories=matched_categories,
-        course_type=course_type,
-    )
+    # No matching fields for this race — fall back to overall
+    if overall_ft:
+        ctx = {
+            "mode": "overall",
+            "selected_category": None,
+            "matched_categories": [],
+            "best_category": None,
+            "best_finish_type": overall_ft,
+            "overall_finish_type": overall_ft,
+            "prediction_source": overall_source,
+            "course_type": course_type,
+            "ai_sez_text": "",
+        }
+        ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+        return ctx
+
+    return _fallback_context(course_type=course_type)
 
 
 def _fallback_context(
@@ -2158,6 +2173,30 @@ def get_feed_items_batch(
                 .all()
             )
             cat_detail_by_series = _build_cat_detail_map(cat_details, races_by_series)
+
+    # Build most-recent-race category map (for per-series field matching)
+    # Uses classifications already loaded by Q2 races — no extra query
+    most_recent_race_ids = []
+    _series_most_recent = {}
+    for sid, races_list in races_by_series.items():
+        if races_list:
+            mr = races_list[0]  # already sorted desc
+            most_recent_race_ids.append(mr.id)
+            _series_most_recent[sid] = mr.id
+
+    recent_cats_by_series: dict[int, set[str]] = {}
+    if most_recent_race_ids:
+        recent_cls = (
+            session.query(RaceClassification.race_id, RaceClassification.category)
+            .filter(RaceClassification.race_id.in_(most_recent_race_ids))
+            .all()
+        )
+        # Map race_id back to series_id
+        race_to_series = {rid: sid for sid, rid in _series_most_recent.items()}
+        for rc in recent_cls:
+            sid = race_to_series.get(rc.race_id)
+            if sid and rc.category:
+                recent_cats_by_series.setdefault(sid, set()).add(rc.category)
 
     # Build items
     items = []
@@ -2308,9 +2347,15 @@ def get_feed_items_batch(
         }
 
         # Sprint 019: Category-aware AI context
+        # Scope matched categories to fields in most recent edition
+        series_recent_cats = recent_cats_by_series.get(sid, set())
+        scoped_matches = [
+            c for c in (matched_categories or [])
+            if c in series_recent_cats
+        ]
         ai_context = _select_feed_prediction_context(
             pred_map, sid,
-            matched_categories=matched_categories or [],
+            matched_categories=scoped_matches,
             course_type=course_type,
             racer_profile_label=racer_profile_label,
         )
