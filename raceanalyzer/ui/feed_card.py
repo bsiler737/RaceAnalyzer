@@ -238,7 +238,7 @@ def extract_key_climb(climbs_json: Optional[str]) -> Optional[str]:
 
 
 def render_elevation_sparkline_svg(
-    profile_points: list, width: int = 140, height: int = 30
+    profile_points: list, width: int = 160, height: int = 46
 ) -> str:
     """Return tiny SVG sparkline string from profile points."""
     if not profile_points or len(profile_points) < 2:
@@ -278,7 +278,7 @@ def render_elevation_sparkline_svg(
 
 
 def render_route_trace_svg(
-    encoded_polyline: Optional[str], width: int = 120, height: int = 60
+    encoded_polyline: Optional[str], width: int = 160, height: int = 58
 ) -> str:
     """Generate a tiny SVG route trace from encoded polyline. Returns '' if missing."""
     if not encoded_polyline:
@@ -419,25 +419,25 @@ def confidence_text(
 
 
 def inject_feed_styles():
-    """Inject CSS styles for feed cards. Call once at top of render."""
+    """Inject CSS styles for feed rows. Call once at top of render."""
     import streamlit as st
 
     st.markdown(
         """
     <style>
-    /* Feed card v2 styles (Sprint 013) */
+    /* Feed row styles (Sprint 019) */
 
-    /* Card press micro-animation (VD-02) */
-    div[data-testid="stVerticalBlock"] > div:has(.feed-card-inner) {
+    /* Row press micro-animation */
+    div[data-testid="stVerticalBlock"] > div:has(.feed-row) {
         transition: transform 150ms ease, opacity 150ms ease;
     }
-    div[data-testid="stVerticalBlock"] > div:has(.feed-card-inner):active {
+    div[data-testid="stVerticalBlock"] > div:has(.feed-row):active {
         transform: scale(0.98);
         opacity: 0.9;
     }
 
-    /* Prediction highlight glow (VD-09) */
-    .feed-card-prediction {
+    /* Prediction highlight glow */
+    .feed-row-ai {
         animation: feed-pred-glow 1.5s ease-out;
     }
     @keyframes feed-pred-glow {
@@ -445,7 +445,7 @@ def inject_feed_styles():
         100% { background: transparent; }
     }
 
-    /* Chip icon sizing (Sprint 014: VR-01, 14->16) */
+    /* Chip icon sizing */
     .feed-card-chip svg {
         width: 16px;
         height: 16px;
@@ -483,12 +483,12 @@ def inject_feed_styles():
         100% { background: rgba(255, 111, 0, 0.08); }
     }
 
-    /* Dark mode surface differentiation (VD-05) */
+    /* Dark mode surface differentiation */
     @media (prefers-color-scheme: dark) {
-        .feed-card-inner {
+        .feed-row {
             color: var(--text-color, #e0e0e0);
         }
-        .feed-card-inner span {
+        .feed-row span {
             color: var(--text-color, #e0e0e0);
         }
         .feed-card-chip {
@@ -498,33 +498,27 @@ def inject_feed_styles():
         .feed-card-date-pill {
             box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
+        .feed-row-date .feed-row-month,
+        .feed-row-date .feed-row-day {
+            color: var(--text-color, #e0e0e0);
+            opacity: 0.55;
+        }
     }
 
-    /* Expand/collapse transition (VD-08) */
+    /* Expand/collapse transition */
     div[data-testid="stExpander"] {
         transition: max-height 300ms ease, opacity 200ms ease;
     }
 
-    /* Card max-width and two-up grid layout */
-    .feed-cards-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-        gap: 16px;
-        max-width: 1200px;
-        margin: 0 auto;
-    }
-
-    /* Sprint 015: Two-column card responsive collapse (CL-04) */
-    @media (max-width: 480px) {
-        .feed-card-inner {
-            grid-template-columns: 1fr !important;
+    /* Sprint 019: Row responsive collapse at 700px */
+    @media (max-width: 700px) {
+        .feed-row {
+            grid-template-columns: 56px 1fr !important;
         }
-        .feed-card-right {
+        .feed-row-visuals {
+            grid-column: 1 / -1;
             flex-direction: row !important;
             justify-content: center;
-        }
-        .feed-cards-grid {
-            grid-template-columns: 1fr;
         }
     }
 
@@ -766,6 +760,247 @@ def build_card_html(item: dict) -> str:
         parts.append('</div>')  # close feed-card-right
 
     parts.append('</div>')  # close feed-card-inner (grid)
+
+    return "\n".join(parts)
+
+
+def build_row_html(item: dict) -> str:
+    """Build a single-column agenda row for a feed item (Sprint 019).
+
+    Three-column CSS Grid: date | text | visuals.
+    Visuals column omitted when neither course map nor elevation exists.
+    All user strings are HTML-escaped.
+    """
+    parts = []
+
+    # --- Finish type accent color ---
+    ft = item.get("predicted_finish_type") or "unknown"
+    accent_color = FINISH_TYPE_COLORS.get(ft, "#9E9E9E")
+    ft_icon = FINISH_TYPE_ICONS.get(ft, FINISH_TYPE_ICONS.get("unknown", ""))
+    ft_icon_20 = ft_icon.replace('width="24"', 'width="20"').replace(
+        'height="24"', 'height="20"'
+    )
+
+    # --- Build visuals ---
+    sparkline_html = ""
+    route_html = ""
+
+    profile_points = item.get("elevation_sparkline_points")
+    if profile_points:
+        sparkline_html = render_elevation_sparkline_svg(profile_points)
+
+    encoded_poly = item.get("rwgps_encoded_polyline")
+    if encoded_poly:
+        route_html = render_route_trace_svg(encoded_poly)
+
+    has_visuals = bool(sparkline_html or route_html)
+
+    # --- Grid template: three-column if visuals, two-column if not ---
+    if has_visuals:
+        grid_cols = "grid-template-columns:72px minmax(0,1fr) 168px;"
+    else:
+        grid_cols = "grid-template-columns:72px 1fr;"
+
+    parts.append(
+        f'<div class="feed-row" style="display:grid;{grid_cols}gap:14px;'
+        f'align-items:center;border-left:4px solid {accent_color};'
+        f'padding-left:12px;">'
+    )
+
+    # === DATE COLUMN ===
+    date_obj = item.get("upcoming_date") or item.get("most_recent_date")
+    date_opacity = ""
+    if not item.get("is_upcoming") and item.get("most_recent_date"):
+        date_opacity = "opacity:0.45;"
+
+    month_str = ""
+    day_str = ""
+    if date_obj:
+        try:
+            month_str = html.escape(f"{date_obj:%b}".upper())
+            day_str = html.escape(f"{date_obj.day}")
+        except (TypeError, ValueError, AttributeError):
+            pass
+
+    parts.append(
+        f'<div class="feed-row-date" style="text-align:center;{date_opacity}">'
+        f'<div class="feed-row-month" style="font-size:0.75em;font-weight:600;'
+        f'text-transform:uppercase;line-height:1.1;'
+        f'color:color-mix(in srgb, var(--text-color) 55%, transparent);">'
+        f'{month_str}</div>'
+        f'<div class="feed-row-day" style="font-size:1.9em;font-weight:700;'
+        f'line-height:1.1;'
+        f'color:color-mix(in srgb, var(--text-color) 55%, transparent);">'
+        f'{day_str}</div>'
+        f'</div>'
+    )
+
+    # === TEXT COLUMN ===
+    parts.append('<div class="feed-row-main" style="min-width:0;">')
+
+    # --- Title + countdown pill ---
+    name = html.escape(str(item.get("display_name", "")))
+    countdown_pill = ""
+    if item.get("is_upcoming") and item.get("upcoming_date"):
+        pill_label, pill_bg, pill_text = countdown_pill_style(item.get("days_until"))
+        if pill_label:
+            countdown_pill = (
+                f'<span class="feed-card-date-pill" '
+                f'style="background:{pill_bg};color:{pill_text};'
+                f'padding:2px 8px;border-radius:12px;'
+                f'font-size:0.8em;font-weight:500;'
+                f'white-space:nowrap;margin-left:6px;">'
+                f'{html.escape(pill_label)}</span>'
+            )
+
+    parts.append(
+        f'<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;">'
+        f'<span style="font-weight:700;font-size:1.3em;line-height:1.2;'
+        f'overflow:hidden;text-overflow:ellipsis;">{name}</span>'
+        f'{countdown_pill}'
+        f'</div>'
+    )
+
+    # --- Location ---
+    loc_parts = []
+    if item.get("location"):
+        loc_parts.append(html.escape(str(item["location"])))
+    state = item.get("state_province", "")
+    if state and state not in item.get("location", ""):
+        loc_parts.append(html.escape(str(state)))
+    loc_str = ", ".join(loc_parts) if loc_parts else ""
+
+    if loc_str:
+        parts.append(
+            f'<div style="font-size:0.85em;color:var(--text-color,#666);">'
+            f'{loc_str}</div>'
+        )
+
+    # --- Race type badge ---
+    race_type = item.get("race_type")
+    if race_type:
+        rt_icon = RACE_TYPE_ICONS.get(race_type, "")
+        rt_name = html.escape(
+            RACE_TYPE_DISPLAY.get(race_type, race_type.replace("_", " ").title())
+        )
+        parts.append(
+            f'<div style="margin-top:2px;">'
+            f'<span style="display:inline-flex;align-items:center;gap:3px;'
+            f'background:var(--secondary-background-color,#f0f2f6);padding:1px 8px;'
+            f'border-radius:4px;font-size:0.8em;'
+            f'color:var(--text-color,#333);">'
+            f'{rt_icon} {rt_name}</span></div>'
+        )
+
+    # --- AI sez (moved up, under location, larger) ---
+    ai_sez_text = ""
+    ai_context = item.get("ai_context")
+    if ai_context and ai_context.get("ai_sez_text"):
+        ai_sez_text = ai_context["ai_sez_text"]
+    else:
+        # Fallback to legacy what_to_expect_text
+        wte = what_to_expect_text(
+            ft if ft != "unknown" else None,
+            prediction_source=item.get("prediction_source"),
+            race_type=race_type,
+        )
+        ai_sez_text = wte
+
+    if ai_sez_text:
+        parts.append(
+            f'<div class="feed-row-ai" style="margin-top:4px;font-weight:500;'
+            f'font-size:1.0rem;display:flex;align-items:center;gap:6px;">'
+            f'{ft_icon_20}'
+            f'<span style="color:var(--text-color,#888);font-weight:400;'
+            f'font-size:0.85em;">AI sez:</span> '
+            f'<span>{html.escape(ai_sez_text)}</span>'
+            f'</div>'
+        )
+
+    # --- Teammate presence accent ---
+    teammates = item.get("teammate_names", [])
+    if teammates:
+        team_icon = (
+            '<svg width="16" height="16" viewBox="0 0 16 16"'
+            ' xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;">'
+            '<circle cx="6" cy="6" r="3" fill="#FF6F00"/>'
+            '<circle cx="11" cy="6" r="3" fill="#FF6F00" opacity="0.7"/>'
+            '<path d="M1 14 Q3 10 6 10 Q8 10 9 11 Q10 10 11 10 '
+            'Q14 10 15 14" fill="#FF6F00" opacity="0.3"/>'
+            "</svg>"
+        )
+        if len(teammates) <= 2:
+            names = ", ".join(html.escape(n) for n in teammates)
+            team_text = f"{names} registered"
+        else:
+            first_two = ", ".join(html.escape(n) for n in teammates[:2])
+            team_text = f"{first_two} + {len(teammates) - 2} more registered"
+        parts.append(
+            '<div class="feed-card-teammate" '
+            'style="display:inline-flex;align-items:center;'
+            'gap:4px;margin-top:4px;padding:2px 8px;'
+            'border-radius:4px;font-size:0.8em;'
+            f'background:rgba(255,111,0,0.08);color:#E65100;">'
+            f'{team_icon} {team_text}'
+            f'</div>'
+        )
+
+    # --- Chip row ---
+    chips = _build_chip_row(item)
+    if chips:
+        parts.append(
+            '<div class="feed-card-chips" style="display:flex;flex-wrap:wrap;gap:6px;'
+            'margin-top:6px;font-size:0.82em;">'
+            + "".join(chips)
+            + "</div>"
+        )
+
+    # --- Drop rate meter ---
+    drop_pct = item.get("drop_rate_pct")
+    if drop_pct is not None:
+        bar_color = _drop_rate_color(drop_pct)
+        drop_label = item.get("drop_rate_label", "")
+        bar_bg = (
+            "#E8F5E9"
+            if drop_pct < 15
+            else "var(--secondary-background-color,#e0e0e0)"
+        )
+        parts.append(
+            '<div style="margin-top:6px;display:flex;align-items:center;'
+            'gap:6px;">'
+            '<span style="font-size:0.78em;'
+            'color:var(--text-color,#666);min-width:70px;">'
+            'Drop rate</span>'
+            '<div style="flex:1;max-width:120px;height:8px;'
+            f'background:{bar_bg};'
+            'border-radius:4px;overflow:hidden;">'
+            f'<div style="width:{min(drop_pct, 100)}%;height:100%;'
+            f'background:{bar_color};'
+            'border-radius:4px;"></div></div>'
+            f'<span style="font-size:0.78em;font-weight:500;">'
+            f'{drop_pct}%</span>'
+            '<span style="font-size:0.72em;'
+            f'color:var(--text-color,#888);">'
+            f'({html.escape(drop_label)})</span>'
+            '</div>'
+        )
+
+    parts.append('</div>')  # close feed-row-main
+
+    # === VISUALS COLUMN ===
+    if has_visuals:
+        parts.append(
+            '<div class="feed-row-visuals" style="min-width:168px;display:flex;'
+            'flex-direction:column;align-items:center;gap:6px;'
+            'justify-content:center;">'
+        )
+        if route_html:
+            parts.append(f'<div>{route_html}</div>')
+        if sparkline_html:
+            parts.append(f'<div>{sparkline_html}</div>')
+        parts.append('</div>')  # close feed-row-visuals
+
+    parts.append('</div>')  # close feed-row
 
     return "\n".join(parts)
 

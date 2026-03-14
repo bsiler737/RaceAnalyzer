@@ -713,15 +713,15 @@ class TestTwoColumnLayout:
         assert "feed-card-info" not in card
 
     def test_responsive_css_in_styles(self):
-        """Sprint 015: Responsive CSS rule exists for mobile collapse."""
+        """Sprint 019: Responsive CSS rule exists for mobile collapse at 700px."""
         from pathlib import Path
 
         card_path = (
             Path(__file__).parent.parent / "raceanalyzer" / "ui" / "feed_card.py"
         )
         source = card_path.read_text()
-        assert "@media (max-width: 480px)" in source
-        assert "grid-template-columns: 1fr !important" in source
+        assert "@media (max-width: 700px)" in source
+        assert "grid-template-columns: 56px 1fr !important" in source
 
 
 # --- Sprint 015: resolve_racer_profile tests ---

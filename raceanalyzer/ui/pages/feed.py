@@ -13,7 +13,7 @@ from raceanalyzer.ui.components import (
     render_racer_profile_filters,
 )
 from raceanalyzer.ui.feed_card import (
-    build_card_html,
+    build_row_html,
     generate_ics,
     generate_share_text,
     inject_feed_styles,
@@ -173,7 +173,7 @@ def render():
     # --- Deep-link to past-only series: render expanded at top level ---
     if isolated_series_id and all_past_only:
         for item in items:
-            _render_container_card(
+            _render_container_row(
                 item, session, category, key_prefix="deeplink", expanded=True
             )
         return
@@ -183,13 +183,13 @@ def render():
         st.caption(f"Showing past editions for '{search_query}'")
         preview_items = items[:3]
         for item in preview_items:
-            _render_container_card(
+            _render_container_row(
                 item, session, category, key_prefix="search_past", expanded=True
             )
         if len(items) > 3:
             with st.expander(f"{len(items) - 3} more results"):
                 for item in items[3:]:
-                    _render_container_card(
+                    _render_container_row(
                         item, session, category, key_prefix="search_past_more"
                     )
         return
@@ -215,7 +215,7 @@ def render():
             '</div>',
             unsafe_allow_html=True,
         )
-        _render_card_pairs(
+        _render_rows(
             racing_soon, session, category,
             key_prefix="soon",
             expanded=isolated_series_id is not None,
@@ -224,57 +224,48 @@ def render():
     # --- Month-grouped agenda view ---
     month_groups = queries.group_by_month(remaining_items)
 
-    # Pagination state
-    if "feed_page_size" not in st.session_state:
-        st.session_state.feed_page_size = FEED_PAGE_SIZE
-    visible_count = st.session_state.feed_page_size
+    # Separate upcoming month groups from past races
+    upcoming_groups = [(h, g) for h, g in month_groups if h != "Past Races"]
+    past_groups = [(h, g) for h, g in month_groups if h == "Past Races"]
 
-    rendered = len(racing_soon)
-    for header, group_items in month_groups:
-        if rendered >= visible_count:
-            break
+    # Render ALL upcoming races (no pagination)
+    for header, group_items in upcoming_groups:
+        st.markdown(
+            f'<div class="feed-month-header" style="position:sticky;top:0;z-index:10;'
+            f'background:var(--background-color,#fff);padding:8px 12px;'
+            f'border-bottom:1px solid var(--secondary-background-color,#e0e0e0);">'
+            f'<span style="font-size:1.1em;font-weight:600;'
+            f'color:var(--text-color,#333);">'
+            f'{html.escape(header)}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        _render_rows(
+            group_items, session, category,
+            key_prefix="feed",
+            expanded=isolated_series_id is not None,
+        )
 
-        # Past Races section is collapsed
-        if header == "Past Races":
-            with st.expander(f"Past Races ({len(group_items)})", expanded=False):
-                for item in group_items:
-                    if rendered >= visible_count:
-                        break
-                    _render_container_card(
+    # Past races: paginated, loaded on demand
+    if past_groups:
+        past_items = past_groups[0][1]
+        if "past_page_size" not in st.session_state:
+            st.session_state.past_page_size = 0
+
+        past_visible = st.session_state.past_page_size
+        if past_visible > 0:
+            with st.expander(f"Past Races ({len(past_items)})", expanded=True):
+                show = past_items[:past_visible]
+                for item in show:
+                    _render_container_row(
                         item, session, category, key_prefix="past"
                     )
-                    rendered += 1
-        else:
-            # Sticky month header (Sprint 013: FO-02)
-            st.markdown(
-                f'<div class="feed-month-header" style="position:sticky;top:0;z-index:10;'
-                f'background:var(--background-color,#fff);padding:8px 12px;'
-                f'border-bottom:1px solid var(--secondary-background-color,#e0e0e0);">'
-                f'<span style="font-size:1.1em;font-weight:600;'
-                f'color:var(--text-color,#333);">'
-                f'{html.escape(header)}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            batch = []
-            for item in group_items:
-                if rendered >= visible_count:
-                    break
-                batch.append(item)
-                rendered += 1
-            _render_card_pairs(
-                batch, session, category,
-                key_prefix="feed",
-                expanded=isolated_series_id is not None,
-            )
 
-    # Show more button
-    total_items = len(racing_soon) + sum(len(g[1]) for g in month_groups)
-    if visible_count < total_items:
-        remaining = total_items - visible_count
-        if st.button(f"Show more ({remaining} remaining)"):
-            st.session_state.feed_page_size = visible_count + FEED_PAGE_SIZE
-            st.rerun()
+        past_remaining = len(past_items) - past_visible
+        if past_remaining > 0:
+            if st.button(f"Load past races ({past_remaining} remaining)"):
+                st.session_state.past_page_size = past_visible + FEED_PAGE_SIZE
+                st.rerun()
 
 
 
@@ -387,49 +378,33 @@ def _render_map_view(items):
         st.info("Showing list view instead.")
 
 
-def _render_card_pairs(
+def _render_rows(
     items: list,
     session,
     category,
     key_prefix: str = "feed",
     expanded: bool = False,
 ):
-    """Render cards in two-column pairs when viewport allows."""
-    for i in range(0, len(items), 2):
-        pair = items[i:i + 2]
-        if len(pair) == 2:
-            col1, col2 = st.columns(2)
-            with col1:
-                _render_container_card(
-                    pair[0], session, category,
-                    key_prefix=key_prefix, expanded=expanded,
-                )
-            with col2:
-                _render_container_card(
-                    pair[1], session, category,
-                    key_prefix=key_prefix, expanded=expanded,
-                )
-        else:
-            col1, col2 = st.columns(2)
-            with col1:
-                _render_container_card(
-                    pair[0], session, category,
-                    key_prefix=key_prefix, expanded=expanded,
-                )
+    """Render feed items as single-column agenda rows (Sprint 019)."""
+    for item in items:
+        _render_container_row(
+            item, session, category,
+            key_prefix=key_prefix, expanded=expanded,
+        )
 
 
-def _render_container_card(
+def _render_container_row(
     item: dict,
     session,
     category,
     key_prefix: str = "feed",
     expanded: bool = False,
 ):
-    """Render a single feed card with HTML content + action buttons."""
+    """Render a single feed row with HTML content + action buttons."""
     with st.container(border=True):
-        # Single HTML block for all card content (Sprint 013 architecture)
-        card_html = build_card_html(item)
-        st.markdown(card_html, unsafe_allow_html=True)
+        # Single HTML block for all row content (Sprint 019 architecture)
+        row_html = build_row_html(item)
+        st.markdown(row_html, unsafe_allow_html=True)
 
         # --- Action row ---
         _render_action_row(item, session, category, key_prefix, expanded)
@@ -467,7 +442,7 @@ def _render_action_row(item, session, category, key_prefix, expanded):
 
     # Overflow menu — caret trigger (Sprint 018: CS-04)
     with cols[2]:
-        with st.popover("v", use_container_width=True):
+        with st.popover("", use_container_width=True):
             # Calendar export
             if item.get("is_upcoming") and item.get("upcoming_date"):
                 loc = item.get("location", "")
