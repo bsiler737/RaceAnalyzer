@@ -85,14 +85,62 @@ def render():
             st.query_params["category"] = chosen_cat or ""
             st.rerun()
 
-    # DD-01: Hero Course Profile (moved to top)
+    # --- Sprint 018: Restructured layout ---
     profile_points = preview.get("profile_points")
     climbs = preview.get("climbs")
+    pred = preview["prediction"]
+    course = preview.get("course")
+    drop_rate = preview.get("drop_rate")
+    typical_speed = preview.get("typical_speed")
+    narrative = preview.get("narrative", "")
 
+    # === 1. Two-column: What to Expect + Predicted Finish Type summary ===
+    col_wte, col_pft = st.columns(2)
+    with col_wte:
+        with st.container(border=True):
+            st.subheader("What to Expect")
+            if narrative:
+                st.write(narrative)
+
+            from raceanalyzer.predictions import racer_type_long_form
+
+            ct = course["course_type"] if course else None
+            pred_ft = pred["predicted_finish_type"] if pred else None
+            edition_count = pred["edition_count"] if pred else 0
+            long_desc = racer_type_long_form(
+                ct, pred_ft, drop_rate=drop_rate, edition_count=edition_count,
+            )
+            if long_desc:
+                st.markdown(f"**Who does well here?** {long_desc}")
+
+    with col_pft:
+        with st.container(border=True):
+            st.subheader("Predicted Finish Type")
+            if pred:
+                ft_display = finish_type_display_name(pred["predicted_finish_type"])
+                st.markdown(f"### {ft_display}")
+
+                confidence = pred["confidence"]
+                color_map = {
+                    "high": "green", "moderate": "orange", "low": "red",
+                }
+                label_map = {
+                    "high": "High confidence",
+                    "moderate": "Moderate confidence",
+                    "low": "Low confidence",
+                }
+                render_confidence_badge(
+                    label_map.get(confidence, confidence),
+                    color_map.get(confidence, "gray"),
+                )
+                st.caption(f"Based on {pred['edition_count']} previous edition(s)")
+            else:
+                st.info("No historical data for predictions yet.")
+
+    # === 2. Course Profile (hero interactive chart + climb breakdown) ===
     if profile_points and len(profile_points) > 1:
         with st.container(border=True):
             st.subheader("Course Profile")
-            course = preview["course"]
             if course:
                 col1, col2, col3 = st.columns(3)
                 ct_display = course_type_display(course["course_type"])
@@ -109,230 +157,158 @@ def render():
                 race_name=series["display_name"],
             )
 
-    # DD-02: Climb Breakdown with race context
-    if climbs:
-        with st.container(border=True):
-            st.subheader("Climb Breakdown")
-            course = preview.get("course")
-            distance_m = course["distance_m"] if course else None
-            pred = preview.get("prediction")
-            pred_ft = pred["predicted_finish_type"] if pred else None
-            drop_rate = preview.get("drop_rate")
-            render_climb_breakdown(
-                climbs, distance_m=distance_m,
-                finish_type=pred_ft, drop_rate=drop_rate,
-            )
-
-    # Card: "What to Expect" with expanded racer type (DD-04)
-    narrative = preview.get("narrative", "")
-    if narrative:
-        with st.container(border=True):
-            st.subheader("What to Expect")
-            st.write(narrative)
-
-            # Expanded racer type
-            from raceanalyzer.predictions import racer_type_long_form
-
-            course = preview.get("course")
-            pred = preview.get("prediction")
-            ct = course["course_type"] if course else None
-            pred_ft = pred["predicted_finish_type"] if pred else None
-            edition_count = pred["edition_count"] if pred else 0
-            drop_rate = preview.get("drop_rate")
-            long_desc = racer_type_long_form(
-                ct, pred_ft, drop_rate=drop_rate, edition_count=edition_count,
-            )
-            if long_desc:
-                st.markdown(f"**Who does well here?** {long_desc}")
-
-    # Course metrics (if no profile but course data exists)
-    if not (profile_points and len(profile_points) > 1):
-        course = preview["course"]
-        if course:
-            with st.container(border=True):
-                st.subheader("Course Profile")
-                col1, col2, col3 = st.columns(3)
-                ct_display = course_type_display(course["course_type"])
-                col1.metric("Terrain", ct_display)
-                if course.get("total_gain_m"):
-                    col2.metric("Elevation", f"{course['total_gain_m']:.0f}m gain")
-                if course.get("distance_m"):
-                    col3.metric("Distance", f"{course['distance_m']/1000:.1f} km")
-
-                desc = COURSE_TYPE_DESCRIPTIONS.get(course["course_type"], "")
-                if desc:
-                    st.caption(desc)
-
-                if series.get("encoded_polyline"):
-                    render_course_map(
-                        series["encoded_polyline"], series["display_name"],
-                    )
-
-    # Card: Predicted Finish Type + DD-05: Historical Pattern
-    with st.container(border=True):
-        st.subheader("Predicted Finish Type")
-        pred = preview["prediction"]
-        if pred:
-            ft_display = finish_type_display_name(pred["predicted_finish_type"])
-            st.markdown(f"### {ft_display}")
-
-            confidence = pred["confidence"]
-            color_map = {
-                "high": "green", "moderate": "orange", "low": "red",
-            }
-            label_map = {
-                "high": "High confidence",
-                "moderate": "Moderate confidence",
-                "low": "Low confidence",
-            }
-            render_confidence_badge(
-                label_map.get(confidence, confidence),
-                color_map.get(confidence, "gray"),
-            )
-
-            st.caption(f"Based on {pred['edition_count']} previous edition(s)")
-
-            # RP-04: Large distribution bar chart (replaces expander text list)
-            if pred.get("distribution"):
-                import pandas as pd
-
-                from raceanalyzer.ui.charts import build_distribution_bar_chart
-
-                dist_data = [
-                    {"finish_type": ft, "count": count}
-                    for ft, count in pred["distribution"].items()
-                ]
-                dist_df = pd.DataFrame(dist_data)
-                fig = build_distribution_bar_chart(dist_df)
-                fig.update_layout(height=max(200, len(dist_data) * 40))
-                fig.update_traces(
-                    texttemplate="%{x}",
-                    textposition="outside",
+            # Climb breakdown inline
+            if climbs:
+                st.divider()
+                distance_m = course["distance_m"] if course else None
+                render_climb_breakdown(
+                    climbs, distance_m=distance_m,
+                    finish_type=pred_ft, drop_rate=drop_rate,
                 )
-                st.plotly_chart(fig, use_container_width=True)
 
-            # DD-05: Historical finish type visualization
-            detail = queries.get_feed_item_detail(
-                session, int(series_id), category=selected_cat,
-            )
-            if detail and detail.get("editions_summary"):
-                st.markdown("**Historical Pattern:**")
-                render_finish_pattern(detail["editions_summary"])
-        else:
-            st.info("No historical data for predictions yet.")
+            # Course map if available
+            if series.get("encoded_polyline"):
+                render_course_map(
+                    series["encoded_polyline"], series["display_name"],
+                    climbs=climbs,
+                )
+    elif course:
+        # Fallback: course metrics without profile
+        with st.container(border=True):
+            st.subheader("Course Profile")
+            col1, col2, col3 = st.columns(3)
+            ct_display = course_type_display(course["course_type"])
+            col1.metric("Terrain", ct_display)
+            if course.get("total_gain_m"):
+                col2.metric("Elevation", f"{course['total_gain_m']:.0f}m gain")
+            if course.get("distance_m"):
+                col3.metric("Distance", f"{course['distance_m']/1000:.1f} km")
 
-    # Card: Historical Stats
-    drop_rate = preview.get("drop_rate")
-    typical_speed = preview.get("typical_speed")
-    if drop_rate or typical_speed:
+            desc = COURSE_TYPE_DESCRIPTIONS.get(course["course_type"], "")
+            if desc:
+                st.caption(desc)
+
+            if series.get("encoded_polyline"):
+                render_course_map(
+                    series["encoded_polyline"], series["display_name"],
+                )
+
+    # === 3. Two-column: Predicted Finish Type details + Historical Stats ===
+    col_pred, col_stats = st.columns(2)
+    with col_pred:
+        with st.container(border=True):
+            st.subheader("Finish Type Details")
+            if pred:
+                if pred.get("distribution"):
+                    import pandas as pd
+
+                    from raceanalyzer.ui.charts import build_distribution_bar_chart
+
+                    dist_data = [
+                        {"finish_type": ft, "count": count}
+                        for ft, count in pred["distribution"].items()
+                    ]
+                    dist_df = pd.DataFrame(dist_data)
+                    fig = build_distribution_bar_chart(dist_df)
+                    fig.update_layout(height=max(200, len(dist_data) * 40))
+                    fig.update_traces(
+                        texttemplate="%{x}",
+                        textposition="outside",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Historical finish type pattern
+                detail = queries.get_feed_item_detail(
+                    session, int(series_id), category=selected_cat,
+                )
+                if detail and detail.get("editions_summary"):
+                    st.markdown("**Historical Pattern:**")
+                    render_finish_pattern(detail["editions_summary"])
+            else:
+                st.info("No prediction data available.")
+
+    with col_stats:
         with st.container(border=True):
             st.subheader("Historical Stats")
+            if drop_rate or typical_speed:
+                if drop_rate:
+                    rate_pct = round(drop_rate["drop_rate"] * 100)
+                    c1, c2 = st.columns([2, 1])
+                    c1.metric("Drop Rate", f"{rate_pct}%")
+                    with c2:
+                        render_selectivity_badge(drop_rate["label"])
+                    st.caption(
+                        f"Based on {drop_rate['edition_count']} edition(s) "
+                        f"({drop_rate['total_starters']} total starters, "
+                        f"{drop_rate['total_dropped']} dropped)"
+                    )
 
-            if drop_rate:
-                rate_pct = round(drop_rate["drop_rate"] * 100)
-                col1, col2 = st.columns([2, 1])
-                col1.metric("Drop Rate", f"{rate_pct}%")
-                with col2:
-                    render_selectivity_badge(drop_rate["label"])
-                st.caption(
-                    f"Based on {drop_rate['edition_count']} edition(s) "
-                    f"({drop_rate['total_starters']} total starters, "
-                    f"{drop_rate['total_dropped']} dropped)"
-                )
+                if typical_speed:
+                    if drop_rate:
+                        st.divider()
+                    c1, c2 = st.columns(2)
+                    c1.metric(
+                        "Winning Speed",
+                        f"{typical_speed['median_winner_speed_mph']} mph",
+                    )
+                    c2.metric(
+                        "Field Speed",
+                        f"{typical_speed['median_field_speed_mph']} mph",
+                    )
+                    st.caption(
+                        f"Median across {typical_speed['edition_count']} edition(s). "
+                        f"({typical_speed['median_winner_speed_kph']} / "
+                        f"{typical_speed['median_field_speed_kph']} kph)"
+                    )
+            else:
+                st.info("No historical stats available yet.")
 
-            if typical_speed:
-                st.divider()
-                col1, col2 = st.columns(2)
-                col1.metric(
-                    "Winning Speed",
-                    f"{typical_speed['median_winner_speed_mph']} mph",
+    # === 4. Scary Riders (category-gated) ===
+    with st.container(border=True):
+        st.subheader("Scary Riders")
+        if selected_cat:
+            latest_race = queries.get_latest_race_for_series(session, int(series_id))
+            if latest_race:
+                scary_racers = queries.get_scary_racers(
+                    session, latest_race.id, category=selected_cat
                 )
-                col2.metric(
-                    "Field Speed",
-                    f"{typical_speed['median_field_speed_mph']} mph",
-                )
-                st.caption(
-                    f"Median across {typical_speed['edition_count']} edition(s). "
-                    f"({typical_speed['median_winner_speed_kph']} / "
-                    f"{typical_speed['median_field_speed_kph']} kph)"
-                )
+                if not scary_racers.empty:
+                    source = scary_racers["source"].iloc[0]
+                    if source == "startlist":
+                        st.caption("Based on registered riders")
+                    else:
+                        st.caption("Based on past editions (no startlist imported yet)")
+                    for _, racer in scary_racers.iterrows():
+                        render_scary_racer_card(racer.to_dict())
+                else:
+                    st.info("No scary rider data for this category.")
+            else:
+                st.info("No scary rider data for this category.")
+        else:
+            st.info(
+                "Pick a category to see the :ghost: spooky riders :ghost: "
+                "for your category."
+            )
 
-    # DD-03: Team-grouped startlist
+    # === 5. Startlist (actual registrations only) ===
     with st.container(border=True):
         st.subheader("Startlist")
-        team_name = st.query_params.get("team", "")
+        team_name = st.session_state.get("team", "") or st.query_params.get("team", "")
         team_blocks = queries.get_startlist_team_blocks(
             session, int(series_id), category=selected_cat, team_name=team_name,
         )
         if team_blocks:
             render_team_startlist(team_blocks, user_team_name=team_name)
         else:
-            # Fallback to original contender display
-            contenders = preview["contenders"]
-            if not contenders.empty:
-                source = contenders["source"].iloc[0]
-                source_labels = {
-                    "startlist": "From registered riders",
-                    "series_history": "Likely contenders based on past editions",
-                    "category": "Top-rated riders in this category",
-                }
-                st.caption(source_labels.get(source, ""))
+            st.info("No startlist data available yet.")
 
-                for _, rider in contenders.iterrows():
-                    rider_name = rider.get("name", "")
-                    if not rider_name or rider_name.strip() in ("", "?", "? ?"):
-                        continue
-                    with st.container():
-                        col1, col2 = st.columns([3, 1])
-                        team_str = (
-                            f" -- {rider['team']}" if rider.get("team") else ""
-                        )
-                        col1.write(f"**{rider_name}**{team_str}")
-                        pts = rider.get("carried_points", 0)
-                        col2.write(f"{pts:.0f} pts" if pts else "")
-            else:
-                st.info("No startlist or contender data available.")
-
-    # RP-05: Scary Riders section
-    with st.container(border=True):
-        st.subheader("Scary Riders")
-        latest_race = queries.get_latest_race_for_series(session, int(series_id))
-        if latest_race:
-            scary_racers = queries.get_scary_racers(
-                session, latest_race.id, category=selected_cat
-            )
-            if not scary_racers.empty:
-                source = scary_racers["source"].iloc[0]
-                if source == "startlist":
-                    st.caption("Based on registered riders")
-                else:
-                    st.caption(
-                        "Based on past editions "
-                        "(no startlist imported yet)"
-                    )
-                for _, racer in scary_racers.iterrows():
-                    render_scary_racer_card(racer.to_dict())
-            else:
-                st.info("No historical results yet.")
-        else:
-            st.info("No past editions to analyze.")
-
-    # DD-06: Similar Races
+    # === 6. Similar Races ===
     with st.container(border=True):
         st.subheader("Similar Races")
         similar = queries.get_similar_series(session, int(series_id))
         render_similar_races(similar)
 
-    # RP-02: Course map at full content width with climb markers
-    if series.get("encoded_polyline") and profile_points and len(profile_points) > 1:
-        with st.container(border=True):
-            st.subheader("Course Map")
-            render_course_map(
-                series["encoded_polyline"], series["display_name"],
-                climbs=climbs,
-            )
-
-    # Post-race feedback
+    # === 7. Post-race Feedback ===
     latest_date = preview.get("latest_date")
     pred = preview["prediction"]
     if latest_date and pred and latest_date < datetime.now():
