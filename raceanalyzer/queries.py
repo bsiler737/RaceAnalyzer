@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from raceanalyzer.config import Settings
 from raceanalyzer.db.models import (
+    CategoryDetail,
     Course,
     Race,
     RaceClassification,
@@ -1166,6 +1167,39 @@ def get_race_preview(
         prediction_source=pred_source,
     )
 
+    # Sprint 018: Category-aware distance and estimated time for preview
+    # Load category details for the latest upcoming race
+    latest_upcoming = (
+        session.query(Race)
+        .filter(Race.series_id == series_id, Race.is_upcoming.is_(True))
+        .order_by(Race.date.asc())
+        .first()
+    )
+    preview_cat_details = []
+    if latest_upcoming:
+        preview_cat_details = (
+            session.query(CategoryDetail)
+            .filter(CategoryDetail.race_id == latest_upcoming.id)
+            .all()
+        )
+    cat_distance, cat_distance_unit = _resolve_category_distance(
+        preview_cat_details, category
+    )
+    distance_range = _format_distance_range(preview_cat_details)
+
+    # Build a pred_map subset for this series to reuse _format_time_range
+    from raceanalyzer.db.models import SeriesPrediction as _SP
+    series_preds = session.query(_SP).filter(_SP.series_id == series_id).all()
+    _pred_map = {(p.series_id, p.category): p for p in series_preds}
+    is_duration = _is_duration_race(preview_cat_details)
+    race_type_val = most_recent.race_type if most_recent else None
+    is_crit = race_type_val == RaceType.CRITERIUM
+    hide_est_time = is_crit or is_duration
+    est_time_range = (
+        None if hide_est_time
+        else _format_time_range(_pred_map, series_id, category)
+    )
+
     return {
         "series": series_dict,
         "course": course_dict,
@@ -1179,6 +1213,12 @@ def get_race_preview(
         "profile_points": profile_points,
         "climbs": climbs,
         "narrative": narrative,
+        # Sprint 018
+        "category_distance": cat_distance,
+        "category_distance_unit": cat_distance_unit,
+        "distance_range": distance_range,
+        "estimated_time_range": est_time_range,
+        "hide_estimated_time": hide_est_time,
     }
 
 
@@ -1513,6 +1553,7 @@ def _snippet(text: str, max_sentences: int = 2, max_chars: int = 200) -> str:
 def _expand_feed_items(
     items: list[dict],
     races_by_series: dict,
+    route_polyline_map: dict[int, str] | None = None,
 ) -> list[dict]:
     """Expand multi-edition and stage race entries into occurrence-level feed items.
 
@@ -1522,7 +1563,10 @@ def _expand_feed_items(
     3. Passthrough → original item with occurrence_key added
 
     Pure Python — no DB queries. Returns new list; input list is not mutated.
+    route_polyline_map maps rwgps_route_id → encoded_polyline for per-stage overrides.
     """
+    if route_polyline_map is None:
+        route_polyline_map = {}
     from raceanalyzer.stages import load_stage_schedule
 
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1559,6 +1603,9 @@ def _expand_feed_items(
                     child["occurrence_key"] = f"{sid}:stage:{stage.number}"
                     child["occurrence_kind"] = "stage"
                     child["source_race_id"] = None
+                    # Per-stage polyline override from YAML rwgps_route_id
+                    if stage.rwgps_route_id and stage.rwgps_route_id in route_polyline_map:
+                        child["rwgps_encoded_polyline"] = route_polyline_map[stage.rwgps_route_id]
                     expanded.append(child)
                 continue
             else:
@@ -1596,6 +1643,161 @@ def _expand_feed_items(
         expanded.append(child)
 
     return expanded
+
+
+# --- Sprint 018: Category distance & time helpers ---
+
+
+def _build_cat_detail_map(
+    cat_details: list,
+    races_by_series: dict[int, list],
+) -> dict[int, list]:
+    """Map series_id -> [CategoryDetail, ...] using race_id -> series_id lookup."""
+    race_to_series = {}
+    for sid, races in races_by_series.items():
+        for race in races:
+            race_to_series[race.id] = sid
+
+    result: dict[int, list] = {}
+    for cd in cat_details:
+        sid = race_to_series.get(cd.race_id)
+        if sid is not None:
+            result.setdefault(sid, []).append(cd)
+    return result
+
+
+_TIME_UNITS = {"minutes", "min", "minute", "hours", "hour", "hrs", "hr"}
+
+
+def _is_time_unit(unit: str | None) -> bool:
+    """Check if a distance_unit value represents time rather than distance."""
+    if not unit:
+        return False
+    return unit.strip().lower() in _TIME_UNITS
+
+
+def _normalize_category(name: str) -> str:
+    """Normalize category name for matching: lowercase, collapse whitespace."""
+    return " ".join(name.lower().split())
+
+
+def _resolve_category_distance(
+    cat_details: list, category: str | None
+) -> tuple[float | None, str | None]:
+    """Match a category to a CategoryDetail and return (distance, unit).
+
+    Returns (None, None) if no match found.
+    """
+    if not category or not cat_details:
+        return (None, None)
+
+    norm_cat = _normalize_category(category)
+
+    # Exact match first
+    for cd in cat_details:
+        if cd.category == category and cd.distance is not None:
+            return (cd.distance, cd.distance_unit)
+
+    # Normalized match
+    for cd in cat_details:
+        if _normalize_category(cd.category) == norm_cat and cd.distance is not None:
+            return (cd.distance, cd.distance_unit)
+
+    return (None, None)
+
+
+def _format_unit_label(unit: str | None) -> str:
+    """Format a distance_unit for display."""
+    if not unit:
+        return "km"
+    u = unit.strip().lower()
+    if u in ("miles", "mile", "mi"):
+        return "mi"
+    if u in ("km", "kilometers", "kilometer"):
+        return "km"
+    if u in _TIME_UNITS:
+        return "min"
+    return u
+
+
+def _format_distance_range(cat_details: list) -> str | None:
+    """Build a display-ready distance range from CategoryDetail rows.
+
+    Groups by unit; if all same unit, formats as range.
+    If min == max, collapses to single value.
+    Returns None if no data.
+    """
+    with_distance = [cd for cd in cat_details if cd.distance is not None]
+    if not with_distance:
+        return None
+
+    # Group by unit label
+    by_unit: dict[str, list[float]] = {}
+    for cd in with_distance:
+        label = _format_unit_label(cd.distance_unit)
+        by_unit.setdefault(label, []).append(cd.distance)
+
+    if not by_unit:
+        return None
+
+    # Pick dominant unit (most entries)
+    dominant_unit = max(by_unit, key=lambda u: len(by_unit[u]))
+    values = by_unit[dominant_unit]
+
+    lo = min(values)
+    hi = max(values)
+
+    # Format as integer if whole numbers, else one decimal
+    def _fmt(v: float) -> str:
+        return str(int(v)) if v == int(v) else f"{v:.1f}"
+
+    if lo == hi:
+        return f"{_fmt(lo)} {dominant_unit}"
+    return f"{_fmt(lo)}-{_fmt(hi)} {dominant_unit}"
+
+
+def _is_duration_race(cat_details: list) -> bool:
+    """Return True if any category has a time-based distance unit."""
+    return any(_is_time_unit(cd.distance_unit) for cd in cat_details if cd.distance_unit)
+
+
+def _format_time_range(
+    pred_map: dict, series_id: int, category: str | None
+) -> str | None:
+    """Format estimated time from SeriesPrediction.typical_field_duration_min.
+
+    If category is specified, return that category's time.
+    Otherwise, return range across all predictions for this series.
+    """
+    def _fmt_duration(minutes: float) -> str:
+        hours = int(minutes) // 60
+        mins = int(minutes) % 60
+        if hours:
+            return f"~{hours}h {mins:02d}m"
+        return f"~{mins}m"
+
+    if category:
+        pred = pred_map.get((series_id, category))
+        if pred and pred.typical_field_duration_min:
+            return _fmt_duration(pred.typical_field_duration_min)
+        # Fall back to null-category prediction
+        pred = pred_map.get((series_id, None))
+        if pred and pred.typical_field_duration_min:
+            return _fmt_duration(pred.typical_field_duration_min)
+        return None
+
+    # No category: range across all predictions for this series
+    durations = []
+    for (sid, _cat), pred in pred_map.items():
+        if sid == series_id and pred.typical_field_duration_min:
+            durations.append(pred.typical_field_duration_min)
+    if not durations:
+        return None
+    lo = min(durations)
+    hi = max(durations)
+    if lo == hi:
+        return _fmt_duration(lo)
+    return f"{_fmt_duration(lo)} - {_fmt_duration(hi)}"
 
 
 # --- Sprint 011: Batch feed queries ---
@@ -1684,6 +1886,20 @@ def get_feed_items_batch(
             teammates_map = get_teammates_by_series(
                 session, series_ids, category, team_name
             )
+
+    # Query 6: Category details for distance/unit (Sprint 018)
+    upcoming_race_ids = [
+        r.id for races in races_by_series.values() for r in races if r.is_upcoming
+    ]
+    cat_detail_by_series: dict[int, list] = {}
+    if upcoming_race_ids:
+        with PerfTimer("Q6: category details"):
+            cat_details = (
+                session.query(CategoryDetail)
+                .filter(CategoryDetail.race_id.in_(upcoming_race_ids))
+                .all()
+            )
+            cat_detail_by_series = _build_cat_detail_map(cat_details, races_by_series)
 
     # Build items
     items = []
@@ -1774,6 +1990,20 @@ def get_feed_items_batch(
         edition_count = pred.edition_count if pred else len(races)
         encoded_polyline = series.rwgps_encoded_polyline
 
+        # Sprint 018: Category-aware distance and estimated time
+        series_cat_details = cat_detail_by_series.get(sid, [])
+        cat_distance, cat_distance_unit = _resolve_category_distance(
+            series_cat_details, category
+        )
+        distance_range = _format_distance_range(series_cat_details)
+        is_duration = _is_duration_race(series_cat_details)
+        is_crit = race_type_str == "criterium"
+        hide_est_time = is_crit or is_duration
+        est_time_range = (
+            None if hide_est_time
+            else _format_time_range(pred_map, sid, category)
+        )
+
         item = {
             "series_id": sid,
             "display_name": series.display_name,
@@ -1811,11 +2041,24 @@ def get_feed_items_batch(
             "typical_field_duration_min": typical_field_duration,
             "rwgps_encoded_polyline": encoded_polyline,
             "distribution_json": distribution_json_val,
+            # Sprint 018: Category distance & time
+            "category_distance": cat_distance,
+            "category_distance_unit": cat_distance_unit,
+            "distance_range": distance_range,
+            "estimated_time_range": est_time_range,
+            "hide_estimated_time": hide_est_time,
         }
         items.append(item)
 
+    # Build route_id → polyline map for per-stage polyline lookups
+    route_polyline_map = {
+        s.rwgps_route_id: s.rwgps_encoded_polyline
+        for s in series_map.values()
+        if s.rwgps_route_id and s.rwgps_encoded_polyline
+    }
+
     # Sprint 017: Expand multi-edition and stage race items
-    items = _expand_feed_items(items, races_by_series)
+    items = _expand_feed_items(items, races_by_series, route_polyline_map)
 
     # Post-expansion filters: race_type and discipline (now see expanded stage types)
     if race_type_filter or discipline_filter:

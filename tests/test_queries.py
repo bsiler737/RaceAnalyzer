@@ -876,3 +876,183 @@ class TestFinishTypePlainEnglishWithSource:
             "nonexistent_type", prediction_source="time_gap"
         )
         assert result is None
+
+
+# --- Sprint 018: Category distance & time helpers ---
+
+
+class _FakeCategoryDetail:
+    """Minimal stand-in for CategoryDetail ORM instances."""
+
+    def __init__(self, race_id=1, category="Cat 3", distance=None, distance_unit=None):
+        self.race_id = race_id
+        self.category = category
+        self.distance = distance
+        self.distance_unit = distance_unit
+
+
+class _FakePrediction:
+    """Minimal stand-in for SeriesPrediction."""
+
+    def __init__(self, series_id=1, category=None, typical_field_duration_min=None):
+        self.series_id = series_id
+        self.category = category
+        self.typical_field_duration_min = typical_field_duration_min
+
+
+class TestResolveCategoryDistance:
+    def test_exact_match(self):
+        details = [_FakeCategoryDetail(category="Cat 3", distance=50.0, distance_unit="miles")]
+        dist, unit = queries._resolve_category_distance(details, "Cat 3")
+        assert dist == 50.0
+        assert unit == "miles"
+
+    def test_normalized_match(self):
+        details = [_FakeCategoryDetail(category="  cat  3 ", distance=40.0, distance_unit="km")]
+        dist, unit = queries._resolve_category_distance(details, "cat 3")
+        assert dist == 40.0
+        assert unit == "km"
+
+    def test_no_match(self):
+        details = [_FakeCategoryDetail(category="Cat 1/2", distance=80.0, distance_unit="miles")]
+        dist, unit = queries._resolve_category_distance(details, "Cat 5")
+        assert dist is None
+        assert unit is None
+
+    def test_no_category_returns_none(self):
+        details = [_FakeCategoryDetail(category="Cat 3", distance=50.0)]
+        dist, unit = queries._resolve_category_distance(details, None)
+        assert dist is None
+
+    def test_empty_details(self):
+        dist, unit = queries._resolve_category_distance([], "Cat 3")
+        assert dist is None
+
+
+class TestFormatDistanceRange:
+    def test_single_unit_range(self):
+        details = [
+            _FakeCategoryDetail(distance=30.0, distance_unit="miles"),
+            _FakeCategoryDetail(distance=60.0, distance_unit="miles"),
+        ]
+        result = queries._format_distance_range(details)
+        assert result == "30-60 mi"
+
+    def test_equal_distance_collapse(self):
+        details = [
+            _FakeCategoryDetail(distance=50.0, distance_unit="miles"),
+            _FakeCategoryDetail(distance=50.0, distance_unit="miles"),
+        ]
+        result = queries._format_distance_range(details)
+        assert result == "50 mi"
+
+    def test_time_based_range(self):
+        details = [
+            _FakeCategoryDetail(distance=30.0, distance_unit="minutes"),
+            _FakeCategoryDetail(distance=60.0, distance_unit="minutes"),
+        ]
+        result = queries._format_distance_range(details)
+        assert result == "30-60 min"
+
+    def test_empty_returns_none(self):
+        assert queries._format_distance_range([]) is None
+
+    def test_no_distance_returns_none(self):
+        details = [_FakeCategoryDetail(distance=None)]
+        assert queries._format_distance_range(details) is None
+
+    def test_mixed_units_uses_dominant(self):
+        details = [
+            _FakeCategoryDetail(distance=30.0, distance_unit="miles"),
+            _FakeCategoryDetail(distance=50.0, distance_unit="miles"),
+            _FakeCategoryDetail(distance=80.0, distance_unit="km"),
+        ]
+        result = queries._format_distance_range(details)
+        assert "mi" in result  # miles is dominant (2 vs 1)
+
+    def test_km_unit(self):
+        details = [
+            _FakeCategoryDetail(distance=40.0, distance_unit="km"),
+            _FakeCategoryDetail(distance=80.0, distance_unit="km"),
+        ]
+        result = queries._format_distance_range(details)
+        assert result == "40-80 km"
+
+
+class TestIsDurationRace:
+    def test_time_based(self):
+        details = [_FakeCategoryDetail(distance_unit="minutes")]
+        assert queries._is_duration_race(details) is True
+
+    def test_distance_based(self):
+        details = [_FakeCategoryDetail(distance_unit="miles")]
+        assert queries._is_duration_race(details) is False
+
+    def test_empty(self):
+        assert queries._is_duration_race([]) is False
+
+    def test_mixed(self):
+        details = [
+            _FakeCategoryDetail(distance_unit="miles"),
+            _FakeCategoryDetail(distance_unit="min"),
+        ]
+        assert queries._is_duration_race(details) is True
+
+
+class TestFormatTimeRange:
+    def test_with_category(self):
+        pred_map = {
+            (1, "Cat 3"): _FakePrediction(1, "Cat 3", 120.0),
+        }
+        result = queries._format_time_range(pred_map, 1, "Cat 3")
+        assert result == "~2h 00m"
+
+    def test_without_category_range(self):
+        pred_map = {
+            (1, "Cat 3"): _FakePrediction(1, "Cat 3", 90.0),
+            (1, "Cat 4/5"): _FakePrediction(1, "Cat 4/5", 60.0),
+        }
+        result = queries._format_time_range(pred_map, 1, None)
+        assert "~1h 00m" in result
+        assert "~1h 30m" in result
+
+    def test_without_category_single(self):
+        pred_map = {
+            (1, None): _FakePrediction(1, None, 120.0),
+        }
+        result = queries._format_time_range(pred_map, 1, None)
+        assert result == "~2h 00m"
+
+    def test_no_data_returns_none(self):
+        result = queries._format_time_range({}, 1, "Cat 3")
+        assert result is None
+
+    def test_fallback_to_null_category(self):
+        pred_map = {
+            (1, None): _FakePrediction(1, None, 105.0),
+        }
+        result = queries._format_time_range(pred_map, 1, "Cat 3")
+        assert result == "~1h 45m"
+
+
+class TestBuildCatDetailMap:
+    def test_maps_by_series(self):
+        class FakeRace:
+            def __init__(self, id, series_id):
+                self.id = id
+                self.series_id = series_id
+                self.is_upcoming = True
+
+        races_by_series = {
+            10: [FakeRace(100, 10), FakeRace(101, 10)],
+            20: [FakeRace(200, 20)],
+        }
+        cat_details = [
+            _FakeCategoryDetail(race_id=100, category="Cat 3"),
+            _FakeCategoryDetail(race_id=200, category="Cat 4/5"),
+        ]
+        result = queries._build_cat_detail_map(cat_details, races_by_series)
+        assert 10 in result
+        assert 20 in result
+        assert len(result[10]) == 1
+        assert result[10][0].category == "Cat 3"
