@@ -90,6 +90,33 @@ class TestNormalizeRaceName:
         result = normalize_race_name("Route 66 Road Race")
         assert "66" in result
 
+    def test_strips_hash_edition(self):
+        assert normalize_race_name("Mason Lake Road Race #1") == "mason lake"
+
+    def test_strips_hash_edition_2(self):
+        assert normalize_race_name("Mason Lake Road Race #2") == "mason lake"
+
+    def test_strips_series_suffix(self):
+        assert normalize_race_name("Mason Lake Road Race Series") == "mason lake"
+
+    def test_alias_merges_road_race_variant(self):
+        """'Mason Lake RR' normalizes to same key as 'Mason Lake'."""
+        assert normalize_race_name("Mason Lake RR") == normalize_race_name("Mason Lake")
+
+    def test_all_mason_lake_variants_merge(self):
+        variants = [
+            "Mason Lake RR",
+            "Mason Lake Road Race Series",
+            "Mason Lake Road Race #1",
+            "Mason Lake Road Race #2",
+            "Mason Lake",
+            "Mason Lake 2",
+            "Mason Lake 1 and 2",
+        ]
+        normalized = {normalize_race_name(n) for n in variants}
+        assert len(normalized) == 1
+        assert normalized.pop() == "mason lake"
+
     def test_empty_string(self):
         result = normalize_race_name("")
         assert result == ""

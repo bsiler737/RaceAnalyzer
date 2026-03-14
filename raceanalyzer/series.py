@@ -42,6 +42,18 @@ _ROMAN_RE = re.compile(
 _COMPOUND_EDITION_RE = re.compile(r"\s+\d{1,2}\s*(?:and|&)\s*\d{1,2}\s*$", re.IGNORECASE)
 _EDITION_DIGIT_RE = re.compile(r"\s+\d{1,2}\s*$")
 
+# Hash-number edition: "Mason Lake Road Race #1" → "Mason Lake Road Race"
+_HASH_EDITION_RE = re.compile(r"\s*#\d{1,2}\s*$")
+
+# Trailing "Series" noise: "Mason Lake Road Race Series" → "Mason Lake Road Race"
+_SERIES_SUFFIX_RE = re.compile(r"\s+series\s*$", re.IGNORECASE)
+
+# Post-normalization alias map: merges known venue name variants.
+# Key = normalized form that should be collapsed, value = canonical form.
+_ALIAS_MAP = {
+    "mason lake road race": "mason lake",
+}
+
 
 @lru_cache(maxsize=2048)
 def normalize_race_name(name: str) -> str:
@@ -69,6 +81,12 @@ def normalize_race_name(name: str) -> str:
     # Strip sponsor noise
     s = _NOISE_RE.sub("", s)
 
+    # Strip hash-number editions (#1, #2)
+    s = _HASH_EDITION_RE.sub("", s)
+
+    # Strip trailing "Series"
+    s = _SERIES_SUFFIX_RE.sub("", s)
+
     # Strip compound edition markers first ("Mason Lake 1 and 2"), then trailing digits
     # Guardrail: only apply if result still has ≥2 whitespace-separated tokens
     compound_candidate = _COMPOUND_EDITION_RE.sub("", s).strip()
@@ -89,6 +107,9 @@ def normalize_race_name(name: str) -> str:
 
     # Collapse whitespace, strip punctuation edges
     s = re.sub(r"\s+", " ", s).strip().strip("-\u2013\u2014,.")
+
+    # Apply alias map for known venue name variants
+    s = _ALIAS_MAP.get(s, s)
 
     return s
 
