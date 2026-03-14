@@ -808,25 +808,24 @@ def build_ai_sez_text(ai_context: dict, race_type: Optional[str] = None) -> str:
             race_type=race_type,
             course_type=course_type,
         )
-        if teaser:
-            return f"For {best_category}: {_lowercase_lead(teaser)}"
-        return ""
+        return teaser
 
     if mode == "multi_match":
-        selected_cat = ai_context.get("selected_category", "")
+        matched = ai_context.get("matched_categories", [])
+        n_fields = len(matched)
         teaser = finish_type_teaser(
             overall_ft or best_ft,
             prediction_source=prediction_source,
             race_type=race_type,
             course_type=course_type,
         )
-        cat_label = selected_cat or "Your profile"
+        count_text = f"{n_fields} fields" if n_fields > 1 else "multiple fields"
         if teaser:
             return (
-                f"{cat_label} matches multiple fields. "
-                f"Overall, {_lowercase_lead(teaser)}"
+                f"You can race {count_text}. "
+                f"Most fields: {_lowercase_lead(teaser)}"
             )
-        return f"{cat_label} matches multiple fields"
+        return f"You can race {count_text}"
 
     if mode == "fallback":
         return finish_type_teaser(

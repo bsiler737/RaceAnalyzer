@@ -945,8 +945,8 @@ class TestBuildAiSezText:
             "course_type": None,
         }
         result = build_ai_sez_text(ctx)
-        assert "Women 1/2/3" in result
-        assert "for" in result.lower()
+        # Single match shows field-specific prediction directly
+        assert "shatter" in result.lower() or "strong survive" in result.lower()
 
     def test_multi_match_mode(self):
         from raceanalyzer.predictions import build_ai_sez_text
@@ -954,6 +954,7 @@ class TestBuildAiSezText:
         ctx = {
             "mode": "multi_match",
             "selected_category": "Cat 3",
+            "matched_categories": ["Cat 3", "Cat 3 Women", "Cat 3 Masters"],
             "best_finish_type": "bunch_sprint",
             "overall_finish_type": "bunch_sprint",
             "prediction_source": "time_gap",
@@ -961,7 +962,8 @@ class TestBuildAiSezText:
             "course_type": None,
         }
         result = build_ai_sez_text(ctx)
-        assert "multiple fields" in result.lower()
+        assert "3 fields" in result
+        assert "most fields" in result.lower()
         assert "sprint" in result.lower()
 
     def test_fallback_mode(self):
@@ -990,7 +992,7 @@ class TestBuildAiSezText:
             "course_type": "mountainous",
         }
         result = build_ai_sez_text(ctx)
-        assert "Cat 3" in result
+        # Single match shows field-specific hedged prediction
         assert "first edition" in result.lower()
 
     def test_race_type_only_overall(self):

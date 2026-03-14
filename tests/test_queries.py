@@ -1154,7 +1154,8 @@ class TestSelectFeedPredictionContext:
             pred_map, 1, ["Cat 3"]
         )
         assert ctx["mode"] == "single_match"
-        assert "Cat 3" in ctx["ai_sez_text"]
+        # Single match shows field-specific prediction directly
+        assert "shatter" in ctx["ai_sez_text"].lower() or "strong" in ctx["ai_sez_text"].lower()
 
     def test_single_match_fallback_to_null(self):
         pred_map = {
@@ -1184,7 +1185,8 @@ class TestSelectFeedPredictionContext:
             pred_map, 1, ["Cat 3", "Cat 3 Women"]
         )
         assert ctx["mode"] == "multi_match"
-        assert "multiple fields" in ctx["ai_sez_text"].lower()
+        assert "2 fields" in ctx["ai_sez_text"]
+        assert "most fields" in ctx["ai_sez_text"].lower()
 
     def test_fallback_no_predictions(self):
         ctx = queries._select_feed_prediction_context({}, 1, ["Cat 3"])
