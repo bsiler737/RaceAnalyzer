@@ -844,3 +844,165 @@ class TestRacerTypeDescriptionCoverage:
             assert combo in RACER_TYPE_DESCRIPTIONS, (
                 f"Missing RACER_TYPE_DESCRIPTIONS entry for {combo}"
             )
+
+
+# --- Sprint 019: finish_type_teaser tests ---
+
+
+class TestFinishTypeTeaser:
+    def test_confident_bunch_sprint(self):
+        from raceanalyzer.predictions import finish_type_teaser
+
+        result = finish_type_teaser("bunch_sprint", prediction_source="time_gap")
+        assert "sprint" in result.lower()
+
+    def test_unknown_returns_empty(self):
+        from raceanalyzer.predictions import finish_type_teaser
+
+        assert finish_type_teaser("unknown") == ""
+
+    def test_none_returns_empty(self):
+        from raceanalyzer.predictions import finish_type_teaser
+
+        assert finish_type_teaser(None) == ""
+
+    def test_criterium_fallback(self):
+        from raceanalyzer.predictions import finish_type_teaser
+
+        result = finish_type_teaser(None, race_type="criterium")
+        assert "circuit" in result.lower() or "laps" in result.lower()
+
+    def test_course_profile_hedged(self):
+        from raceanalyzer.predictions import finish_type_teaser
+
+        result = finish_type_teaser(
+            "breakaway_selective",
+            prediction_source="course_profile",
+            course_type="hilly",
+        )
+        assert "first edition" in result.lower()
+        assert "shatter" in result.lower() or "climbs" in result.lower()
+
+    def test_course_profile_mountainous(self):
+        from raceanalyzer.predictions import finish_type_teaser
+
+        result = finish_type_teaser(
+            "gc_selective",
+            prediction_source="course_profile",
+            course_type="mountainous",
+        )
+        assert "first edition" in result.lower()
+        assert "climbing" in result.lower()
+
+    def test_race_type_only_hedged(self):
+        from raceanalyzer.predictions import finish_type_teaser
+
+        result = finish_type_teaser(
+            "bunch_sprint",
+            prediction_source="race_type_only",
+            race_type="criterium",
+        )
+        assert "no course data" in result.lower()
+        assert "crit" in result.lower()
+
+    def test_time_gap_confident(self):
+        from raceanalyzer.predictions import finish_type_teaser
+
+        result = finish_type_teaser(
+            "gc_selective", prediction_source="time_gap"
+        )
+        assert "attrition" in result.lower()
+        assert "first edition" not in result.lower()
+
+
+# --- Sprint 019: build_ai_sez_text tests ---
+
+
+class TestBuildAiSezText:
+    def test_overall_mode(self):
+        from raceanalyzer.predictions import build_ai_sez_text
+
+        ctx = {
+            "mode": "overall",
+            "best_finish_type": "bunch_sprint",
+            "overall_finish_type": "bunch_sprint",
+            "prediction_source": "time_gap",
+            "best_category": None,
+            "course_type": None,
+        }
+        result = build_ai_sez_text(ctx)
+        assert "sprint" in result.lower()
+
+    def test_single_match_mode(self):
+        from raceanalyzer.predictions import build_ai_sez_text
+
+        ctx = {
+            "mode": "single_match",
+            "best_finish_type": "breakaway_selective",
+            "overall_finish_type": "bunch_sprint",
+            "prediction_source": "time_gap",
+            "best_category": "Women 1/2/3",
+            "course_type": None,
+        }
+        result = build_ai_sez_text(ctx)
+        assert "Women 1/2/3" in result
+        assert "for" in result.lower()
+
+    def test_multi_match_mode(self):
+        from raceanalyzer.predictions import build_ai_sez_text
+
+        ctx = {
+            "mode": "multi_match",
+            "selected_category": "Cat 3",
+            "best_finish_type": "bunch_sprint",
+            "overall_finish_type": "bunch_sprint",
+            "prediction_source": "time_gap",
+            "best_category": None,
+            "course_type": None,
+        }
+        result = build_ai_sez_text(ctx)
+        assert "multiple fields" in result.lower()
+        assert "sprint" in result.lower()
+
+    def test_fallback_mode(self):
+        from raceanalyzer.predictions import build_ai_sez_text
+
+        ctx = {
+            "mode": "fallback",
+            "best_finish_type": None,
+            "overall_finish_type": None,
+            "prediction_source": None,
+            "best_category": None,
+            "course_type": None,
+        }
+        result = build_ai_sez_text(ctx)
+        assert result == ""
+
+    def test_course_profile_single_match(self):
+        from raceanalyzer.predictions import build_ai_sez_text
+
+        ctx = {
+            "mode": "single_match",
+            "best_finish_type": "gc_selective",
+            "overall_finish_type": None,
+            "prediction_source": "course_profile",
+            "best_category": "Cat 3",
+            "course_type": "mountainous",
+        }
+        result = build_ai_sez_text(ctx)
+        assert "Cat 3" in result
+        assert "first edition" in result.lower()
+
+    def test_race_type_only_overall(self):
+        from raceanalyzer.predictions import build_ai_sez_text
+
+        ctx = {
+            "mode": "overall",
+            "best_finish_type": "bunch_sprint",
+            "overall_finish_type": "bunch_sprint",
+            "prediction_source": "race_type_only",
+            "best_category": None,
+            "course_type": None,
+        }
+        result = build_ai_sez_text(ctx, race_type="criterium")
+        assert "no course data" in result.lower()

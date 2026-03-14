@@ -8,6 +8,7 @@ from raceanalyzer.ui.feed_card import (
     _card_has_chip,
     _chip,
     build_card_html,
+    build_row_html,
     confidence_text,
     countdown_pill_style,
     extract_key_climb,
@@ -983,3 +984,110 @@ class TestCardSimplification:
         card = build_card_html(self._make_item())
         assert "feed-card-prediction-details" not in card
         assert "More</summary>" not in card
+
+
+# --- Sprint 019: Row HTML tests ---
+
+
+class TestBuildRowHtml:
+    def _make_item(self, **overrides):
+        from datetime import date
+
+        base = {
+            "display_name": "Banana Belt RR",
+            "location": "Maryhill",
+            "state_province": "WA",
+            "is_upcoming": True,
+            "upcoming_date": date(2026, 3, 15),
+            "days_until": 5,
+            "most_recent_date": None,
+            "race_type": "road_race",
+            "predicted_finish_type": "bunch_sprint",
+            "confidence": "high",
+            "prediction_source": "time_gap",
+            "course_type": "rolling",
+            "distance_m": 85000,
+            "total_gain_m": 850,
+            "drop_rate_pct": 15,
+            "drop_rate_label": "low",
+            "field_size_median": 45,
+            "teammate_names": [],
+            "edition_count": 5,
+            "elevation_sparkline_points": None,
+            "climbs_json": None,
+            "typical_field_duration_min": 120,
+            "rwgps_encoded_polyline": None,
+            "distribution_json": None,
+            "category_distance": None,
+            "category_distance_unit": None,
+            "distance_range": None,
+            "estimated_time_range": None,
+            "hide_estimated_time": False,
+        }
+        base.update(overrides)
+        return base
+
+    def test_feed_row_class(self):
+        row = build_row_html(self._make_item())
+        assert "feed-row" in row
+
+    def test_date_contains_month_and_day(self):
+        row = build_row_html(self._make_item())
+        assert "feed-row-date" in row
+        assert "MAR" in row
+        assert "15" in row
+
+    def test_ai_sez_before_chips(self):
+        row = build_row_html(self._make_item())
+        ai_pos = row.find("feed-row-ai")
+        chips_pos = row.find("feed-card-chips")
+        assert ai_pos > 0
+        assert chips_pos > 0
+        assert ai_pos < chips_pos
+
+    def test_visuals_present_with_polyline(self):
+        try:
+            import polyline as pl
+            coords = [(45.5, -122.6), (45.51, -122.61), (45.52, -122.59)]
+            encoded = pl.encode(coords)
+        except ImportError:
+            pytest.skip("polyline not installed")
+        row = build_row_html(self._make_item(rwgps_encoded_polyline=encoded))
+        assert "feed-row-visuals" in row
+        assert "168px" in row
+
+    def test_no_visuals_two_column(self):
+        row = build_row_html(self._make_item())
+        assert "feed-row-visuals" not in row
+        assert "grid-template-columns:72px 1fr" in row
+
+    def test_html_escaping_category_in_ai_sez(self):
+        row = build_row_html(self._make_item(
+            ai_context={
+                "mode": "single_match",
+                "best_category": "Cat <3> & 'evil'",
+                "ai_sez_text": 'For Cat <3> & \'evil\': the group sprints',
+            },
+        ))
+        assert "<3>" not in row
+        assert "&lt;3&gt;" in row or "&#" in row
+
+    def test_past_date_reduced_opacity(self):
+        from datetime import date
+
+        row = build_row_html(self._make_item(
+            is_upcoming=False,
+            upcoming_date=None,
+            most_recent_date=date(2025, 6, 15),
+            days_until=None,
+        ))
+        assert "opacity:0.45" in row
+
+    def test_ai_context_text_used(self):
+        row = build_row_html(self._make_item(
+            ai_context={
+                "mode": "overall",
+                "ai_sez_text": "Custom AI text here",
+            },
+        ))
+        assert "Custom AI text here" in row

@@ -1056,3 +1056,137 @@ class TestBuildCatDetailMap:
         assert 20 in result
         assert len(result[10]) == 1
         assert result[10][0].category == "Cat 3"
+
+
+# --- Sprint 019: resolve_racer_profile_matches tests ---
+
+
+class TestResolveRacerProfileMatches:
+    SAMPLE_CATS = [
+        "Cat 3",
+        "Cat 3 Women",
+        "Cat 4/5",
+        "Cat 4/5 Women",
+        "Cat 1/2/3 Masters 35+",
+        "Cat 4/5 Masters 35+",
+        "Master 45+",
+        "Men Cat 3",
+        "Women Cat 4",
+    ]
+
+    def test_no_filters_returns_empty(self):
+        result = queries.resolve_racer_profile_matches(self.SAMPLE_CATS)
+        assert result == []
+
+    def test_single_match(self):
+        result = queries.resolve_racer_profile_matches(
+            self.SAMPLE_CATS, cat_level="3", gender="W"
+        )
+        assert len(result) >= 1
+        assert all("3" in c for c in result)
+
+    def test_multiple_matches(self):
+        result = queries.resolve_racer_profile_matches(
+            self.SAMPLE_CATS, cat_level="3"
+        )
+        assert len(result) > 1
+
+    def test_masters_intersection(self):
+        result = queries.resolve_racer_profile_matches(
+            self.SAMPLE_CATS, masters_on=True, masters_age=45
+        )
+        assert len(result) >= 1
+        assert any("aster" in c for c in result)
+
+    def test_sorted_output(self):
+        result = queries.resolve_racer_profile_matches(
+            self.SAMPLE_CATS, cat_level="3"
+        )
+        assert result == sorted(result)
+
+    def test_empty_categories(self):
+        result = queries.resolve_racer_profile_matches(
+            [], cat_level="3", gender="W"
+        )
+        assert result == []
+
+
+# --- Sprint 019: _select_feed_prediction_context tests ---
+
+
+class _FakePred:
+    """Minimal stand-in for SeriesPrediction for context tests."""
+
+    def __init__(
+        self, series_id=1, category=None, predicted_finish_type=None,
+        confidence=None, edition_count=0, prediction_source=None,
+    ):
+        self.series_id = series_id
+        self.category = category
+        self.predicted_finish_type = predicted_finish_type
+        self.confidence = confidence
+        self.edition_count = edition_count
+        self.prediction_source = prediction_source
+
+
+class TestSelectFeedPredictionContext:
+    def test_overall_mode(self):
+        pred_map = {
+            (1, None): _FakePred(
+                1, None, "bunch_sprint", "high", 5, "time_gap"
+            ),
+        }
+        ctx = queries._select_feed_prediction_context(pred_map, 1, [])
+        assert ctx["mode"] == "overall"
+        assert ctx["ai_sez_text"] != ""
+        assert "sprint" in ctx["ai_sez_text"].lower()
+
+    def test_single_match_with_category(self):
+        pred_map = {
+            (1, "Cat 3"): _FakePred(
+                1, "Cat 3", "breakaway_selective", "high", 3, "time_gap"
+            ),
+            (1, None): _FakePred(
+                1, None, "bunch_sprint", "high", 5, "time_gap"
+            ),
+        }
+        ctx = queries._select_feed_prediction_context(
+            pred_map, 1, ["Cat 3"]
+        )
+        assert ctx["mode"] == "single_match"
+        assert "Cat 3" in ctx["ai_sez_text"]
+
+    def test_single_match_fallback_to_null(self):
+        pred_map = {
+            (1, None): _FakePred(
+                1, None, "bunch_sprint", "high", 5, "time_gap"
+            ),
+        }
+        ctx = queries._select_feed_prediction_context(
+            pred_map, 1, ["Cat 3"]
+        )
+        assert ctx["mode"] == "overall"
+        assert "sprint" in ctx["ai_sez_text"].lower()
+
+    def test_multi_match(self):
+        pred_map = {
+            (1, "Cat 3"): _FakePred(
+                1, "Cat 3", "breakaway", "moderate", 2, "time_gap"
+            ),
+            (1, "Cat 3 Women"): _FakePred(
+                1, "Cat 3 Women", "bunch_sprint", "high", 3, "time_gap"
+            ),
+            (1, None): _FakePred(
+                1, None, "bunch_sprint", "high", 5, "time_gap"
+            ),
+        }
+        ctx = queries._select_feed_prediction_context(
+            pred_map, 1, ["Cat 3", "Cat 3 Women"]
+        )
+        assert ctx["mode"] == "multi_match"
+        assert "multiple fields" in ctx["ai_sez_text"].lower()
+
+    def test_fallback_no_predictions(self):
+        ctx = queries._select_feed_prediction_context({}, 1, ["Cat 3"])
+        assert ctx["mode"] == "fallback"
+        assert ctx["ai_sez_text"] == ""
