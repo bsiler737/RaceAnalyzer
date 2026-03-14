@@ -14,7 +14,6 @@ from raceanalyzer.ui.feed_card import (
     format_duration,
     generate_ics,
     generate_share_text,
-    is_beginner_friendly,
     pack_survival_text,
     racer_type_short_label,
     render_distribution_sparkline,
@@ -105,32 +104,6 @@ class TestRacerTypeShortLabel:
 
     def test_none_returns_empty(self):
         assert racer_type_short_label(None, None) == ""
-
-
-class TestIsBeginnerFriendly:
-    def test_friendly_race(self):
-        item = {
-            "drop_rate_pct": 10,
-            "predicted_finish_type": "bunch_sprint",
-            "distance_m": 40000,
-        }
-        friendly, reasons = is_beginner_friendly(item)
-        assert friendly is True
-        assert len(reasons) >= 1
-
-    def test_selective_race(self):
-        item = {
-            "drop_rate_pct": 40,
-            "predicted_finish_type": "gc_selective",
-            "distance_m": 120000,
-        }
-        friendly, reasons = is_beginner_friendly(item)
-        assert friendly is False
-
-    def test_missing_data_not_friendly(self):
-        item = {}
-        friendly, reasons = is_beginner_friendly(item)
-        assert friendly is False
 
 
 class TestExtractKeyClimb:
@@ -324,7 +297,8 @@ class TestBuildCardHtml:
         # Should not error out
         assert "feed-card-inner" in card
 
-    def test_beginner_friendly_badge_shown(self):
+    def test_no_beginner_badge(self):
+        """Sprint 018: Beginner-friendly badge removed."""
         item = {
             "display_name": "Easy Crit",
             "location": "Portland",
@@ -352,8 +326,7 @@ class TestBuildCardHtml:
             "distribution_json": None,
         }
         card = build_card_html(item)
-        assert "Beginner-friendly" in card
-        assert "Sprinters" in card
+        assert "Beginner-friendly" not in card
         assert "Jake" in card
 
 
@@ -721,8 +694,8 @@ class TestTwoColumnLayout:
         assert "margin-left:6px" in card
         assert "in 3 days" in card
 
-    def test_prediction_details_in_details_element(self):
-        """CL-03: Prediction details are in a <details> element below fold."""
+    def test_no_prediction_details_section(self):
+        """Sprint 018: Prediction details <details> section removed."""
         item = self._make_item(
             drop_rate_pct=15,
             predicted_finish_type="bunch_sprint",
@@ -730,29 +703,14 @@ class TestTwoColumnLayout:
             distance_m=30000,
         )
         card = build_card_html(item)
-        assert "feed-card-prediction-details" in card
-        assert "<details" in card
-        assert "More details" in card
+        assert "feed-card-prediction-details" not in card
+        assert "Beginner-friendly" not in card
 
-    def test_prediction_details_not_in_main_card(self):
-        """CL-03: Confidence/beginner-friendly NOT in main card body."""
-        item = self._make_item(
-            drop_rate_pct=10,
-            predicted_finish_type="bunch_sprint",
-            course_type="flat",
-            distance_m=30000,
-        )
-        card = build_card_html(item)
-        # "Beginner-friendly" should only appear inside <details>
-        left_col = card.split("feed-card-prediction-details")[0]
-        assert "Beginner-friendly" not in left_col
-
-    def test_info_icon_present(self):
-        """CL-05: Info icon is an HTML <details> element."""
+    def test_no_info_icon(self):
+        """Sprint 018: Info icon removed."""
         item = self._make_item()
         card = build_card_html(item)
-        assert "feed-card-info" in card
-        assert "<summary" in card
+        assert "feed-card-info" not in card
 
     def test_responsive_css_in_styles(self):
         """Sprint 015: Responsive CSS rule exists for mobile collapse."""
@@ -834,3 +792,194 @@ class TestResolveRacerProfile:
         )
         assert result is None
         assert exact is False
+
+
+# --- Sprint 018: Race length display tests ---
+
+
+class TestRaceLengthDisplay:
+    """Sprint 018: Category-specific distance in chips."""
+
+    def _make_item(self, **overrides):
+        base = {
+            "display_name": "Test Race",
+            "location": None,
+            "state_province": None,
+            "is_upcoming": True,
+            "upcoming_date": None,
+            "days_until": 5,
+            "most_recent_date": None,
+            "race_type": "road_race",
+            "predicted_finish_type": "bunch_sprint",
+            "confidence": "high",
+            "prediction_source": "time_gap",
+            "course_type": "rolling",
+            "distance_m": 85000,
+            "total_gain_m": 850,
+            "drop_rate_pct": 15,
+            "drop_rate_label": "low",
+            "field_size_median": 45,
+            "teammate_names": [],
+            "edition_count": 5,
+            "elevation_sparkline_points": None,
+            "climbs_json": None,
+            "typical_field_duration_min": 120,
+            "rwgps_encoded_polyline": None,
+            "distribution_json": None,
+            "category_distance": None,
+            "category_distance_unit": None,
+            "distance_range": None,
+            "estimated_time_range": None,
+            "hide_estimated_time": False,
+        }
+        base.update(overrides)
+        return base
+
+    def test_category_specific_miles(self):
+        item = self._make_item(category_distance=50.0, category_distance_unit="miles")
+        card = build_card_html(item)
+        assert "50 mi" in card
+
+    def test_category_specific_km(self):
+        item = self._make_item(category_distance=80.0, category_distance_unit="km")
+        card = build_card_html(item)
+        assert "80 km" in card
+
+    def test_category_specific_minutes(self):
+        item = self._make_item(category_distance=60.0, category_distance_unit="minutes")
+        card = build_card_html(item)
+        assert "60 min" in card
+
+    def test_distance_range(self):
+        item = self._make_item(distance_range="30-60 mi")
+        card = build_card_html(item)
+        assert "30-60 mi" in card
+
+    def test_fallback_to_course_distance(self):
+        item = self._make_item(distance_m=85000)
+        card = build_card_html(item)
+        assert "85 km" in card
+
+    def test_category_distance_priority_over_range(self):
+        item = self._make_item(
+            category_distance=50.0,
+            category_distance_unit="miles",
+            distance_range="30-60 mi",
+        )
+        card = build_card_html(item)
+        assert "50 mi" in card
+
+
+class TestEstimatedTime:
+    """Sprint 018: Estimated time display in chips."""
+
+    def _make_item(self, **overrides):
+        base = {
+            "display_name": "Test Race",
+            "location": None,
+            "state_province": None,
+            "is_upcoming": True,
+            "upcoming_date": None,
+            "days_until": 5,
+            "most_recent_date": None,
+            "race_type": "road_race",
+            "predicted_finish_type": "bunch_sprint",
+            "confidence": "high",
+            "prediction_source": "time_gap",
+            "course_type": "rolling",
+            "distance_m": 85000,
+            "total_gain_m": 850,
+            "drop_rate_pct": 15,
+            "drop_rate_label": "low",
+            "field_size_median": 45,
+            "teammate_names": [],
+            "edition_count": 5,
+            "elevation_sparkline_points": None,
+            "climbs_json": None,
+            "typical_field_duration_min": 120,
+            "rwgps_encoded_polyline": None,
+            "distribution_json": None,
+            "category_distance": None,
+            "category_distance_unit": None,
+            "distance_range": None,
+            "estimated_time_range": None,
+            "hide_estimated_time": False,
+        }
+        base.update(overrides)
+        return base
+
+    def test_estimated_time_range_shown(self):
+        item = self._make_item(estimated_time_range="~1h 30m - ~3h 00m")
+        card = build_card_html(item)
+        assert "~1h 30m - ~3h 00m" in card
+
+    def test_hidden_for_crits(self):
+        item = self._make_item(
+            race_type="criterium",
+            hide_estimated_time=True,
+            typical_field_duration_min=45,
+        )
+        card = build_card_html(item)
+        assert "~45m" not in card
+        assert "~? min" not in card
+
+    def test_hidden_for_duration_races(self):
+        item = self._make_item(
+            hide_estimated_time=True,
+            typical_field_duration_min=60,
+        )
+        card = build_card_html(item)
+        assert "~1h 00m" not in card
+
+
+class TestCardSimplification:
+    """Sprint 018: Verify removed elements are gone."""
+
+    def _make_item(self, **overrides):
+        base = {
+            "display_name": "Test Race",
+            "location": "Portland",
+            "state_province": "OR",
+            "is_upcoming": True,
+            "upcoming_date": None,
+            "days_until": 5,
+            "most_recent_date": None,
+            "race_type": "road_race",
+            "predicted_finish_type": "bunch_sprint",
+            "confidence": "high",
+            "prediction_source": "time_gap",
+            "course_type": "flat",
+            "distance_m": 30000,
+            "total_gain_m": 50,
+            "drop_rate_pct": 5,
+            "drop_rate_label": "low",
+            "field_size_median": 40,
+            "teammate_names": [],
+            "edition_count": 5,
+            "elevation_sparkline_points": None,
+            "climbs_json": None,
+            "typical_field_duration_min": 45,
+            "rwgps_encoded_polyline": None,
+            "distribution_json": None,
+            "category_distance": None,
+            "category_distance_unit": None,
+            "distance_range": None,
+            "estimated_time_range": None,
+            "hide_estimated_time": False,
+        }
+        base.update(overrides)
+        return base
+
+    def test_no_info_icon(self):
+        card = build_card_html(self._make_item())
+        assert "feed-card-info" not in card
+
+    def test_no_beginner_badge(self):
+        card = build_card_html(self._make_item())
+        assert "Beginner-friendly" not in card
+        assert "feed-card-beginner" not in card
+
+    def test_no_prediction_details(self):
+        card = build_card_html(self._make_item())
+        assert "feed-card-prediction-details" not in card
+        assert "More</summary>" not in card

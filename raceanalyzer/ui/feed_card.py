@@ -124,7 +124,9 @@ def countdown_pill_style(days_until: Optional[int]) -> tuple[str, str, str]:
     if days_until <= 14:
         return (f"in {days_until} days", "#F57C00", "#fff")
     weeks = days_until // 7
-    return (f"in {weeks} weeks", "var(--secondary-background-color, #f0f2f6)", "inherit")
+    bg = "var(--secondary-background-color, #f0f2f6)"
+    fg = "var(--text-color, #555)"
+    return (f"in {weeks} weeks", bg, fg)
 
 
 # --- Pack survival text ---
@@ -209,40 +211,6 @@ def racer_type_short_label(
 
 
 # --- Beginner-friendly logic ---
-
-
-def is_beginner_friendly(item: dict) -> tuple[bool, list[str]]:
-    """Determine if a race is beginner-friendly. Returns (bool, reasons[])."""
-    reasons = []
-    drop_rate = item.get("drop_rate_pct")
-    finish_type = item.get("predicted_finish_type")
-    distance_m = item.get("distance_m")
-
-    # Drop rate check
-    if drop_rate is not None and drop_rate <= 25:
-        reasons.append("Low drop rate")
-    elif drop_rate is not None and drop_rate > 25:
-        return (False, [])
-
-    # Non-selective finish types
-    non_selective = {
-        "bunch_sprint", "small_group_sprint", "reduced_sprint", "mixed", "individual_tt"
-    }
-    if finish_type and finish_type in non_selective:
-        reasons.append("Non-selective finish")
-    elif finish_type and finish_type not in non_selective:
-        return (False, [])
-
-    # Moderate distance (under 100 km)
-    if distance_m is not None and distance_m <= 100_000:
-        reasons.append("Moderate distance")
-    elif distance_m is not None and distance_m > 100_000:
-        return (False, [])
-
-    # Need at least one positive signal
-    if reasons:
-        return (True, reasons)
-    return (False, [])
 
 
 # --- Key climb extract ---
@@ -515,18 +483,12 @@ def inject_feed_styles():
         100% { background: rgba(255, 111, 0, 0.08); }
     }
 
-    /* Beginner-friendly badge */
-    .feed-card-beginner {
-        animation: feed-beginner-pop 0.3s ease-out;
-    }
-    @keyframes feed-beginner-pop {
-        0% { transform: scale(0.9); opacity: 0.5; }
-        100% { transform: scale(1); opacity: 1; }
-    }
-
     /* Dark mode surface differentiation (VD-05) */
     @media (prefers-color-scheme: dark) {
         .feed-card-inner {
+            color: var(--text-color, #e0e0e0);
+        }
+        .feed-card-inner span {
             color: var(--text-color, #e0e0e0);
         }
         .feed-card-chip {
@@ -543,6 +505,15 @@ def inject_feed_styles():
         transition: max-height 300ms ease, opacity 200ms ease;
     }
 
+    /* Card max-width and two-up grid layout */
+    .feed-cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+        gap: 16px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
     /* Sprint 015: Two-column card responsive collapse (CL-04) */
     @media (max-width: 480px) {
         .feed-card-inner {
@@ -552,19 +523,11 @@ def inject_feed_styles():
             flex-direction: row !important;
             justify-content: center;
         }
+        .feed-cards-grid {
+            grid-template-columns: 1fr;
+        }
     }
 
-    /* Sprint 015: Info icon disclosure (CL-05) */
-    .feed-card-info summary::-webkit-details-marker { display: none; }
-    .feed-card-info summary::marker { display: none; content: ""; }
-
-    /* Sprint 015: Prediction details disclosure (CL-03) */
-    .feed-card-prediction-details summary::-webkit-details-marker { display: none; }
-    .feed-card-prediction-details summary::marker { display: none; content: ""; }
-    .feed-card-prediction-details[open] summary span {
-        transform: rotate(90deg);
-        display: inline-block;
-    }
     </style>
     """,
         unsafe_allow_html=True,
@@ -653,30 +616,13 @@ def build_card_html(item: dict) -> str:
     parts.append(
         f'<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;'
         f'max-width:calc(100% - 30px);">'
-        f'<span style="font-weight:600;font-size:1.05em;'
+        f'<span style="font-weight:700;font-size:1.3em;line-height:1.2;'
         f'overflow:hidden;text-overflow:ellipsis;">{name}</span>'
         f'{countdown_pill}'
         f'</div>'
     )
 
-    # --- Registration urgency badge (VD-07) ---
-    days = item.get("days_until")
-    if item.get("is_upcoming") and days is not None and days <= 7:
-        if days <= 3:
-            urg_bg = "#D32F2F"
-            urg_text = f"Race in {days} day{'s' if days != 1 else ''}!"
-        else:
-            urg_bg = "#F57C00"
-            urg_text = f"Race in {days} days"
-        parts.append(
-            f'<div style="margin-top:2px;">'
-            f'<span style="background:{urg_bg};color:#fff;'
-            f'padding:1px 8px;border-radius:4px;'
-            f'font-size:0.75em;font-weight:600;">'
-            f'{html.escape(urg_text)}</span></div>'
-        )
-
-    # --- Row 2: Location + Race type badge ---
+    # --- Row 2: Location ---
     loc_parts = []
     if item.get("location"):
         loc_parts.append(html.escape(str(item["location"])))
@@ -693,15 +639,21 @@ def build_card_html(item: dict) -> str:
         rt_badge = (
             f'<span style="display:inline-flex;align-items:center;gap:3px;'
             f'background:var(--secondary-background-color,#f0f2f6);padding:1px 8px;'
-            f'border-radius:4px;font-size:0.8em;">'
+            f'border-radius:4px;font-size:0.8em;'
+            f'color:var(--text-color,#333);">'
             f'{rt_icon} {rt_name}</span>'
         )
 
-    if loc_str or rt_badge:
+    if loc_str:
         parts.append(
-            f'<div style="display:flex;align-items:center;gap:8px;margin-top:2px;'
-            f'font-size:0.85em;color:var(--text-color,#666);flex-wrap:wrap;">'
+            f'<div style="margin-top:2px;'
+            f'font-size:0.85em;color:var(--text-color,#666);">'
             f'{loc_str}'
+            f'</div>'
+        )
+    if rt_badge:
+        parts.append(
+            f'<div style="margin-top:3px;">'
             f'{rt_badge}'
             f'</div>'
         )
@@ -721,8 +673,16 @@ def build_card_html(item: dict) -> str:
         if len(teammates) <= 2:
             names = ", ".join(html.escape(n) for n in teammates)
             team_text = f"{names} registered"
+        elif len(teammates) <= 4:
+            first_two = ", ".join(html.escape(n) for n in teammates[:2])
+            team_text = (
+                f"{first_two} + {len(teammates) - 2} more registered"
+            )
         else:
-            team_text = f"{len(teammates)} teammates registered"
+            first_two = ", ".join(html.escape(n) for n in teammates[:2])
+            team_text = (
+                f"{first_two} + {len(teammates) - 2} more registered"
+            )
         parts.append(
             '<div class="feed-card-teammate" '
             'style="display:inline-flex;align-items:center;'
@@ -784,6 +744,8 @@ def build_card_html(item: dict) -> str:
             f'<div class="feed-card-prediction" style="margin-top:6px;font-weight:500;'
             f'font-size:0.92em;display:flex;align-items:center;gap:6px;">'
             f'{ft_icon_20}'
+            f'<span style="color:var(--text-color,#888);font-weight:400;'
+            f'font-size:0.85em;">AI sez:</span> '
             f'<span>{html.escape(wte)}</span>'
             f'</div>'
         )
@@ -805,40 +767,6 @@ def build_card_html(item: dict) -> str:
 
     parts.append('</div>')  # close feed-card-inner (grid)
 
-    # === CL-05: Info icon (HTML <details>) in upper-right ===
-    info_items = _build_info_items(item)
-    if info_items:
-        info_content = "".join(info_items)
-        parts.append(
-            '<details class="feed-card-info" style="position:absolute;top:8px;right:8px;'
-            'z-index:5;">'
-            '<summary style="cursor:pointer;font-size:14px;width:20px;height:20px;'
-            'display:flex;align-items:center;justify-content:center;'
-            'border-radius:50%;background:var(--secondary-background-color,#f0f2f6);'
-            'color:var(--text-color,#666);list-style:none;font-weight:600;">i</summary>'
-            '<div style="position:absolute;right:0;top:24px;background:'
-            'var(--background-color,#fff);border:1px solid '
-            'var(--secondary-background-color,#e0e0e0);'
-            'border-radius:8px;padding:8px 12px;min-width:200px;max-width:300px;'
-            'box-shadow:0 4px 12px rgba(0,0,0,0.1);font-size:0.78em;z-index:10;">'
-            f'{info_content}'
-            '</div></details>'
-        )
-
-    # === CL-03: Prediction details below fold in <details> ===
-    detail_parts = _build_prediction_details(item, ft, drop_pct)
-    if detail_parts:
-        detail_content = "".join(detail_parts)
-        parts.append(
-            '<details class="feed-card-prediction-details" style="margin-top:6px;">'
-            '<summary style="cursor:pointer;font-size:0.82em;'
-            'color:var(--text-color,#888);list-style:none;'
-            'display:flex;align-items:center;gap:4px;">'
-            '<span style="font-size:10px;">&#9654;</span> More details</summary>'
-            f'<div style="margin-top:4px;padding-left:4px;">{detail_content}</div>'
-            '</details>'
-        )
-
     return "\n".join(parts)
 
 
@@ -856,7 +784,18 @@ def _build_chip_row(item: dict) -> list[str]:
         '<line x1="13" y1="5" x2="13" y2="9"'
         ' stroke="currentColor" stroke-width="1.5"/></svg>'
     )
-    if item.get("distance_m") is not None:
+    # Sprint 018: Prefer category-specific distance, then range, then Course.distance_m
+    cat_dist = item.get("category_distance")
+    cat_unit = item.get("category_distance_unit")
+    dist_range = item.get("distance_range")
+    if cat_dist is not None:
+        from raceanalyzer.queries import _format_unit_label
+        unit_label = _format_unit_label(cat_unit)
+        dist_val = int(cat_dist) if cat_dist == int(cat_dist) else f"{cat_dist:.1f}"
+        chips.append(_chip("distance", _DIST_ICON, f"{dist_val} {unit_label}"))
+    elif dist_range:
+        chips.append(_chip("distance", _DIST_ICON, html.escape(dist_range)))
+    elif item.get("distance_m") is not None:
         km = item["distance_m"] / 1000
         chips.append(_chip("distance", _DIST_ICON, f"{km:.0f} km"))
     elif is_upcoming:
@@ -903,6 +842,7 @@ def _build_chip_row(item: dict) -> list[str]:
         ))
 
     if item.get("field_size_median"):
+        fs_label = f"{item['field_size_median']} riders"
         chips.append(_chip(
             "field_size",
             '<svg width="14" height="14" viewBox="0 0 14 14">'
@@ -911,113 +851,38 @@ def _build_chip_row(item: dict) -> list[str]:
             ' opacity="0.6"/>'
             '<circle cx="7" cy="10" r="2" fill="currentColor"'
             ' opacity="0.4"/></svg>',
-            f"{item['field_size_median']} riders",
+            fs_label,
         ))
 
-    dur_text = format_duration(item.get("typical_field_duration_min"))
-    if dur_text:
-        chips.append(_chip(
-            "duration",
-            '<svg width="14" height="14" viewBox="0 0 14 14">'
-            '<circle cx="7" cy="7" r="5.5"'
-            ' fill="none" stroke="currentColor"'
-            ' stroke-width="1.2"/>'
-            '<line x1="7" y1="7" x2="7" y2="4"'
-            ' stroke="currentColor" stroke-width="1.2"'
-            ' stroke-linecap="round"/>'
-            '<line x1="7" y1="7" x2="10" y2="7"'
-            ' stroke="currentColor" stroke-width="1"'
-            ' stroke-linecap="round"/></svg>',
-            dur_text,
-        ))
-    elif is_upcoming:
-        chips.append(
-            '<span class="feed-card-chip" style="opacity:0.5;'
-            'display:inline-flex;align-items:center;gap:3px;'
-            'background:var(--secondary-background-color,#f0f2f6);'
-            'padding:2px 8px;border-radius:4px;'
-            'color:var(--text-color,#444);">'
-            '\U0001f550 ~? min</span>'
-        )
+    # Sprint 018: Hide estimated time for crits and duration-based races
+    _DUR_ICON = (
+        '<svg width="14" height="14" viewBox="0 0 14 14">'
+        '<circle cx="7" cy="7" r="5.5"'
+        ' fill="none" stroke="currentColor"'
+        ' stroke-width="1.2"/>'
+        '<line x1="7" y1="7" x2="7" y2="4"'
+        ' stroke="currentColor" stroke-width="1.2"'
+        ' stroke-linecap="round"/>'
+        '<line x1="7" y1="7" x2="10" y2="7"'
+        ' stroke="currentColor" stroke-width="1"'
+        ' stroke-linecap="round"/></svg>'
+    )
+    if not item.get("hide_estimated_time"):
+        est_range = item.get("estimated_time_range")
+        dur_text = est_range or format_duration(item.get("typical_field_duration_min"))
+        if dur_text:
+            chips.append(_chip("duration", _DUR_ICON, html.escape(dur_text)))
+        elif is_upcoming:
+            chips.append(
+                '<span class="feed-card-chip" style="opacity:0.5;'
+                'display:inline-flex;align-items:center;gap:3px;'
+                'background:var(--secondary-background-color,#f0f2f6);'
+                'padding:2px 8px;border-radius:4px;'
+                'color:var(--text-color,#444);">'
+                '\U0001f550 ~? min</span>'
+            )
 
     return chips
-
-
-def _build_info_items(item: dict) -> list[str]:
-    """Build HTML content for the info icon disclosure (CL-05)."""
-    items = []
-    for chip_key, explanation in CHIP_TOOLTIPS.items():
-        if _card_has_chip(item, chip_key):
-            label = chip_key.replace("_", " ").title()
-            items.append(
-                f'<div style="margin-bottom:4px;">'
-                f'<strong>{html.escape(label)}</strong>: '
-                f'{html.escape(explanation)}</div>'
-            )
-    return items
-
-
-def _build_prediction_details(
-    item: dict, ft: str, drop_pct: Optional[float]
-) -> list[str]:
-    """Build prediction detail HTML for the below-fold <details> section (CL-03)."""
-    detail_parts = []
-
-    # Confidence indicator
-    conf = confidence_text(
-        item.get("confidence"),
-        item.get("edition_count", 0),
-        prediction_source=item.get("prediction_source"),
-    )
-    if conf:
-        detail_parts.append(
-            f'<div style="font-size:0.78em;color:var(--text-color,#888);margin-top:2px;">'
-            f'{html.escape(conf)}</div>'
-        )
-
-    # Beginner-friendly badge
-    friendly, reasons = is_beginner_friendly(item)
-    if friendly:
-        detail_parts.append(
-            '<div style="margin-top:4px;">'
-            '<span class="feed-card-beginner"'
-            ' style="display:inline-block;background:#E8F5E9;'
-            'color:#2E7D32;padding:2px 8px;border-radius:4px;'
-            'font-size:0.78em;font-weight:500;">'
-            '\u2705 Beginner-friendly</span></div>'
-        )
-
-    # Pack survival odds
-    survival = pack_survival_text(drop_pct, ft if ft != "unknown" else None)
-    if survival:
-        detail_parts.append(
-            f'<div style="font-size:0.8em;color:var(--text-color,#666);margin-top:2px;">'
-            f'{html.escape(survival)}</div>'
-        )
-
-    # Who does well here
-    racer_label = racer_type_short_label(
-        item.get("course_type"), ft if ft != "unknown" else None
-    )
-    if racer_label:
-        detail_parts.append(
-            '<div style="font-size:0.78em;color:var(--text-color,#888);'
-            f'margin-top:2px;">Suits: {html.escape(racer_label)}</div>'
-        )
-
-    # Climb highlight
-    climb_text = item.get("climb_highlight") or extract_key_climb(item.get("climbs_json"))
-    if climb_text:
-        detail_parts.append(
-            '<div style="font-size:0.78em;color:var(--text-color,#666);'
-            'margin-top:2px;display:flex;align-items:center;gap:4px;">'
-            '<svg width="12" height="12" viewBox="0 0 12 12">'
-            '<path d="M1 10 L6 2 L11 10"'
-            ' fill="none" stroke="#F57C00" stroke-width="1.5"/></svg>'
-            f'{html.escape(climb_text)}</div>'
-        )
-
-    return detail_parts
 
 
 def _chip(chip_type: str, icon_svg: str, label: str) -> str:
