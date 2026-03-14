@@ -82,6 +82,14 @@ def render():
     # Team name from profile dict (Sprint 018: moved into profile container)
     team_name = racer_profile.get("team_name") if racer_profile else None
 
+    # Build human-readable profile label for AI sez text
+    racer_profile_label = queries.build_racer_profile_label(
+        cat_level=racer_profile.get("cat_level") if racer_profile else None,
+        gender=racer_profile.get("gender") if racer_profile else None,
+        masters_on=racer_profile.get("masters_on", False) if racer_profile else False,
+        masters_age=racer_profile.get("masters_age") if racer_profile else None,
+    )
+
     # --- Search bar ---
     search_query = st.query_params.get("q", "")
     if not isolated_series_id:
@@ -109,6 +117,7 @@ def render():
         all_items = queries.get_feed_items_batch(
             session, category=category,
             matched_categories=matched_categories or None,
+            racer_profile_label=racer_profile_label,
             team_name=team_name,
         )
         items = [i for i in all_items if i["series_id"] == isolated_series_id]
@@ -120,6 +129,7 @@ def render():
             session,
             category=category,
             matched_categories=matched_categories or None,
+            racer_profile_label=racer_profile_label,
             search_query=search_query or None,
             discipline_filter=chip_discipline,
             state_filter=state_filter,
@@ -236,8 +246,9 @@ def render():
     for header, group_items in upcoming_groups:
         st.markdown(
             f'<div class="feed-month-header" style="position:sticky;top:0;z-index:10;'
-            f'background:var(--background-color,#fff);padding:8px 12px;'
-            f'border-bottom:1px solid var(--secondary-background-color,#e0e0e0);">'
+            f'background:linear-gradient(90deg, #FFF3E0, transparent);'
+            f'padding:8px 12px;border-radius:8px;'
+            f'border-left:4px solid #FFB74D;">'
             f'<span style="font-size:1.1em;font-weight:600;'
             f'color:var(--text-color,#333);">'
             f'{html.escape(header)}</span>'

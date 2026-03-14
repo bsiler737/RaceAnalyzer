@@ -1015,6 +1015,7 @@ def get_race_preview(
     series_id: int,
     category: Optional[str] = None,
     matched_categories: Optional[list[str]] = None,
+    racer_profile_label: str = "",
 ) -> Optional[dict]:
     """Assemble all data for the Race Preview page.
 
@@ -1228,6 +1229,7 @@ def get_race_preview(
         preview_pred_map, series_id,
         matched_categories=matched_categories or [],
         course_type=ct,
+        racer_profile_label=racer_profile_label,
     )
 
     # Build field_forecasts for multi-match preview
@@ -1859,6 +1861,31 @@ def _format_time_range(
     return f"{_fmt_duration(lo)} - {_fmt_duration(hi)}"
 
 
+def build_racer_profile_label(
+    cat_level: Optional[str] = None,
+    gender: Optional[str] = None,
+    masters_on: bool = False,
+    masters_age: Optional[int] = None,
+) -> str:
+    """Build a human-readable label from racer profile selections.
+
+    Examples: "Cat 3 men", "Cat 4/5 women", "Cat 3 masters 45+"
+    """
+    parts = []
+    if cat_level:
+        parts.append(f"Cat {cat_level}")
+    if gender == "M":
+        parts.append("men")
+    elif gender == "W":
+        parts.append("women")
+    if masters_on:
+        if masters_age:
+            parts.append(f"masters {masters_age}+")
+        else:
+            parts.append("masters")
+    return " ".join(parts) if parts else ""
+
+
 # --- Sprint 019: Category-aware prediction context ---
 
 _CONFIDENCE_RANK = {"high": 3, "moderate": 2, "low": 1, None: 0}
@@ -1874,6 +1901,7 @@ def _select_feed_prediction_context(
     series_id: int,
     matched_categories: list[str],
     course_type: Optional[str] = None,
+    racer_profile_label: str = "",
 ) -> dict:
     """Build an ai_context dict for a feed item.
 
@@ -1979,10 +2007,9 @@ def _select_feed_prediction_context(
             best_ft = best_cat_pred.predicted_finish_type
             best_source = getattr(best_cat_pred, "prediction_source", None)
 
-        selected_cat_label = matched_categories[0] if matched_categories else ""
         ctx = {
             "mode": "multi_match",
-            "selected_category": selected_cat_label,
+            "selected_category": racer_profile_label or "",
             "matched_categories": matched_categories,
             "best_category": None,
             "best_finish_type": best_ft,
@@ -2029,6 +2056,7 @@ def get_feed_items_batch(
     *,
     category=None,
     matched_categories=None,
+    racer_profile_label="",
     search_query=None,
     discipline_filter=None,
     race_type_filter=None,
@@ -2284,6 +2312,7 @@ def get_feed_items_batch(
             pred_map, sid,
             matched_categories=matched_categories or [],
             course_type=course_type,
+            racer_profile_label=racer_profile_label,
         )
         item["ai_context"] = ai_context
 

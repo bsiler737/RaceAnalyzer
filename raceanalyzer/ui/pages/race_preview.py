@@ -68,10 +68,17 @@ def render():
                 if resolved:
                     selected_cat = resolved
 
+    racer_profile_label = queries.build_racer_profile_label(
+        cat_level=st.session_state.get("cat_level"),
+        gender=st.session_state.get("gender"),
+        masters_on=st.session_state.get("masters_on", False),
+        masters_age=st.session_state.get("masters_age"),
+    )
     preview = queries.get_race_preview(
         session, int(series_id),
         category=selected_cat,
         matched_categories=matched_categories or None,
+        racer_profile_label=racer_profile_label,
     )
     if preview is None:
         render_empty_state("Series not found.")

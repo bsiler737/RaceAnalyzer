@@ -953,7 +953,7 @@ class TestBuildAiSezText:
 
         ctx = {
             "mode": "multi_match",
-            "selected_category": "Cat 3",
+            "selected_category": "Cat 3 men",
             "matched_categories": ["Cat 3", "Cat 3 Women", "Cat 3 Masters"],
             "best_finish_type": "bunch_sprint",
             "overall_finish_type": "bunch_sprint",
@@ -962,6 +962,7 @@ class TestBuildAiSezText:
             "course_type": None,
         }
         result = build_ai_sez_text(ctx)
+        assert "Cat 3 men" in result
         assert "3 fields" in result
         assert "most fields" in result.lower()
         assert "sprint" in result.lower()
