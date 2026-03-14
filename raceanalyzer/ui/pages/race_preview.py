@@ -10,6 +10,7 @@ from raceanalyzer import queries
 from raceanalyzer.elevation import COURSE_TYPE_DESCRIPTIONS, course_type_display
 from raceanalyzer.queries import finish_type_display_name
 from raceanalyzer.ui.components import (
+    _init_filters_from_params,
     render_climb_breakdown,
     render_climb_legend,
     render_confidence_badge,
@@ -19,12 +20,16 @@ from raceanalyzer.ui.components import (
     render_selectivity_badge,
     render_similar_races,
     render_team_startlist,
+    resolve_effective_category,
 )
 from raceanalyzer.ui.maps import render_course_map, render_interactive_course_profile
 
 
 def render():
     session = st.session_state.db_session
+
+    # Sprint 018: Initialize filters from URL params
+    _init_filters_from_params()
 
     # Back navigation (restore feed scroll position)
     if st.button("Back to Feed"):
@@ -41,9 +46,17 @@ def render():
         render_empty_state("No series selected for preview.")
         return
 
+    # Sprint 018: Resolve category from racer profile session state
     selected_cat = st.query_params.get("category")
     if not selected_cat:
         selected_cat = st.session_state.get("global_category")
+    # If still no explicit category, try resolving from racer profile
+    if not selected_cat:
+        all_cats = queries.get_categories(session)
+        if all_cats:
+            resolved, _ = resolve_effective_category(all_cats)
+            if resolved:
+                selected_cat = resolved
 
     preview = queries.get_race_preview(session, int(series_id), category=selected_cat)
     if preview is None:
@@ -288,9 +301,17 @@ def render():
             scary_racers = queries.get_scary_racers(
                 session, latest_race.id, category=selected_cat
             )
-            if scary_racers:
-                for racer in scary_racers[:10]:
-                    render_scary_racer_card(racer)
+            if not scary_racers.empty:
+                source = scary_racers["source"].iloc[0]
+                if source == "startlist":
+                    st.caption("Based on registered riders")
+                else:
+                    st.caption(
+                        "Based on past editions "
+                        "(no startlist imported yet)"
+                    )
+                for _, racer in scary_racers.iterrows():
+                    render_scary_racer_card(racer.to_dict())
             else:
                 st.info("No historical results yet.")
         else:

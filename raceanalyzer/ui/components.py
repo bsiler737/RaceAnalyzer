@@ -480,9 +480,9 @@ def render_series_tile_grid(tiles_df, key_prefix: str = "cal"):
 # --- Scary Racer rendering ---
 
 _THREAT_LEVELS = [
-    (80, "Apex Predator", "#dc3545"),
-    (50, "Very Dangerous", "#fd7e14"),
-    (25, "Dangerous", "#FFC107"),
+    (500, "Apex Predator", "#dc3545"),
+    (400, "Very Dangerous", "#fd7e14"),
+    (300, "Dangerous", "#FFC107"),
     (0, "One to Watch", "#6c757d"),
 ]
 
@@ -680,126 +680,49 @@ def render_climb_legend():
 
 
 def render_feed_filters(session) -> dict:
-    """Render sidebar filters: discipline, race type, state/region.
+    """Render state/province filter pills in the top chip bar area.
 
-    Returns dict with filter values. Syncs to st.query_params.
+    Sprint 018: Advanced Filters expander removed entirely.
+    State/province filtering now handled by _render_filter_chips in feed.py.
+    Returns empty dict for backward compatibility.
     """
-    from raceanalyzer.queries import (
-        RACE_TYPE_TO_DISCIPLINE,
-        Discipline,
-        race_type_display_name,
+    return {}
+
+
+def _init_filters_from_params():
+    """On page load, seed session state from URL params if not already set."""
+    for key in ("cat", "gender", "masters", "age", "team", "states"):
+        if key not in st.session_state and key in st.query_params:
+            st.session_state[key] = st.query_params[key]
+
+
+def resolve_effective_category(categories: list[str]) -> tuple:
+    """Read racer profile from session state, resolve to best-matching category.
+
+    Returns (category_string | None, is_exact_match).
+    """
+    cat_level = st.session_state.get("cat")
+    gender = st.session_state.get("gender")
+    masters_on = st.session_state.get("masters") == "1"
+    masters_age = int(st.session_state.get("age", "0") or "0") or None
+    return queries.resolve_racer_profile(
+        categories,
+        cat_level=cat_level,
+        gender=gender,
+        masters_on=masters_on,
+        masters_age=masters_age,
     )
-
-    # Sprint 014: SF-01 — advanced filters in expander
-    with st.sidebar.expander("Advanced Filters", expanded=False):
-        # Discipline filter
-        disc_options = [
-            d.value for d in Discipline if d != Discipline.UNKNOWN
-        ]
-        current_disc = (
-            st.query_params.get("discipline", "").split(",")
-            if st.query_params.get("discipline")
-            else []
-        )
-        current_disc = [d for d in current_disc if d in disc_options]
-
-        selected_disc = st.multiselect(
-            "Discipline",
-            options=disc_options,
-            default=current_disc or disc_options,
-            format_func=lambda x: x.title(),
-            key="filter_discipline",
-        )
-
-        # Sync to query params
-        if set(selected_disc) != set(disc_options):
-            new_val = ",".join(selected_disc)
-            if st.query_params.get("discipline") != new_val:
-                st.query_params["discipline"] = new_val
-        elif "discipline" in st.query_params:
-            del st.query_params["discipline"]
-
-        # Race type filter (conditional on discipline)
-        available_types = []
-        for rt, d in RACE_TYPE_TO_DISCIPLINE.items():
-            if d.value in selected_disc:
-                available_types.append(rt.value)
-
-        current_rt = (
-            st.query_params.get("race_type", "").split(",")
-            if st.query_params.get("race_type")
-            else []
-        )
-        current_rt = [r for r in current_rt if r in available_types]
-
-        if available_types:
-            selected_rt = st.multiselect(
-                "Race Type",
-                options=available_types,
-                default=current_rt or available_types,
-                format_func=lambda x: race_type_display_name(x),
-                key="filter_race_type",
-            )
-            if set(selected_rt) != set(available_types):
-                new_val = ",".join(selected_rt)
-                if st.query_params.get("race_type") != new_val:
-                    st.query_params["race_type"] = new_val
-            elif "race_type" in st.query_params:
-                del st.query_params["race_type"]
-        else:
-            selected_rt = []
-
-        # State/region filter
-        states = _cached_states(session)
-        current_states = (
-            st.query_params.get("states", "").split(",")
-            if st.query_params.get("states")
-            else []
-        )
-        current_states = [
-            s for s in current_states if s in states
-        ]
-
-        selected_states = st.multiselect(
-            "State/Region",
-            options=states,
-            default=current_states or states,
-            key="filter_states",
-        )
-        if set(selected_states) != set(states):
-            new_val = ",".join(selected_states)
-            if st.query_params.get("states") != new_val:
-                st.query_params["states"] = new_val
-        elif "states" in st.query_params:
-            del st.query_params["states"]
-
-    return {
-        "discipline": (
-            selected_disc
-            if set(selected_disc) != set(disc_options)
-            else None
-        ),
-        "race_type": (
-            selected_rt
-            if available_types
-            and set(selected_rt) != set(available_types)
-            else None
-        ),
-        "states": (
-            selected_states
-            if set(selected_states) != set(states)
-            else None
-        ),
-    }
 
 
 def render_racer_profile_filters(session) -> dict:
     """Render cohesive racer profile filters in a bordered sidebar container.
 
-    Returns dict with keys: cat_level, gender, masters_on, masters_age.
-    Syncs to URL params: cat, gender, masters, age.
+    Returns dict with keys: cat_level, gender, masters_on, masters_age, team_name.
+    Syncs to URL params: cat, gender, masters, age, team.
     """
     with st.sidebar.container(border=True):
+        st.sidebar.caption("Racer Profile")
+
         # FG-01: Flat category pills
         current_cat = st.query_params.get("cat")
         cat_options = ["All", "1", "2", "3", "4", "5"]
@@ -812,12 +735,15 @@ def render_racer_profile_filters(session) -> dict:
         )
         cat_level = chosen_cat if chosen_cat and chosen_cat != "All" else None
 
-        # Sync cat to URL
+        # Sync cat to URL and session state
         if cat_level:
             if st.query_params.get("cat") != cat_level:
                 st.query_params["cat"] = cat_level
-        elif "cat" in st.query_params:
-            del st.query_params["cat"]
+            st.session_state["cat"] = cat_level
+        else:
+            if "cat" in st.query_params:
+                del st.query_params["cat"]
+            st.session_state.pop("cat", None)
 
         # FG-03: Gender pills
         current_gender = st.query_params.get("gender")
@@ -831,12 +757,15 @@ def render_racer_profile_filters(session) -> dict:
         )
         gender = chosen_gender if chosen_gender and chosen_gender != "All" else None
 
-        # Sync gender to URL
+        # Sync gender to URL and session state
         if gender:
             if st.query_params.get("gender") != gender:
                 st.query_params["gender"] = gender
-        elif "gender" in st.query_params:
-            del st.query_params["gender"]
+            st.session_state["gender"] = gender
+        else:
+            if "gender" in st.query_params:
+                del st.query_params["gender"]
+            st.session_state.pop("gender", None)
 
         # FG-02: Masters toggle + age
         current_masters = st.query_params.get("masters") == "1"
@@ -857,50 +786,57 @@ def render_racer_profile_filters(session) -> dict:
                 key="racer_masters_age",
             )
 
-        # Sync masters/age to URL
+        # Sync masters/age to URL and session state
         if masters_on:
             if st.query_params.get("masters") != "1":
                 st.query_params["masters"] = "1"
+            st.session_state["masters"] = "1"
             if masters_age and st.query_params.get("age") != str(masters_age):
                 st.query_params["age"] = str(masters_age)
+            if masters_age:
+                st.session_state["age"] = str(masters_age)
         else:
             if "masters" in st.query_params:
                 del st.query_params["masters"]
             if "age" in st.query_params:
                 del st.query_params["age"]
+            st.session_state.pop("masters", None)
+            st.session_state.pop("age", None)
+
+        # Sprint 018: Team name inside profile container
+        st.divider()
+        current_team = st.query_params.get("team", "")
+        team_name = st.text_input(
+            "My Team",
+            value=current_team,
+            placeholder="e.g. Hagens Berman",
+            key="team_name_input",
+        )
+
+        if team_name != current_team:
+            if team_name:
+                st.query_params["team"] = team_name
+            elif "team" in st.query_params:
+                del st.query_params["team"]
+
+        if team_name:
+            st.session_state["team"] = team_name
+        else:
+            st.session_state.pop("team", None)
+
+        team_result = None
+        if team_name and len(team_name.strip()) >= 3:
+            team_result = team_name.strip()
+        elif team_name and len(team_name.strip()) < 3:
+            st.caption("Enter at least 3 characters")
 
     return {
         "cat_level": cat_level,
         "gender": gender,
         "masters_on": masters_on,
         "masters_age": masters_age,
+        "team_name": team_result,
     }
-
-
-def render_team_setting() -> str | None:
-    """Render team name input in sidebar. Returns team name or None."""
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("My Team")
-
-    current = st.query_params.get("team", "")
-    team_name = st.sidebar.text_input(
-        "Team name",
-        value=current,
-        placeholder="e.g. Hagens Berman",
-        key="team_name_input",
-    )
-
-    if team_name != current:
-        if team_name:
-            st.query_params["team"] = team_name
-        elif "team" in st.query_params:
-            del st.query_params["team"]
-
-    if team_name and len(team_name.strip()) < 3:
-        st.sidebar.caption("Enter at least 3 characters")
-        return None
-
-    return team_name.strip() if team_name and len(team_name.strip()) >= 3 else None
 
 
 def render_climb_breakdown(climbs, distance_m=None, finish_type=None, drop_rate=None):
@@ -952,7 +888,16 @@ def render_similar_races(similar_items):
         with col1:
             name = item["display_name"]
             loc = item.get("location", "")
-            st.write(f"**{name}** — {loc}")
+            # Build similarity reason tags
+            reasons = []
+            ct = item.get("course_type")
+            if ct:
+                reasons.append(ct.replace("_", " ").title() + " terrain")
+            ft = item.get("predicted_finish_type")
+            if ft:
+                reasons.append(ft.replace("_", " ").title())
+            reason_text = f" · {', '.join(reasons)}" if reasons else ""
+            st.write(f"**{name}** — {loc}{reason_text}")
         with col2:
             sid = item["series_id"]
             if st.button("View", key=f"similar_{sid}", use_container_width=True):

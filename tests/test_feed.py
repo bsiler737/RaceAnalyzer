@@ -205,19 +205,19 @@ class TestExpandedTier1Fields:
             assert "distribution_json" in item
             assert "field_size_median" in item
 
-    def test_beginner_friendly_filter(self, seeded_series_session):
+    def test_category_distance_keys_present(self, seeded_series_session):
+        """Sprint 018: Feed items include category distance keys."""
         from raceanalyzer.precompute import precompute_all
-        from raceanalyzer.ui.feed_card import is_beginner_friendly
 
         precompute_all(seeded_series_session)
 
         items = queries.get_feed_items_batch(seeded_series_session)
-        friendly = [i for i in items if is_beginner_friendly(i)[0]]
-        # Some items may be friendly, all must pass without error
-        for item in friendly:
-            ok, reasons = is_beginner_friendly(item)
-            assert ok is True
-            assert len(reasons) >= 1
+        for item in items:
+            assert "category_distance" in item
+            assert "category_distance_unit" in item
+            assert "distance_range" in item
+            assert "estimated_time_range" in item
+            assert "hide_estimated_time" in item
 
 
 class TestPredictionSourceInFeedItems:
@@ -233,21 +233,20 @@ class TestPredictionSourceInFeedItems:
             assert "prediction_source" in item
 
 
-class TestActionRowNoAbbreviations:
-    """Sprint 014: Action row no longer uses abbreviated labels."""
+class TestActionRowSimplified:
+    """Sprint 018: Action row simplified — only Preview, Register, caret overflow."""
 
-    def test_no_abbreviated_labels_in_action_row_source(self):
-        """Assert _render_action_row source has no abbreviated 'Cmp' or 'Cal' labels."""
+    def test_simplified_action_row_source(self):
+        """Assert _render_action_row has simplified buttons (no Compare/More details)."""
         from pathlib import Path
 
         feed_path = Path(__file__).parent.parent / "raceanalyzer" / "ui" / "pages" / "feed.py"
         source = feed_path.read_text()
-        # Should not contain abbreviated button labels
-        assert '"Cmp"' not in source
-        assert '"Cal"' not in source
-        # Should contain full labels
-        assert "Compare" in source
+        # Sprint 018: Compare and More details removed
+        assert "Compare" not in source
+        assert "More details" not in source
+        assert "Less details" not in source
+        # Kept buttons
         assert "Add to calendar" in source
-        assert "More details" in source
-        assert "Less details" in source
         assert "Share" in source
+        assert "Preview" in source

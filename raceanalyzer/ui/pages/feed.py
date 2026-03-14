@@ -8,10 +8,9 @@ import streamlit as st
 
 from raceanalyzer import queries
 from raceanalyzer.ui.components import (
+    _init_filters_from_params,
     render_empty_state,
-    render_feed_filters,
     render_racer_profile_filters,
-    render_team_setting,
 )
 from raceanalyzer.ui.feed_card import (
     build_card_html,
@@ -31,6 +30,9 @@ FEED_PAGE_SIZE = 20
 def render():
     session = st.session_state.db_session
 
+    # Sprint 018: Initialize filters from URL params
+    _init_filters_from_params()
+
     # Inject CSS once at top
     inject_feed_styles()
 
@@ -48,8 +50,7 @@ def render():
         except (ValueError, TypeError):
             isolated_series_id = None
 
-    # --- Sidebar: racer profile filters, feed filters, team setting ---
-    # FG-01..FG-04: Cohesive racer profile filters
+    # --- Sidebar: racer profile filters (includes team) ---
     racer_profile = {}
     if not isolated_series_id:
         racer_profile = render_racer_profile_filters(session)
@@ -77,11 +78,8 @@ def render():
         if legacy_cat:
             category = legacy_cat
 
-    filters = {}
-    team_name = None
-    if not isolated_series_id:
-        filters = render_feed_filters(session)
-        team_name = render_team_setting()
+    # Team name from profile dict (Sprint 018: moved into profile container)
+    team_name = racer_profile.get("team_name") if racer_profile else None
 
     # --- Search bar ---
     search_query = st.query_params.get("q", "")
@@ -99,17 +97,13 @@ def render():
             elif "q" in st.query_params:
                 del st.query_params["q"]
 
-    # --- Filter chips (Sprint 013: FO-03, FO-04) ---
+    # --- Filter chips (Sprint 018: type + state pills) ---
     chip_discipline = None
+    state_filter = None
     if not isolated_series_id:
-        chip_discipline = _render_filter_chips()
+        chip_discipline, state_filter = _render_filter_chips(session)
 
     # --- Fetch feed items (batch) ---
-    # Merge chip filters with sidebar filters
-    discipline_filter = filters.get("discipline")
-    if chip_discipline:
-        discipline_filter = chip_discipline
-
     if isolated_series_id:
         all_items = queries.get_feed_items_batch(
             session, category=category, team_name=team_name
@@ -123,9 +117,8 @@ def render():
             session,
             category=category,
             search_query=search_query or None,
-            discipline_filter=discipline_filter,
-            race_type_filter=filters.get("race_type"),
-            state_filter=filters.get("states"),
+            discipline_filter=chip_discipline,
+            state_filter=state_filter,
             team_name=team_name,
         )
 
@@ -136,12 +129,10 @@ def render():
                 if "q" in st.query_params:
                     del st.query_params["q"]
                 st.rerun()
-        elif any(
-            filters.get(k) is not None for k in ("discipline", "race_type", "states")
-        ):
+        elif chip_discipline or state_filter:
             st.warning("No races match your filters.")
             if st.button("Clear filters"):
-                for p in ("discipline", "race_type", "states"):
+                for p in ("chip_discipline", "states"):
                     if p in st.query_params:
                         del st.query_params[p]
                 st.rerun()
@@ -287,38 +278,65 @@ def render():
 
 
 
-def _render_filter_chips():
-    """Render filter chips above feed using st.pills (Sprint 013: FO-03)."""
-    # Read current from query params
-    current_disc = st.query_params.get("chip_discipline", "").split(",")
-    current_disc = [d for d in current_disc if d]
+def _render_filter_chips(session):
+    """Render type + state/province filter pills (Sprint 018: FS-02)."""
+    col_type, col_state = st.columns([3, 2])
 
-    disc_options = ["Criterium", "Road Race", "Gravel", "TT", "Hill Climb"]
-    selected = st.pills(
-        "Filter by type",
-        disc_options,
-        selection_mode="multi",
-        default=(
-            current_disc
-            if current_disc and all(d in disc_options for d in current_disc)
-            else None
-        ),
-        key="filter_chips_discipline",
-    )
+    # --- Left: Race type pills ---
+    with col_type:
+        current_disc = st.query_params.get("chip_discipline", "").split(",")
+        current_disc = [d for d in current_disc if d]
 
-    # Map display names to query values
-    chip_to_value = {
-        "Criterium": "criterium",
-        "Road Race": "road_race",
-        "Gravel": "gravel",
-        "TT": "time_trial",
-        "Hill Climb": "hill_climb",
-    }
-    discipline_filter = None
-    if selected:
-        discipline_filter = [chip_to_value[s] for s in selected if s in chip_to_value]
+        disc_options = ["Criterium", "Road Race", "Gravel", "TT", "Hill Climb"]
+        selected = st.pills(
+            "Filter by type",
+            disc_options,
+            selection_mode="multi",
+            default=(
+                current_disc
+                if current_disc and all(d in disc_options for d in current_disc)
+                else None
+            ),
+            key="filter_chips_discipline",
+        )
 
-    return discipline_filter
+        chip_to_value = {
+            "Criterium": "criterium",
+            "Road Race": "road_race",
+            "Gravel": "gravel",
+            "TT": "time_trial",
+            "Hill Climb": "hill_climb",
+        }
+        discipline_filter = None
+        if selected:
+            discipline_filter = [chip_to_value[s] for s in selected if s in chip_to_value]
+
+    # --- Right: State/province pills ---
+    with col_state:
+        from raceanalyzer.ui.components import _cached_states
+
+        all_states = _cached_states(session)
+        current_states = st.query_params.get("states", "").split(",")
+        current_states = [s for s in current_states if s in all_states]
+
+        selected_states = st.pills(
+            "State/Province",
+            all_states,
+            selection_mode="multi",
+            default=current_states if current_states else None,
+            key="filter_chips_states",
+        )
+
+        state_filter = None
+        if selected_states:
+            state_filter = selected_states
+            new_val = ",".join(selected_states)
+            if st.query_params.get("states") != new_val:
+                st.query_params["states"] = new_val
+        elif "states" in st.query_params:
+            del st.query_params["states"]
+
+    return discipline_filter, state_filter
 
 
 def _render_view_toggle():
