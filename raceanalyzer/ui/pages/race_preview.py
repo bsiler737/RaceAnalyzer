@@ -178,10 +178,41 @@ def render():
     # --- Re-fetch preview data if a specific field is chosen ---
     # Use the first raw category name for querying (any variant will match)
     query_category = None
-    # All raw category name variants for this canonical field
+    # All raw category name variants for this canonical field — includes
+    # names from classifications, startlist, and category details
     query_category_variants: list[str] = []
     if chosen_field and chosen_field in canon_to_raws:
-        query_category_variants = canon_to_raws[chosen_field]
+        query_category_variants = list(canon_to_raws[chosen_field])
+        # Also include startlist/CategoryDetail category names that
+        # normalize to the same canonical field (they use different naming)
+        from raceanalyzer.db.models import CategoryDetail, Startlist
+        from raceanalyzer.queries import normalize_field_name
+        extra_cats = set()
+        sl_cats = (
+            session.query(Startlist.category)
+            .filter(Startlist.series_id == int(series_id))
+            .distinct()
+            .all()
+        )
+        for (c,) in sl_cats:
+            if c and normalize_field_name(c) == chosen_field:
+                extra_cats.add(c)
+        cd_cats = (
+            session.query(CategoryDetail.category)
+            .join(
+                queries.Race,
+                CategoryDetail.race_id == queries.Race.id,
+            )
+            .filter(queries.Race.series_id == int(series_id))
+            .distinct()
+            .all()
+        )
+        for (c,) in cd_cats:
+            if c and normalize_field_name(c) == chosen_field:
+                extra_cats.add(c)
+        for c in extra_cats:
+            if c not in query_category_variants:
+                query_category_variants.append(c)
         query_category = query_category_variants[0]
 
     if query_category:
