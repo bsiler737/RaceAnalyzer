@@ -31,44 +31,29 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # RWGPS-inspired light mode: warm gray background, white cards, darker sidebar
+    # RWGPS-inspired light mode: warm gray background, white surfaces
     st.markdown(
         """<style>
-        /* Sidebar: slightly darker than main background */
-        [data-testid="stSidebar"] {
-            background-color: #e2ddd8 !important;
-        }
+        /* Sidebar */
+        [data-testid="stSidebar"],
         [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
             background-color: #e2ddd8 !important;
         }
 
-        /* All bordered containers (cards, info boxes) get white background */
-        .st-emotion-cache-18kf3ut,
-        [data-testid="stExpander"],
+        /* Bordered containers (cards, info boxes): white surface */
         div[data-testid="stVerticalBlockBorderWrapper"] {
             background-color: #ffffff !important;
             border-radius: 8px !important;
         }
 
-        /* Buttons (filters, toggles) get white background */
-        button[kind="secondary"],
-        [data-testid="stBaseButton-secondary"] {
-            background-color: #ffffff !important;
+        /* Button rows: keep parent transparent, only the button itself white */
+        [data-testid="stHorizontalBlock"] {
+            background-color: transparent !important;
         }
 
-        /* Selectboxes, text inputs get white background */
-        [data-testid="stSelectbox"] > div,
-        [data-testid="stTextInput"] > div > div {
-            background-color: #ffffff !important;
-        }
-
-        /* Info/warning boxes get white background */
-        [data-testid="stAlert"] {
-            background-color: #ffffff !important;
-        }
-
-        /* Popover content white */
-        [data-testid="stPopoverBody"] {
+        /* Popover, alerts, expanders: white */
+        [data-testid="stPopoverBody"],
+        [data-testid="stExpander"] {
             background-color: #ffffff !important;
         }
         </style>""",
