@@ -21,7 +21,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, backref, relationship
 
 
 class Base(DeclarativeBase):
@@ -72,10 +72,23 @@ class RaceSeries(Base):
     rwgps_encoded_polyline = Column(Text, nullable=True)
     rwgps_manual_override = Column(Boolean, default=False)
 
+    # Stage race support (Sprint 021)
+    parent_series_id = Column(Integer, ForeignKey("race_series.id"), nullable=True)
+    stage_number = Column(Integer, nullable=True)
+
     races = relationship("Race", back_populates="series")
+    children = relationship(
+        "RaceSeries",
+        backref=backref("parent", remote_side="RaceSeries.id"),
+        order_by="RaceSeries.stage_number",
+    )
 
     __table_args__ = (
         Index("ix_race_series_normalized_name", "normalized_name"),
+        UniqueConstraint(
+            "parent_series_id", "stage_number",
+            name="uq_stage_race_stage_number",
+        ),
     )
 
 
@@ -355,6 +368,28 @@ class SeriesPrediction(Base):
 
     __table_args__ = (
         UniqueConstraint("series_id", "category", name="uq_series_cat"),
+    )
+
+
+class CategoryDetail(Base):
+    """Per-category race details from BikeReg (distance, start time, etc)."""
+
+    __tablename__ = "category_details"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    race_id = Column(Integer, ForeignKey("races.id"), nullable=False)
+    category = Column(String, nullable=False)
+    distance = Column(Float, nullable=True)  # Numeric distance value
+    distance_unit = Column(String, nullable=True)  # "miles", "km", etc.
+    start_time = Column(DateTime, nullable=True)
+    description = Column(Text, nullable=True)
+    bikereg_race_rec_id = Column(String, nullable=True)
+
+    race = relationship("Race")
+
+    __table_args__ = (
+        UniqueConstraint("race_id", "category", name="uq_category_detail"),
+        Index("ix_category_details_race_id", "race_id"),
     )
 
 

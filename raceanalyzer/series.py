@@ -139,7 +139,17 @@ def build_series(session: Session) -> dict:
     """
     races = session.query(Race).all()
     groups: dict[str, list[Race]] = {}
+
+    # Sprint 021: Skip races that belong to child stage series (managed by migrate-stages)
+    child_series_ids = {
+        s.id for s in session.query(RaceSeries).filter(
+            RaceSeries.parent_series_id.isnot(None)
+        ).all()
+    }
+
     for race in races:
+        if race.series_id and race.series_id in child_series_ids:
+            continue
         key = normalize_race_name(race.name)
         groups.setdefault(key, []).append(race)
 

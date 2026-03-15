@@ -1,4 +1,9 @@
-"""Stage race schedule loader from YAML files."""
+"""Stage race schedule loader from YAML files.
+
+DEPRECATED (Sprint 021): This module is no longer imported at runtime.
+Stage data is now stored in the database as child RaceSeries rows.
+Kept as a reference and as the data source for the `migrate-stages` CLI command.
+"""
 
 from __future__ import annotations
 

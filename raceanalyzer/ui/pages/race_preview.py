@@ -109,6 +109,53 @@ def render():
     st.title(series["display_name"])
     st.caption("Race Preview")
 
+    # === Sprint 021: Stage Navigation Pills ===
+    siblings = series.get("siblings", [])
+    if siblings and len(siblings) > 1:
+        pills_html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 16px 0;">'
+        for sib in siblings:
+            sib_name = sib["display_name"].split(": ", 1)[-1] if ": " in sib["display_name"] else sib["display_name"]
+            label = f"Stage {sib['stage_number']}: {sib_name}"
+            if sib["is_current"]:
+                pills_html += (
+                    f'<span style="display:inline-block;padding:4px 12px;'
+                    f'background:#ff6b35;color:white;border-radius:16px;'
+                    f'font-size:0.85rem;font-weight:600;">{label}</span>'
+                )
+            else:
+                pills_html += (
+                    f'<span style="display:inline-block;padding:4px 12px;'
+                    f'background:rgba(255,107,53,0.1);border:1px solid #ff6b35;'
+                    f'border-radius:16px;font-size:0.85rem;color:#ff6b35;'
+                    f'cursor:pointer;">{label}</span>'
+                )
+        pills_html += '</div>'
+        st.markdown(pills_html, unsafe_allow_html=True)
+
+        # Stage navigation buttons (Streamlit can't do clickable HTML links, use buttons)
+        non_current = [s for s in siblings if not s["is_current"]]
+        if non_current:
+            cols = st.columns(len(non_current))
+            for i, sib in enumerate(non_current):
+                sib_label = sib["display_name"].split(": ", 1)[-1] if ": " in sib["display_name"] else sib["display_name"]
+                with cols[i]:
+                    if st.button(
+                        f"→ {sib_label}",
+                        key=f"stage_nav_{sib['series_id']}",
+                    ):
+                        st.query_params["series_id"] = str(sib["series_id"])
+                        st.rerun()
+
+    # === Sprint 021: History banner for stage fallback ===
+    history_banner = preview.get("history_banner")
+    if history_banner:
+        st.info(history_banner)
+
+    # === Sprint 021: Registration URL (inherited from parent for stages) ===
+    reg_url = preview.get("registration_url")
+    if reg_url:
+        st.link_button("Register", reg_url, type="primary")
+
     # === Sprint 020: Smart Field Picker with deduplication ===
     raw_categories = preview["categories"]
     chosen_field = None  # None = "All Fields" mode
@@ -382,6 +429,11 @@ def render():
 
             # Sprint 020 PP-05: No render_course_map() here either
 
+    # Sprint 021: Explicit "No course data" for stages without course
+    if not profile_points and not course and series.get("parent_series_id"):
+        with st.container(border=True):
+            st.info("No course data available for this stage.")
+
     # === 3. Two-column: Predicted Finish Type details + Historical Stats ===
     col_pred, col_stats = st.columns(2)
     with col_pred:
@@ -500,11 +552,13 @@ def render():
             )
 
     # === 5. Startlist (actual registrations only) ===
+    # Sprint 021: Use startlist_source_id for parent fallback
+    startlist_sid = preview.get("startlist_source_id", int(series_id))
     with st.container(border=True):
         st.subheader("Startlist")
         team_name = st.session_state.get("team", "") or st.query_params.get("team", "")
         team_blocks = queries.get_startlist_team_blocks(
-            session, int(series_id),
+            session, startlist_sid,
             categories=query_category_variants if is_field_mode else None,
             team_name=team_name,
         )

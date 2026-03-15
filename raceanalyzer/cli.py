@@ -784,6 +784,113 @@ def override_route(ctx, series_id, rwgps_route_id):
     session.close()
 
 
+@main.command("import-gpx")
+@click.argument("gpx_path", type=click.Path(exists=True))
+@click.argument("series_id", type=int)
+@click.pass_context
+def import_gpx(ctx, gpx_path, series_id):
+    """Import a GPX file as the course for a race series.
+
+    Parses the GPX, generates an encoded polyline, computes elevation stats,
+    builds the elevation profile, and detects climbs — all from the local file.
+    """
+    import json
+    from datetime import datetime
+    from pathlib import Path as P
+
+    settings = ctx.obj["settings"]
+
+    from raceanalyzer.db.engine import get_session, init_db
+    from raceanalyzer.db.models import Course, RaceSeries
+    from raceanalyzer.elevation import (
+        build_profile,
+        classify_terrain,
+        compute_elevation_stats,
+        compute_m_per_km,
+        detect_climbs,
+        gpx_to_encoded_polyline,
+        parse_gpx_track_points,
+    )
+
+    init_db(settings.db_path)
+    session = get_session(settings.db_path)
+
+    series = session.get(RaceSeries, series_id)
+    if not series:
+        click.echo(f"Series {series_id} not found.", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"Importing GPX for '{series.display_name}'...")
+
+    track_points = parse_gpx_track_points(P(gpx_path))
+    if not track_points:
+        click.echo("No track points found in GPX file.", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"  Parsed {len(track_points)} track points")
+
+    # Encode polyline and store on series
+    encoded = gpx_to_encoded_polyline(track_points)
+    if encoded:
+        series.rwgps_encoded_polyline = encoded
+        series.rwgps_manual_override = True
+        click.echo(f"  Encoded polyline ({len(encoded)} chars)")
+
+    # Compute elevation stats
+    elev_data = compute_elevation_stats(track_points)
+    if not elev_data:
+        click.echo("  No elevation data in GPX.", err=True)
+        raise SystemExit(1)
+
+    m_km = compute_m_per_km(elev_data["total_gain_m"], elev_data["distance_m"])
+    course_type = classify_terrain(m_km, settings)
+
+    # Build profile and detect climbs
+    profile = build_profile(track_points)
+    climbs = detect_climbs(profile)
+
+    # Create or update Course row
+    existing = session.query(Course).filter(Course.series_id == series.id).first()
+    if existing:
+        existing.distance_m = elev_data["distance_m"]
+        existing.total_gain_m = elev_data["total_gain_m"]
+        existing.total_loss_m = elev_data["total_loss_m"]
+        existing.max_elevation_m = elev_data.get("max_elevation_m")
+        existing.min_elevation_m = elev_data.get("min_elevation_m")
+        existing.m_per_km = m_km
+        existing.course_type = course_type
+        existing.profile_json = json.dumps(profile)
+        existing.climbs_json = json.dumps(climbs)
+        existing.extracted_at = datetime.utcnow()
+        existing.source = "gpx"
+    else:
+        course = Course(
+            series_id=series.id,
+            distance_m=elev_data["distance_m"],
+            total_gain_m=elev_data["total_gain_m"],
+            total_loss_m=elev_data["total_loss_m"],
+            max_elevation_m=elev_data.get("max_elevation_m"),
+            min_elevation_m=elev_data.get("min_elevation_m"),
+            m_per_km=m_km,
+            course_type=course_type,
+            profile_json=json.dumps(profile),
+            climbs_json=json.dumps(climbs),
+            extracted_at=datetime.utcnow(),
+            source="gpx",
+        )
+        session.add(course)
+
+    session.commit()
+    session.close()
+
+    click.echo(
+        f"  {course_type.value}: {elev_data['total_gain_m']:.0f}m gain, "
+        f"{elev_data['distance_m']/1000:.1f}km, "
+        f"{len(profile)} profile points, {len(climbs)} climbs"
+    )
+    click.echo("Done.")
+
+
 @main.command("fetch-calendar")
 @click.option("--region", default="WA", help="State/region code (default: WA).")
 @click.option("--days-ahead", type=int, default=60, help="Days to look ahead (default: 60).")
@@ -895,6 +1002,103 @@ def fetch_calendar(ctx, region, days_ahead, source):
     session.commit()
     session.close()
     click.echo(f"Matched {matched}/{len(events)} events to existing series.")
+
+
+@main.command("fetch-category-details")
+@click.option("--force", is_flag=True, help="Re-fetch even if details already exist.")
+@click.option("--event-id", type=int, default=None, help="Fetch for a single event ID.")
+@click.pass_context
+def fetch_category_details(ctx, force, event_id):
+    """Fetch per-category distance and start time from BikeReg/GraphQL."""
+    import time
+    from datetime import datetime as dt
+
+    settings = ctx.obj["settings"]
+
+    from raceanalyzer.calendar_feed import fetch_event_categories
+    from raceanalyzer.db.engine import get_session, init_db
+    from raceanalyzer.db.models import CategoryDetail, Race
+
+    init_db(settings.db_path)
+    session = get_session(settings.db_path)
+
+    if event_id:
+        races = session.query(Race).filter(Race.event_id == event_id).all()
+    else:
+        races = (
+            session.query(Race)
+            .filter(Race.is_upcoming.is_(True), Race.event_id.isnot(None))
+            .all()
+        )
+
+    if not races:
+        click.echo("No upcoming races with event IDs found.")
+        session.close()
+        return
+
+    click.echo(f"Fetching category details for {len(races)} races...")
+
+    fetched = 0
+    skipped = 0
+    for race in races:
+        # Check existing
+        existing_count = (
+            session.query(CategoryDetail)
+            .filter(CategoryDetail.race_id == race.id)
+            .count()
+        )
+        if existing_count > 0 and not force:
+            skipped += 1
+            continue
+
+        categories = fetch_event_categories(race.event_id)
+        if not categories:
+            click.echo(f"  {race.name}: no categories found")
+            continue
+
+        # Delete old details if re-fetching
+        if existing_count > 0:
+            session.query(CategoryDetail).filter(
+                CategoryDetail.race_id == race.id
+            ).delete()
+            session.flush()
+
+        seen_cats = set()
+        for cat in categories:
+            # Skip duplicate category names within the same event
+            # (e.g. series events list the same category for each race date)
+            if cat["name"] in seen_cats:
+                continue
+            seen_cats.add(cat["name"])
+
+            detail = CategoryDetail(
+                race_id=race.id,
+                category=cat["name"],
+                distance=cat["distance"],
+                distance_unit=cat["distance_unit"],
+                start_time=cat["start_time"],
+                description=cat["description"],
+                bikereg_race_rec_id=cat["bikereg_race_rec_id"],
+            )
+            session.add(detail)
+
+        session.flush()
+
+        distances = [
+            f"{c['name']}: {c['distance']}{c['distance_unit']}"
+            for c in categories
+            if c["distance"]
+        ]
+        click.echo(f"  {race.name}: {len(categories)} categories")
+        for d in distances:
+            click.echo(f"    {d}")
+
+        fetched += 1
+        time.sleep(settings.min_request_delay)
+
+    session.commit()
+    session.close()
+    click.echo(f"Fetched details for {fetched} races ({skipped} skipped).")
 
 
 @main.command("fetch-startlists")
@@ -1080,6 +1284,165 @@ def fetch_startlists(ctx, region, source, dry_run):
     click.echo(
         f"Fetched {total_entries} startlist entries across {total_races} races."
     )
+
+
+@main.command("migrate-stages")
+@click.pass_context
+def migrate_stages(ctx):
+    """Create child RaceSeries rows for each stage in stage race YAML files.
+
+    Reads data/stages/*.yaml, finds the parent RaceSeries, and creates a child
+    RaceSeries + upcoming Race row for each stage. Idempotent — re-running
+    does not create duplicates.
+    """
+    from datetime import datetime as dt
+
+    from raceanalyzer.db.engine import get_session, init_db
+    from raceanalyzer.db.models import Race, RaceSeries, RaceType
+    from raceanalyzer.stages import load_stage_schedule
+
+    settings = ctx.obj["settings"]
+    init_db(settings.db_path)
+    session = get_session(settings.db_path)
+
+    stages_dir = Path(__file__).resolve().parent.parent / "data" / "stages"
+    if not stages_dir.is_dir():
+        click.echo(f"No stages directory found at {stages_dir}")
+        session.close()
+        return
+
+    yaml_files = sorted(stages_dir.glob("*.yaml"))
+    if not yaml_files:
+        click.echo("No YAML stage files found.")
+        session.close()
+        return
+
+    total_created = 0
+    total_skipped = 0
+
+    for yaml_file in yaml_files:
+        norm_name = yaml_file.stem  # e.g. "tour_de_bloom"
+        stages = load_stage_schedule(norm_name)
+        if not stages:
+            click.echo(f"  Skipping {yaml_file.name}: invalid or empty")
+            continue
+
+        # Find parent series by normalized_name (try common variants)
+        parent = None
+        for variant in [norm_name, norm_name.replace("_", " ")]:
+            parent = (
+                session.query(RaceSeries)
+                .filter(RaceSeries.normalized_name == variant)
+                .first()
+            )
+            if parent:
+                break
+
+        if not parent:
+            # Try display name match from YAML
+            import yaml as _yaml
+            with open(yaml_file) as f:
+                data = _yaml.safe_load(f)
+            display = data.get("name", "")
+            parent = (
+                session.query(RaceSeries)
+                .filter(RaceSeries.display_name == display)
+                .first()
+            )
+
+        if not parent:
+            # Try LIKE match on display_name (handles "The Dalles Omnium | Full Race Series | ...")
+            search_name = norm_name.replace("_", " ").title()
+            candidates = (
+                session.query(RaceSeries)
+                .filter(
+                    RaceSeries.display_name.like(f"{search_name}%"),
+                    RaceSeries.parent_series_id.is_(None),
+                )
+                .all()
+            )
+            # Prefer the "full race series" variant if multiple matches
+            if len(candidates) == 1:
+                parent = candidates[0]
+            elif candidates:
+                for c in candidates:
+                    if "full race" in c.display_name.lower() or "series" in c.display_name.lower():
+                        parent = c
+                        break
+                if not parent:
+                    parent = candidates[0]
+
+        if not parent:
+            click.echo(f"  Skipping {yaml_file.name}: no parent series found for '{norm_name}'")
+            continue
+
+        click.echo(f"  Processing {parent.display_name} ({len(stages)} stages)...")
+
+        # Get parent's upcoming race for registration_url
+        parent_upcoming = (
+            session.query(Race)
+            .filter(Race.series_id == parent.id, Race.is_upcoming.is_(True))
+            .first()
+        )
+        parent_reg_url = parent_upcoming.registration_url if parent_upcoming else None
+
+        for stage in stages:
+            # Check for existing child (idempotent)
+            existing = (
+                session.query(RaceSeries)
+                .filter(
+                    RaceSeries.parent_series_id == parent.id,
+                    RaceSeries.stage_number == stage.number,
+                )
+                .first()
+            )
+            if existing:
+                total_skipped += 1
+                click.echo(f"    Stage {stage.number}: already exists (id={existing.id})")
+                continue
+
+            # Build display name
+            stage_display = stage.name
+            if stage.elites_only:
+                stage_display = f"{stage_display} (Elites)"
+            full_display = f"{parent.display_name}: {stage_display}"
+
+            # Build normalized name
+            child_norm = f"{parent.normalized_name}_stage_{stage.number}_{stage.name.lower().replace(' ', '_')}"
+
+            child_series = RaceSeries(
+                normalized_name=child_norm,
+                display_name=full_display,
+                rwgps_route_id=stage.rwgps_route_id,
+                parent_series_id=parent.id,
+                stage_number=stage.number,
+            )
+            session.add(child_series)
+            session.flush()  # Get child_series.id
+
+            # Create upcoming Race row for the child series
+            child_race = Race(
+                name=full_display,
+                date=dt.combine(stage.date, dt.min.time()),
+                location=parent_upcoming.location if parent_upcoming else None,
+                state_province=parent_upcoming.state_province if parent_upcoming else None,
+                race_type=RaceType(stage.race_type),
+                series_id=child_series.id,
+                is_upcoming=True,
+                registration_url=parent_reg_url,
+                event_id=parent_upcoming.event_id if parent_upcoming else None,
+            )
+            session.add(child_race)
+
+            total_created += 1
+            click.echo(
+                f"    Stage {stage.number}: {full_display} "
+                f"(type={stage.race_type}, rwgps={stage.rwgps_route_id or 'none'})"
+            )
+
+    session.commit()
+    session.close()
+    click.echo(f"\nMigration complete: {total_created} child series created, {total_skipped} already existed.")
 
 
 if __name__ == "__main__":

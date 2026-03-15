@@ -401,11 +401,47 @@ def _render_rows(
     expanded: bool = False,
 ):
     """Render feed items as single-column agenda rows (Sprint 019)."""
+    in_stage_group = False
     for item in items:
-        _render_container_row(
-            item, session, category,
-            key_prefix=key_prefix, expanded=expanded,
-        )
+        occ_kind = item.get("occurrence_kind")
+
+        # Sprint 021: Stage race group header
+        if occ_kind == "stage_header":
+            in_stage_group = True
+            parent_name = item.get("display_name", "Stage Race")
+            stage_count = item.get("stage_count", 0)
+            st.markdown(
+                f'<div style="padding:8px 12px;margin:12px 0 4px 0;'
+                f'font-weight:700;font-size:1.05rem;'
+                f'border-left:4px solid #ff6b35;'
+                f'background:rgba(255,107,53,0.08);border-radius:4px;">'
+                f'{parent_name} &mdash; {stage_count} stages</div>',
+                unsafe_allow_html=True,
+            )
+            continue
+
+        # End stage group visual when we hit a non-stage item
+        if occ_kind != "stage" and in_stage_group:
+            in_stage_group = False
+
+        # Stage children get a left-border connector
+        if occ_kind == "stage":
+            with st.container():
+                st.markdown(
+                    '<div style="border-left:3px solid #ff6b35;'
+                    'padding-left:8px;margin-left:4px;">',
+                    unsafe_allow_html=True,
+                )
+                _render_container_row(
+                    item, session, category,
+                    key_prefix=key_prefix, expanded=expanded,
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            _render_container_row(
+                item, session, category,
+                key_prefix=key_prefix, expanded=expanded,
+            )
 
 
 def _render_container_row(

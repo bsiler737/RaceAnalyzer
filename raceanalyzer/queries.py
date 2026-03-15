@@ -96,15 +96,17 @@ def group_by_month(items):
     )
     historical = [i for i in items if not i["is_upcoming"]]
 
+    def month_key(i):
+        # Sprint 021: Stage race children use anchor date for month grouping
+        # so the entire stage race group stays in one month section
+        anchor = i.get("stage_anchor_date")
+        d = anchor or i.get("upcoming_date")
+        if d:
+            return (d.year, d.month)
+        return (9999, 12)
+
     groups = []
-    for (year, month), group_items in groupby(
-        upcoming,
-        key=lambda i: (
-            (i["upcoming_date"].year, i["upcoming_date"].month)
-            if i.get("upcoming_date")
-            else (9999, 12)
-        ),
-    ):
+    for (year, month), group_items in groupby(upcoming, key=month_key):
         header = f"{date(year, month, 1):%B %Y}"
         groups.append((header, list(group_items)))
 
@@ -1069,6 +1071,28 @@ def get_race_preview(
     if series is None:
         return None
 
+    # Sprint 021: Stage-aware series info
+    is_stage = series.parent_series_id is not None
+    parent = None
+    siblings = []
+    if is_stage:
+        parent = session.get(RaceSeries, series.parent_series_id)
+        sibling_rows = (
+            session.query(RaceSeries)
+            .filter(RaceSeries.parent_series_id == series.parent_series_id)
+            .order_by(RaceSeries.stage_number)
+            .all()
+        )
+        siblings = [
+            {
+                "series_id": s.id,
+                "display_name": s.display_name,
+                "stage_number": s.stage_number,
+                "is_current": s.id == series_id,
+            }
+            for s in sibling_rows
+        ]
+
     # Series info
     series_dict = {
         "id": series.id,
@@ -1076,6 +1100,11 @@ def get_race_preview(
         "normalized_name": series.normalized_name,
         "rwgps_route_id": series.rwgps_route_id,
         "encoded_polyline": series.rwgps_encoded_polyline,
+        # Sprint 021: Stage info
+        "parent_series_id": series.parent_series_id,
+        "stage_number": series.stage_number,
+        "parent_display_name": parent.display_name if parent else None,
+        "siblings": siblings,
     }
 
     # Course data
@@ -1157,12 +1186,22 @@ def get_race_preview(
         # Default to first category
         contenders = predict_contenders(session, series_id, all_categories[0])
 
-    # Startlist check
+    # Startlist check — Sprint 021: fall back to parent's startlist for stages
     has_startlist = (
         session.query(Startlist)
         .filter(Startlist.series_id == series_id)
         .first()
     ) is not None
+    startlist_source_id = series_id
+    if not has_startlist and is_stage and parent:
+        parent_has = (
+            session.query(Startlist)
+            .filter(Startlist.series_id == parent.id)
+            .first()
+        ) is not None
+        if parent_has:
+            has_startlist = True
+            startlist_source_id = parent.id
 
     # Most recent race date (for post-race feedback check)
     most_recent = (
@@ -1300,6 +1339,37 @@ def get_race_preview(
                     "confidence": cat_pred.confidence,
                 })
 
+    # Sprint 021: Registration URL inheritance for stages
+    reg_url = None
+    if latest_upcoming:
+        reg_url = latest_upcoming.registration_url
+    if not reg_url and is_stage and parent:
+        parent_upcoming = (
+            session.query(Race)
+            .filter(Race.series_id == parent.id, Race.is_upcoming.is_(True))
+            .first()
+        )
+        if parent_upcoming:
+            reg_url = parent_upcoming.registration_url
+
+    # Sprint 021: Historical data fallback for stages
+    history_banner = None
+    if is_stage and parent:
+        # Check if child has its own historical data
+        child_historical = (
+            session.query(Race)
+            .filter(
+                Race.series_id == series_id,
+                Race.is_upcoming.is_(False),
+            )
+            .first()
+        )
+        if not child_historical:
+            history_banner = (
+                f"Showing overall {parent.display_name} history "
+                f"\u2014 no stage-specific historical data available yet."
+            )
+
     return {
         "series": series_dict,
         "course": course_dict,
@@ -1307,6 +1377,7 @@ def get_race_preview(
         "contenders": contenders,
         "categories": all_categories,
         "has_startlist": has_startlist,
+        "startlist_source_id": startlist_source_id,
         "latest_date": latest_date,
         "drop_rate": drop_rate,
         "typical_speed": typical_speed,
@@ -1322,6 +1393,9 @@ def get_race_preview(
         # Sprint 019
         "ai_context": ai_context,
         "field_forecasts": field_forecasts,
+        # Sprint 021: Stage race support
+        "registration_url": reg_url,
+        "history_banner": history_banner,
     }
 
 
@@ -1657,20 +1731,24 @@ def _expand_feed_items(
     items: list[dict],
     races_by_series: dict,
     route_polyline_map: dict[int, str] | None = None,
+    *,
+    children_by_parent: dict[int, list[dict]] | None = None,
 ) -> list[dict]:
     """Expand multi-edition and stage race entries into occurrence-level feed items.
 
     Processing order per item:
-    1. Stage races (YAML match) → one item per stage
+    1. Stage races (DB children) → one item per child stage series
     2. Multi-edition (≥2 upcoming Race rows) → one item per upcoming race
     3. Passthrough → original item with occurrence_key added
 
     Pure Python — no DB queries. Returns new list; input list is not mutated.
     route_polyline_map maps rwgps_route_id → encoded_polyline for per-stage overrides.
+    children_by_parent maps parent_series_id → list of child stage info dicts.
     """
     if route_polyline_map is None:
         route_polyline_map = {}
-    from raceanalyzer.stages import load_stage_schedule
+    if children_by_parent is None:
+        children_by_parent = {}
 
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     expanded = []
@@ -1679,43 +1757,90 @@ def _expand_feed_items(
         sid = item["series_id"]
         rt = item.get("race_type")
 
-        # 1. Stage race expansion (race_type match OR YAML file exists)
-        display = item.get("display_name", "")
-        norm_name = display.lower().strip()
-        stages = load_stage_schedule(norm_name)
-        if rt == "stage_race" or stages:
-            if stages and item.get("upcoming_date") is not None:
-                for stage in stages:
-                    child = dict(item)  # shallow copy
-                    stage_name = stage.name
-                    if stage.elites_only:
-                        stage_name = f"{stage_name} (Elites)"
-                    child["display_name"] = f"{display}: {stage_name}"
-                    child["upcoming_date"] = datetime.combine(
-                        stage.date, datetime.min.time()
-                    )
-                    days = (child["upcoming_date"] - today).days
+        # 1. Stage race expansion (DB-based child series)
+        db_children = children_by_parent.get(sid, [])
+        if db_children and item.get("upcoming_date") is not None:
+            # Compute anchor date (earliest child date) for sort grouping
+            child_dates = [c["upcoming_date"] for c in db_children if c.get("upcoming_date")]
+            anchor_date = min(child_dates) if child_dates else item["upcoming_date"]
+
+            # Add group header marker (not a real card — used by feed UI)
+            header = dict(item)
+            header["occurrence_key"] = f"{sid}:stage_header"
+            header["occurrence_kind"] = "stage_header"
+            header["stage_count"] = len(db_children)
+            header["stage_anchor_date"] = anchor_date
+            header["parent_series_id"] = None  # header is "parent-level"
+            expanded.append(header)
+
+            for child_info in db_children:
+                child = dict(item)  # inherit parent location, teammates, etc.
+                # Override with child-specific data
+                child["series_id"] = child_info["series_id"]
+                child["parent_series_id"] = child_info["parent_series_id"]
+                child["stage_number"] = child_info["stage_number"]
+                child["display_name"] = child_info["display_name"]
+                child["race_type"] = child_info["race_type"]
+                child["discipline"] = child_info["discipline"]
+                child["course_type"] = child_info["course_type"]
+                child["distance_m"] = child_info["distance_m"]
+                child["total_gain_m"] = child_info["total_gain_m"]
+                child["elevation_sparkline_points"] = child_info["elevation_sparkline_points"]
+                child["climbs_json"] = child_info["climbs_json"]
+                child["rwgps_encoded_polyline"] = child_info["rwgps_encoded_polyline"]
+                child["predicted_finish_type"] = child_info["predicted_finish_type"]
+                child["confidence"] = child_info["confidence"]
+                child["prediction_source"] = child_info["prediction_source"]
+                if child_info.get("upcoming_date"):
+                    child["upcoming_date"] = child_info["upcoming_date"]
+                    days = (child_info["upcoming_date"] - today).days
                     child["days_until"] = days
                     child["countdown_label"] = countdown_label(days)
-                    child["race_type"] = stage.race_type
-                    child["discipline"] = discipline_for_race_type(
-                        RaceType(stage.race_type)
-                    ).value
                     child["is_upcoming"] = days >= 0
-                    child["occurrence_key"] = f"{sid}:stage:{stage.number}"
-                    child["occurrence_kind"] = "stage"
-                    child["source_race_id"] = None
-                    # Per-stage polyline override from YAML rwgps_route_id
-                    if stage.rwgps_route_id and stage.rwgps_route_id in route_polyline_map:
-                        child["rwgps_encoded_polyline"] = route_polyline_map[stage.rwgps_route_id]
-                    expanded.append(child)
-                continue
-            else:
-                if stages is None:
-                    logger.debug(
-                        "No YAML schedule for stage race '%s', rendering as single card",
-                        display,
-                    )
+                if child_info.get("registration_url"):
+                    child["registration_url"] = child_info["registration_url"]
+                child["occurrence_key"] = f"{sid}:stage:{child_info['stage_number']}"
+                child["occurrence_kind"] = "stage"
+                child["source_race_id"] = None
+                child["stage_anchor_date"] = anchor_date
+                # Override AI context with stage-specific prediction
+                from raceanalyzer.predictions import build_ai_sez_text
+                if child_info.get("predicted_finish_type"):
+                    child["ai_context"] = {
+                        "mode": "overall",
+                        "selected_category": None,
+                        "matched_categories": [],
+                        "best_category": None,
+                        "best_finish_type": child_info["predicted_finish_type"],
+                        "overall_finish_type": child_info["predicted_finish_type"],
+                        "prediction_source": child_info.get("prediction_source"),
+                        "course_type": child_info.get("course_type"),
+                        "ai_sez_text": "",
+                    }
+                    child["ai_context"]["ai_sez_text"] = build_ai_sez_text(child["ai_context"])
+                else:
+                    # No prediction — use race type fallback
+                    child["ai_context"] = {
+                        "mode": "fallback",
+                        "selected_category": None,
+                        "matched_categories": [],
+                        "best_category": None,
+                        "best_finish_type": None,
+                        "overall_finish_type": None,
+                        "prediction_source": None,
+                        "course_type": child_info.get("course_type"),
+                        "ai_sez_text": "",
+                    }
+                    child["ai_context"]["ai_sez_text"] = build_ai_sez_text(child["ai_context"])
+                expanded.append(child)
+            continue
+
+        # Stage race without DB children — fall back to single card
+        if rt == "stage_race" and not db_children:
+            logger.debug(
+                "No DB children for stage race '%s', rendering as single card",
+                item.get("display_name", ""),
+            )
 
         # 2. Multi-edition expansion
         races = races_by_series.get(sid, [])
@@ -2259,7 +2384,7 @@ def get_feed_items_batch(
 
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # Query 1: All series (optionally filtered by search)
+    # Query 1: Top-level series only (exclude child stage series)
     with PerfTimer("Q1: series"):
         if search_query and search_query.strip():
             matching_ids = search_series(session, search_query)
@@ -2267,11 +2392,18 @@ def get_feed_items_batch(
                 return []
             series_rows = (
                 session.query(RaceSeries)
-                .filter(RaceSeries.id.in_(matching_ids))
+                .filter(
+                    RaceSeries.id.in_(matching_ids),
+                    RaceSeries.parent_series_id.is_(None),
+                )
                 .all()
             )
         else:
-            series_rows = session.query(RaceSeries).all()
+            series_rows = (
+                session.query(RaceSeries)
+                .filter(RaceSeries.parent_series_id.is_(None))
+                .all()
+            )
 
     if not series_rows:
         return []
@@ -2536,6 +2668,83 @@ def get_feed_items_batch(
 
         items.append(item)
 
+    # Sprint 021: Batch-load child stage series for any parent with DB children
+    all_item_ids = [item["series_id"] for item in items]
+    children_by_parent: dict[int, list[dict]] = {}
+    if all_item_ids:
+        with PerfTimer("Q7: child stage series"):
+            child_series_rows = (
+                session.query(RaceSeries)
+                .filter(RaceSeries.parent_series_id.in_(all_item_ids))
+                .order_by(RaceSeries.parent_series_id, RaceSeries.stage_number)
+                .all()
+            )
+        child_ids = [c.id for c in child_series_rows]
+        # Batch-load child courses, predictions, races
+        child_courses = {}
+        child_preds = {}
+        child_races_map = {}
+        if child_ids:
+            for c in session.query(Course).filter(Course.series_id.in_(child_ids)).all():
+                child_courses[c.series_id] = c
+            for p in session.query(SeriesPrediction).filter(
+                SeriesPrediction.series_id.in_(child_ids),
+                SeriesPrediction.category.is_(None),
+            ).all():
+                child_preds[p.series_id] = p
+            for r in session.query(Race).filter(Race.series_id.in_(child_ids)).all():
+                child_races_map.setdefault(r.series_id, []).append(r)
+
+        for child in child_series_rows:
+            parent_id = child.parent_series_id
+            c_course = child_courses.get(child.id)
+            c_pred = child_preds.get(child.id)
+            c_races = child_races_map.get(child.id, [])
+            c_upcoming = next((r for r in c_races if r.is_upcoming), None)
+
+            c_course_type = c_course.course_type.value if c_course and c_course.course_type else None
+            c_distance_m = c_course.distance_m if c_course else None
+            c_total_gain_m = c_course.total_gain_m if c_course else None
+            c_sparkline = None
+            c_climbs = None
+            if c_course and c_course.profile_json:
+                try:
+                    import json as _json
+                    profile = _json.loads(c_course.profile_json)
+                    c_sparkline = _downsample_profile(profile, target=20)
+                except (ValueError, TypeError):
+                    pass
+            if c_course:
+                c_climbs = c_course.climbs_json
+
+            c_race_type = c_upcoming.race_type.value if c_upcoming and c_upcoming.race_type else None
+            c_disc = discipline_for_race_type(c_upcoming.race_type if c_upcoming else None).value
+
+            child_info = {
+                "series_id": child.id,
+                "parent_series_id": parent_id,
+                "stage_number": child.stage_number,
+                "display_name": child.display_name,
+                "race_type": c_race_type,
+                "discipline": c_disc,
+                "course_type": c_course_type,
+                "distance_m": c_distance_m,
+                "total_gain_m": c_total_gain_m,
+                "elevation_sparkline_points": c_sparkline,
+                "climbs_json": c_climbs,
+                "rwgps_encoded_polyline": child.rwgps_encoded_polyline,
+                "predicted_finish_type": (
+                    c_pred.predicted_finish_type
+                    if c_pred and c_pred.predicted_finish_type and c_pred.predicted_finish_type != "unknown"
+                    else None
+                ),
+                "confidence": c_pred.confidence if c_pred else None,
+                "prediction_source": getattr(c_pred, "prediction_source", None) if c_pred else None,
+                "upcoming_date": c_upcoming.date if c_upcoming else None,
+                "registration_url": c_upcoming.registration_url if c_upcoming else None,
+            }
+            children_by_parent.setdefault(parent_id, []).append(child_info)
+
     # Build route_id → polyline map for per-stage polyline lookups
     route_polyline_map = {
         s.rwgps_route_id: s.rwgps_encoded_polyline
@@ -2543,8 +2752,11 @@ def get_feed_items_batch(
         if s.rwgps_route_id and s.rwgps_encoded_polyline
     }
 
-    # Sprint 017: Expand multi-edition and stage race items
-    items = _expand_feed_items(items, races_by_series, route_polyline_map)
+    # Sprint 017→021: Expand multi-edition and stage race items (DB-based)
+    items = _expand_feed_items(
+        items, races_by_series, route_polyline_map,
+        children_by_parent=children_by_parent,
+    )
 
     # Post-expansion filters: race_type and discipline (now see expanded stage types)
     if race_type_filter or discipline_filter:
@@ -2564,14 +2776,20 @@ def get_feed_items_batch(
         items = filtered
 
     # Sort: upcoming by date asc, then historical by most_recent desc
+    # Stage race children anchor at earliest child date, grouped by parent
     def sort_key(item):
         if item["is_upcoming"]:
-            return (0, item["upcoming_date"] or datetime.max, item["display_name"])
+            # Stage children: anchor to earliest sibling date, then sort by stage_number
+            anchor = item.get("stage_anchor_date") or item["upcoming_date"] or datetime.max
+            is_child = 1 if item.get("parent_series_id") else 0
+            parent_key = item.get("parent_series_id") or item["series_id"]
+            stage_num = item.get("stage_number") or 0
+            return (0, anchor, is_child, parent_key, stage_num, item["display_name"])
         else:
             epoch = datetime(1970, 1, 1)
             d = item["most_recent_date"]
             inv = datetime.max - (d - epoch) if d else datetime.min
-            return (1, inv, item["display_name"])
+            return (1, inv, 0, 0, 0, item["display_name"])
 
     items.sort(key=sort_key)
     return items
