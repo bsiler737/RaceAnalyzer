@@ -401,13 +401,11 @@ def _render_rows(
     expanded: bool = False,
 ):
     """Render feed items as single-column agenda rows (Sprint 019)."""
-    in_stage_group = False
     for item in items:
         occ_kind = item.get("occurrence_kind")
 
         # Sprint 021: Stage race group header
         if occ_kind == "stage_header":
-            in_stage_group = True
             parent_name = item.get("display_name", "Stage Race")
             stage_count = item.get("stage_count", 0)
             st.markdown(
@@ -420,11 +418,6 @@ def _render_rows(
             )
             continue
 
-        # End stage group visual when we hit a non-stage item
-        if occ_kind != "stage" and in_stage_group:
-            in_stage_group = False
-
-        # Stage children and regular items render the same way
         _render_container_row(
             item, session, category,
             key_prefix=key_prefix, expanded=expanded,
