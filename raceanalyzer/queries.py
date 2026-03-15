@@ -1398,6 +1398,7 @@ def get_race_preview(
         "registration_url": reg_url,
         "history_banner": history_banner,
         "race_type": race_type_val.value if race_type_val else None,
+        "state_province": most_recent.state_province if most_recent else None,
     }
 
 

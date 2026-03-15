@@ -12,6 +12,34 @@ from typing import Optional
 
 from raceanalyzer.ui.components import FINISH_TYPE_COLORS, FINISH_TYPE_ICONS
 
+_CANADIAN_PROVINCES = {"BC", "AB", "SK", "MB", "ON", "QC", "NB", "NS", "PE", "NL", "YT", "NT", "NU"}
+
+
+def _is_metric(item: dict) -> bool:
+    """Return True for Canadian races (metric), False for US (imperial)."""
+    sp = (item.get("state_province") or "").strip().upper().replace(".", "")
+    if sp.startswith("US-"):
+        return False
+    return sp in _CANADIAN_PROVINCES
+
+
+def _format_distance(distance_m: float, metric: bool) -> str:
+    if metric:
+        km = distance_m / 1000
+        return f"{km:.0f} km"
+    else:
+        mi = distance_m / 1609.34
+        return f"{mi:.0f} mi"
+
+
+def _format_elevation(gain_m: float, metric: bool) -> str:
+    if metric:
+        return f"{gain_m:.0f}m"
+    else:
+        ft = gain_m * 3.28084
+        return f"{ft:.0f} ft"
+
+
 # --- Race type icons (SVG, 20x20) ---
 
 RACE_TYPE_ICONS: dict[str, str] = {
@@ -1018,20 +1046,21 @@ def _build_chip_row(item: dict) -> list[str]:
         ' stroke="currentColor" stroke-width="1.5"/></svg>'
     )
     # Sprint 020: Always show cross-field range, then Course.distance_m fallback
+    metric = _is_metric(item)
     dist_range = item.get("distance_range")
     if dist_range:
         chips.append(_chip("distance", _DIST_ICON, html.escape(dist_range)))
     elif item.get("distance_m") is not None:
-        km = item["distance_m"] / 1000
-        chips.append(_chip("distance", _DIST_ICON, f"{km:.0f} km"))
+        chips.append(_chip("distance", _DIST_ICON, _format_distance(item["distance_m"], metric)))
     elif is_upcoming:
+        unit = "km" if metric else "mi"
         chips.append(
             '<span class="feed-card-chip" style="opacity:0.5;'
             'display:inline-flex;align-items:center;gap:3px;'
             'background:var(--secondary-background-color,#f0f2f6);'
             'padding:2px 8px;border-radius:4px;'
-            'color:var(--text-color,#444);">'
-            '\U0001f4cf -- km</span>'
+            f'color:var(--text-color,#444);">'
+            f'\U0001f4cf -- {unit}</span>'
         )
 
     _ELEV_ICON = (
@@ -1042,16 +1071,17 @@ def _build_chip_row(item: dict) -> list[str]:
     )
     if item.get("total_gain_m") is not None:
         chips.append(
-            _chip("elevation", _ELEV_ICON, f"{item['total_gain_m']:.0f}m")
+            _chip("elevation", _ELEV_ICON, _format_elevation(item["total_gain_m"], metric))
         )
     elif is_upcoming:
+        unit = "m \u2191" if metric else "ft \u2191"
         chips.append(
             '<span class="feed-card-chip" style="opacity:0.5;'
             'display:inline-flex;align-items:center;gap:3px;'
             'background:var(--secondary-background-color,#f0f2f6);'
             'padding:2px 8px;border-radius:4px;'
-            'color:var(--text-color,#444);">'
-            '\u26f0\ufe0f -- m \u2191</span>'
+            f'color:var(--text-color,#444);">'
+            f'\u26f0\ufe0f -- {unit}</span>'
         )
 
     if item.get("course_type"):

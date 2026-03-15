@@ -229,8 +229,8 @@ class TestBuildCardHtml:
         assert "Banana Belt RR" in card
         assert "Maryhill" in card
         assert "Road Race" in card
-        assert "85 km" in card
-        assert "850m" in card
+        assert "53 mi" in card  # US race: imperial
+        assert "2789 ft" in card  # US race: feet
         assert "Drop rate" in card
         assert "sprint" in card.lower()
 
@@ -597,12 +597,12 @@ class TestMissingDataChips:
     def test_upcoming_missing_distance_shows_placeholder(self):
         item = self._make_item(is_upcoming=True, distance_m=None)
         card = build_card_html(item)
-        assert "-- km" in card
+        assert "-- mi" in card or "-- km" in card
 
     def test_upcoming_missing_elevation_shows_placeholder(self):
         item = self._make_item(is_upcoming=True, total_gain_m=None)
         card = build_card_html(item)
-        assert "-- m" in card
+        assert "-- ft" in card or "-- m" in card
 
     def test_upcoming_missing_duration_shows_placeholder(self):
         item = self._make_item(
@@ -625,7 +625,7 @@ class TestMissingDataChips:
         """Truthy check fix: distance_m=0 should still render."""
         item = self._make_item(is_upcoming=True, distance_m=0)
         card = build_card_html(item)
-        assert "0 km" in card
+        assert "0 mi" in card or "0 km" in card
 
 
 # --- Sprint 015: Two-column layout tests ---
@@ -844,7 +844,12 @@ class TestRaceLengthDisplay:
     def test_fallback_to_course_distance(self):
         item = self._make_item(distance_m=85000)
         card = build_card_html(item)
-        assert "85 km" in card
+        assert "53 mi" in card  # default state=None -> imperial
+
+    def test_fallback_to_course_distance_metric(self):
+        item = self._make_item(distance_m=85000, state_province="BC", location="Vancouver, BC")
+        card = build_card_html(item)
+        assert "85 km" in card  # BC -> metric
 
     def test_range_takes_priority_over_course_distance(self):
         """Sprint 020: distance_range always wins over Course.distance_m."""
@@ -854,7 +859,7 @@ class TestRaceLengthDisplay:
         )
         card = build_card_html(item)
         assert "30-60 mi" in card
-        assert "85 km" not in card
+        assert "53 mi" not in card  # range takes priority
 
 
 class TestEstimatedTime:

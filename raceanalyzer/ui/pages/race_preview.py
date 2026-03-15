@@ -281,6 +281,20 @@ def render():
     preview_race_type = preview.get("race_type")
     is_tt = preview_race_type == "time_trial"
 
+    # Unit system: metric for Canada, imperial for US
+    from raceanalyzer.ui.feed_card import _is_metric
+    _metric = _is_metric({"state_province": preview.get("state_province")})
+
+    def _fmt_dist(m):
+        if _metric:
+            return f"{m/1000:.1f} km"
+        return f"{m/1609.34:.1f} mi"
+
+    def _fmt_elev(m):
+        if _metric:
+            return f"{m:.0f}m gain"
+        return f"{m * 3.28084:.0f} ft gain"
+
     # === 1. Two-column: What to Expect + Predicted Finish Type summary ===
     col_wte, col_pft = st.columns(2)
     with col_wte:
@@ -290,12 +304,12 @@ def render():
             if is_tt:
                 # TT-specific narrative based on course
                 ct = course["course_type"] if course else None
-                dist_km = course["distance_m"] / 1000.0 if course and course.get("distance_m") else None
-                gain_m = course.get("total_gain_m") if course else None
                 tt_parts = ["It's a time trial \u2014 a solo effort against the clock."]
-                if dist_km and gain_m:
+                if course and course.get("distance_m") and course.get("total_gain_m"):
+                    dist_str = _fmt_dist(course["distance_m"]).replace(" gain", "")
+                    elev_str = _fmt_elev(course["total_gain_m"]).replace(" gain", "")
                     tt_parts.append(
-                        f"The {dist_km:.0f} km course has {gain_m:.0f}m of climbing."
+                        f"The {dist_str} course has {elev_str} of climbing."
                     )
                 if ct == "mountainous":
                     tt_parts.append(
@@ -403,7 +417,7 @@ def render():
                 ct_display = course_type_display(course["course_type"])
                 col1.metric("Terrain", ct_display)
                 if course.get("total_gain_m"):
-                    col2.metric("Elevation", f"{course['total_gain_m']:.0f}m gain")
+                    col2.metric("Elevation", _fmt_elev(course["total_gain_m"]))
                 # Sprint 020: Show field-specific distance if available, else range/course
                 if is_field_mode and cat_distance is not None:
                     from raceanalyzer.queries import _format_unit_label
@@ -413,7 +427,7 @@ def render():
                 elif distance_range:
                     col3.metric("Distance", distance_range)
                 elif course.get("distance_m"):
-                    col3.metric("Distance", f"{course['distance_m']/1000:.1f} km")
+                    col3.metric("Distance", _fmt_dist(course["distance_m"]))
 
             if climbs:
                 render_climb_legend()
@@ -440,9 +454,9 @@ def render():
             ct_display = course_type_display(course["course_type"])
             col1.metric("Terrain", ct_display)
             if course.get("total_gain_m"):
-                col2.metric("Elevation", f"{course['total_gain_m']:.0f}m gain")
+                col2.metric("Elevation", _fmt_elev(course["total_gain_m"]))
             if course.get("distance_m"):
-                col3.metric("Distance", f"{course['distance_m']/1000:.1f} km")
+                col3.metric("Distance", _fmt_dist(course["distance_m"]))
 
             desc = COURSE_TYPE_DESCRIPTIONS.get(course["course_type"], "")
             if desc:
