@@ -38,14 +38,38 @@ def main():
         [data-testid="stSidebar"] {
             background-color: #e2ddd8 !important;
         }
-        /* Card containers: white surface like RWGPS info boxes */
-        [data-testid="stLayoutWrapper"] > div[data-testid="stVerticalBlock"] {
-            border-color: #d9d4cf !important;
+        [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+            background-color: #e2ddd8 !important;
         }
-        /* Bordered containers get white background */
-        [data-testid="stLayoutWrapper"]:has(> div[style*="border"]) {
+
+        /* All bordered containers (cards, info boxes) get white background */
+        .st-emotion-cache-18kf3ut,
+        [data-testid="stExpander"],
+        div[data-testid="stVerticalBlockBorderWrapper"] {
             background-color: #ffffff !important;
-            border-radius: 8px;
+            border-radius: 8px !important;
+        }
+
+        /* Buttons (filters, toggles) get white background */
+        button[kind="secondary"],
+        [data-testid="stBaseButton-secondary"] {
+            background-color: #ffffff !important;
+        }
+
+        /* Selectboxes, text inputs get white background */
+        [data-testid="stSelectbox"] > div,
+        [data-testid="stTextInput"] > div > div {
+            background-color: #ffffff !important;
+        }
+
+        /* Info/warning boxes get white background */
+        [data-testid="stAlert"] {
+            background-color: #ffffff !important;
+        }
+
+        /* Popover content white */
+        [data-testid="stPopoverBody"] {
+            background-color: #ffffff !important;
         }
         </style>""",
         unsafe_allow_html=True,

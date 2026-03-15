@@ -7,5 +7,5 @@ hideTopBar = true
 [theme]
 primaryColor = "#ff6b35"
 backgroundColor = "#f0edea"
-secondaryBackgroundColor = "#e8e4e0"
+secondaryBackgroundColor = "#ffffff"
 textColor = "#333333"
