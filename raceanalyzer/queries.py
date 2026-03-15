@@ -1172,6 +1172,22 @@ def get_race_preview(
     drop_rate = calculate_drop_rate(session, series_id, category=category)
     typical_speed = calculate_typical_speeds(session, series_id, category=category)
 
+    # When showing overall (no specific category), compute speed range across fields
+    if not category and typical_speed and all_categories:
+        field_speeds = []
+        for cat in all_categories:
+            fs = calculate_typical_speeds(session, series_id, category=cat)
+            if fs:
+                field_speeds.append(fs["median_winner_speed_mph"])
+        if len(field_speeds) >= 2:
+            lo = min(field_speeds)
+            hi = max(field_speeds)
+            if lo != hi:
+                lo_kph = round(lo / 0.621371, 1)
+                hi_kph = round(hi / 0.621371, 1)
+                typical_speed["speed_range_mph"] = (lo, hi)
+                typical_speed["speed_range_kph"] = (lo_kph, hi_kph)
+
     # Profile and climbs data
     profile_points = None
     climbs = None

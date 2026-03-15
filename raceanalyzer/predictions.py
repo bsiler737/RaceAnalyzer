@@ -742,12 +742,21 @@ def generate_narrative(
 
     # 4. Pacing sentence
     if typical_speed:
-        mph = typical_speed["median_winner_speed_mph"]
-        kph = typical_speed["median_winner_speed_kph"]
-        sentences.append(
-            f"The winning group usually averages around"
-            f" {mph} mph ({kph} kph)."
-        )
+        if "speed_range_mph" in typical_speed:
+            lo_mph, hi_mph = typical_speed["speed_range_mph"]
+            lo_kph, hi_kph = typical_speed["speed_range_kph"]
+            sentences.append(
+                f"Winning speeds typically range from"
+                f" {lo_mph}-{hi_mph} mph ({lo_kph}-{hi_kph} kph)"
+                f" depending on the field."
+            )
+        else:
+            mph = typical_speed["median_winner_speed_mph"]
+            kph = typical_speed["median_winner_speed_kph"]
+            sentences.append(
+                f"The winning group usually averages around"
+                f" {mph} mph ({kph} kph)."
+            )
 
     # 5. Caveat
     if edition_count == 1:
