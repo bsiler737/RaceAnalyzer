@@ -53,8 +53,8 @@ class TestLoadStageSchedule:
     def test_rwgps_route_id_optional(self):
         stages = load_stage_schedule("baker city cycling classic")
         assert stages is not None
-        # Stage 3 (Downtown Criterium) has no rwgps_route_id
-        assert stages[2].rwgps_route_id is None
+        # Stage 3 (Downtown Criterium) now has rwgps_route_id
+        assert stages[2].rwgps_route_id == 27808423
         # Stage 1 has one
         assert stages[0].rwgps_route_id == 45958894
 

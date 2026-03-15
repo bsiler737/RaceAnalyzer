@@ -263,7 +263,7 @@ class TestStageMigrationDB:
             )
             .first()
         )
-        assert stage3.rwgps_route_id is None
+        assert stage3.rwgps_route_id == 27808423  # Downtown Crit now has RWGPS
 
     def test_dalles_stages(self, session):
         """The Dalles Omnium has 2 stages."""

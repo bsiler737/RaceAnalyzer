@@ -378,5 +378,7 @@ def _render_fallback_profile(
         margin=dict(l=40, r=10, t=10, b=40),
         height=400,
         showlegend=False,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
     )
     st.plotly_chart(fig, use_container_width=True)
