@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from raceanalyzer.config import Settings
@@ -19,24 +21,90 @@ def compute_m_per_km(
     return total_gain_m / (distance_m / 1000.0)
 
 
+def _uci_climb_category(length_km: float, avg_grade: float) -> int:
+    """Estimate UCI-style climb category (4=easiest, 0=HC).
+
+    Based on standard categorization rules:
+    - HC: 15+km@8%+ or 20+km@4%+
+    - Cat 1: 5-10km@8%+ or 10-15km@6%+
+    - Cat 2: 5-10km@5-7% or 10+km@3-5%
+    - Cat 3: 2-4km@6%+ or 4-6km@4%+
+    - Cat 4: 2km@6%+ or 4km@4%+
+    Returns 5 if not a categorizable climb.
+    """
+    score = length_km * avg_grade  # simple difficulty product
+    if score >= 120 or (length_km >= 20 and avg_grade >= 4) or (length_km >= 15 and avg_grade >= 8):
+        return 0  # HC
+    if score >= 60 or (length_km >= 10 and avg_grade >= 6) or (length_km >= 5 and avg_grade >= 8):
+        return 1
+    if score >= 30 or (length_km >= 10 and avg_grade >= 3.5) or (length_km >= 5 and avg_grade >= 5):
+        return 2
+    if score >= 12 or (length_km >= 4 and avg_grade >= 4) or (length_km >= 2 and avg_grade >= 6):
+        return 3
+    if score >= 8 or (length_km >= 2 and avg_grade >= 4):
+        return 4
+    return 5  # not a real climb
+
+
 def classify_terrain(
-    m_per_km: Optional[float], settings: Optional[Settings] = None
+    m_per_km: Optional[float],
+    settings: Optional[Settings] = None,
+    climbs: Optional[list[dict]] = None,
 ) -> CourseType:
-    """Classify terrain into 4-bin system. Returns UNKNOWN if m_per_km is None."""
+    """Classify terrain using m/km ratio adjusted by climb quality.
+
+    When climb data is available, the hardest climb's UCI category
+    can push the classification up or pull it down. Short, shallow
+    climbs (all Cat 4+) on a moderate-m/km course = rolling, not hilly.
+    Long sustained climbs (Cat 1-2) on a moderate course = hilly or mountainous.
+    """
     if m_per_km is None:
         return CourseType.UNKNOWN
 
     if settings is None:
         settings = Settings()
 
+    # Base classification from m/km
     if m_per_km < settings.terrain_flat_max:
-        return CourseType.FLAT
+        base = CourseType.FLAT
     elif m_per_km < settings.terrain_rolling_max:
-        return CourseType.ROLLING
+        base = CourseType.ROLLING
     elif m_per_km < settings.terrain_hilly_max:
-        return CourseType.HILLY
+        base = CourseType.HILLY
     else:
+        base = CourseType.MOUNTAINOUS
+
+    # Adjust based on climb characteristics if available
+    if not climbs:
+        return base
+
+    # Find the hardest climb (lowest UCI category number = hardest)
+    best_cat = 5
+    for cl in climbs:
+        length_km = cl.get("length_m", 0) / 1000.0
+        avg_grade = cl.get("avg_grade", 0)
+        cat = _uci_climb_category(length_km, avg_grade)
+        if cat < best_cat:
+            best_cat = cat
+
+    # Adjustment rules:
+    # If all climbs are Cat 4+ (nothing harder), cap at ROLLING
+    if best_cat >= 4 and base in (CourseType.HILLY, CourseType.MOUNTAINOUS):
+        return CourseType.ROLLING
+
+    # If hardest climb is Cat 3, floor at HILLY (real categorized climb)
+    if best_cat <= 3 and base in (CourseType.FLAT, CourseType.ROLLING):
+        return CourseType.HILLY
+
+    # If hardest climb is Cat 1 or HC, floor at MOUNTAINOUS if m/km > 12
+    if best_cat <= 1 and m_per_km >= 12:
         return CourseType.MOUNTAINOUS
+
+    # If hardest climb is Cat 2 and total climbing is heavy, push to MOUNTAINOUS
+    if best_cat <= 2 and m_per_km >= 12:
+        return CourseType.MOUNTAINOUS
+
+    return base
 
 
 COURSE_TYPE_DISPLAY_NAMES = {
@@ -61,6 +129,85 @@ def course_type_display(course_type_value: str) -> str:
     return COURSE_TYPE_DISPLAY_NAMES.get(
         course_type_value, course_type_value.replace("_", " ").title()
     )
+
+
+# --- GPX parsing ---
+
+
+def parse_gpx_track_points(gpx_path: Path) -> list[dict]:
+    """Parse a GPX file into track points with cumulative distance.
+
+    Returns the same format as extract_track_points: [{d, e, y, x}, ...].
+    Works with both Strava and RideWithGPS GPX exports.
+    """
+    tree = ET.parse(gpx_path)
+    root = tree.getroot()
+
+    # Handle GPX namespace
+    ns = ""
+    if root.tag.startswith("{"):
+        ns = root.tag.split("}")[0] + "}"
+
+    result: list[dict] = []
+    cum_dist = 0.0
+
+    for trkpt in root.iter(f"{ns}trkpt"):
+        lat_s = trkpt.get("lat")
+        lon_s = trkpt.get("lon")
+        if lat_s is None or lon_s is None:
+            continue
+
+        lat = float(lat_s)
+        lon = float(lon_s)
+
+        ele_el = trkpt.find(f"{ns}ele")
+        elev = float(ele_el.text) if ele_el is not None and ele_el.text else 0.0
+
+        if result:
+            prev = result[-1]
+            cum_dist += _haversine(prev["y"], prev["x"], lat, lon)
+
+        result.append({"d": cum_dist, "e": elev, "y": lat, "x": lon})
+
+    return result
+
+
+def gpx_to_encoded_polyline(track_points: list[dict]) -> Optional[str]:
+    """Encode parsed GPX track points as a Google encoded polyline."""
+    if not track_points:
+        return None
+    import polyline as pl
+
+    coords = [(pt["y"], pt["x"]) for pt in track_points]
+    return pl.encode(coords)
+
+
+def compute_elevation_stats(track_points: list[dict]) -> Optional[dict]:
+    """Compute elevation stats from parsed track points (GPX or RWGPS).
+
+    Returns dict matching the shape of rwgps.fetch_route_elevation output.
+    """
+    if not track_points or len(track_points) < 2:
+        return None
+
+    total_gain = 0.0
+    total_loss = 0.0
+    elevations = [pt["e"] for pt in track_points]
+
+    for i in range(1, len(track_points)):
+        delta = track_points[i]["e"] - track_points[i - 1]["e"]
+        if delta > 0:
+            total_gain += delta
+        else:
+            total_loss += abs(delta)
+
+    return {
+        "distance_m": track_points[-1]["d"],
+        "total_gain_m": total_gain,
+        "total_loss_m": total_loss,
+        "max_elevation_m": max(elevations),
+        "min_elevation_m": min(elevations),
+    }
 
 
 # --- Profile processing ---

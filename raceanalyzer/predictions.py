@@ -859,7 +859,7 @@ def finish_type_teaser(
             insight = _lowercase_lead(base) if base else ""
         if insight:
             if edition_count and edition_count > 1:
-                return f"Past results were inconclusive \u2014 {insight}"
+                return f"Hard to say from past results \u2014 {insight}"
             return f"Hard to say since this is the first edition \u2014 {insight}"
         return ""
 

@@ -734,6 +734,18 @@ def course_profile_extract(ctx, force):
             course.profile_json = json.dumps(profile)
             course.climbs_json = json.dumps(climbs)
             course.extracted_at = datetime.utcnow()
+
+            # Reclassify terrain using climb-aware classifier
+            from raceanalyzer.elevation import classify_terrain, compute_m_per_km
+            if course.m_per_km is not None:
+                old_type = course.course_type
+                new_type = classify_terrain(course.m_per_km, settings, climbs=climbs)
+                if old_type != new_type:
+                    course.course_type = new_type
+                    click.echo(
+                        f"    Reclassified: {old_type.value} -> {new_type.value}"
+                    )
+
             extracted += 1
 
             click.echo(
