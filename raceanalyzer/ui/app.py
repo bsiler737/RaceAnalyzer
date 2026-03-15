@@ -40,12 +40,6 @@ def main():
             background-color: #e2ddd8 !important;
         }
 
-        /* Bordered containers (feed cards, info boxes, preview sections): white */
-        div[data-testid="stVerticalBlockBorderWrapper"] {
-            background-color: #ffffff !important;
-            border-radius: 8px !important;
-        }
-
         /* Popover and expander content: white */
         [data-testid="stPopoverBody"],
         [data-testid="stExpander"] {
@@ -53,6 +47,32 @@ def main():
         }
         </style>""",
         unsafe_allow_html=True,
+    )
+
+    # JS to set white bg on bordered containers (Streamlit strips <script>
+    # from st.markdown, so use st.html which renders in an iframe that can
+    # access the parent document)
+    import streamlit.components.v1 as components
+    components.html(
+        """<script>
+        function whiteCards() {
+            const doc = window.parent.document;
+            doc.querySelectorAll('[data-testid="stVerticalBlock"]').forEach(el => {
+                if (window.parent.getComputedStyle(el).borderStyle !== 'none') {
+                    el.style.backgroundColor = '#ffffff';
+                    el.style.borderRadius = '8px';
+                }
+            });
+        }
+        // Run after Streamlit finishes rendering
+        setTimeout(whiteCards, 500);
+        setTimeout(whiteCards, 1500);
+        setTimeout(whiteCards, 3000);
+        new MutationObserver(whiteCards).observe(
+            window.parent.document.body, {childList: true, subtree: true}
+        );
+        </script>""",
+        height=0,
     )
 
     # Seed global session state from query params (Sprint 010)
