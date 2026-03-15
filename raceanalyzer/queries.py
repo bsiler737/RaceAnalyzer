@@ -2408,6 +2408,40 @@ def get_feed_items_batch(
     if not series_rows:
         return []
 
+    # Sprint 021: Filter out old stage-named series that are superseded by
+    # DB children. Find parents that have children, then exclude standalone
+    # series whose name starts with the parent's name + separator.
+    parent_ids_with_children = set(
+        row[0] for row in
+        session.query(RaceSeries.parent_series_id)
+        .filter(RaceSeries.parent_series_id.isnot(None))
+        .distinct()
+        .all()
+    )
+    if parent_ids_with_children:
+        parent_names = {
+            s.id: s.display_name for s in series_rows
+            if s.id in parent_ids_with_children
+        }
+        superseded_ids = set()
+        for s in series_rows:
+            if s.id in parent_ids_with_children:
+                continue  # keep parents
+            for pid, pname in parent_names.items():
+                if s.id != pid and (
+                    s.display_name.startswith(f"{pname}:")
+                    or s.display_name.startswith(f"{pname} -")
+                    or s.display_name.startswith(f"{pname} Stage")
+                ):
+                    superseded_ids.add(s.id)
+                    break
+        if superseded_ids:
+            series_rows = [s for s in series_rows if s.id not in superseded_ids]
+            logger.info(
+                "Filtered %d superseded stage-named series from feed",
+                len(superseded_ids),
+            )
+
     series_ids = [s.id for s in series_rows]
     series_map = {s.id: s for s in series_rows}
 

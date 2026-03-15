@@ -424,24 +424,11 @@ def _render_rows(
         if occ_kind != "stage" and in_stage_group:
             in_stage_group = False
 
-        # Stage children get a left-border connector
-        if occ_kind == "stage":
-            with st.container():
-                st.markdown(
-                    '<div style="border-left:3px solid #ff6b35;'
-                    'padding-left:8px;margin-left:4px;">',
-                    unsafe_allow_html=True,
-                )
-                _render_container_row(
-                    item, session, category,
-                    key_prefix=key_prefix, expanded=expanded,
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            _render_container_row(
-                item, session, category,
-                key_prefix=key_prefix, expanded=expanded,
-            )
+        # Stage children and regular items render the same way
+        _render_container_row(
+            item, session, category,
+            key_prefix=key_prefix, expanded=expanded,
+        )
 
 
 def _render_container_row(

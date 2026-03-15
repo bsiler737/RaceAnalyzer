@@ -9,7 +9,7 @@ stages:
     name: "Waterville Road Race"
     race_type: "road_race"
     date: "2026-05-15"
-    rwgps_route_id: 46491966
+    rwgps_route_id: 53849214
   - stage: 3
     name: "Downtown Wenatchee Criterium"
     race_type: "criterium"
