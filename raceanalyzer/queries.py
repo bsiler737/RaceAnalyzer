@@ -673,6 +673,7 @@ def get_scary_racers(
     session: Session,
     race_id: int,
     category: Optional[str] = None,
+    categories: Optional[list[str]] = None,
     *,
     top_n: int = 10,
 ) -> pd.DataFrame:
@@ -701,7 +702,9 @@ def get_scary_racers(
         Startlist.rider_id,
     ).filter(Startlist.race_id == race_id)
 
-    if category:
+    if categories:
+        sl_rows = sl_q.filter(Startlist.category.in_(categories)).all()
+    elif category:
         exact = sl_q.filter(Startlist.category == category).all()
         if exact:
             sl_rows = exact
@@ -780,7 +783,9 @@ def get_scary_racers(
         )
     )
 
-    if category:
+    if categories:
+        rider_results = q.filter(Result.race_category_name.in_(categories)).all()
+    elif category:
         exact = q.filter(Result.race_category_name == category).all()
         if exact:
             rider_results = exact
@@ -2773,17 +2778,21 @@ def get_similar_series(session, series_id, all_items=None, top_n=3, min_score=50
     return [(score, item) for score, item in scored[:top_n]]
 
 
-def get_startlist_team_blocks(session, series_id, category=None, team_name=None):
+def get_startlist_team_blocks(session, series_id, category=None, categories=None, team_name=None):
     """Get startlist grouped by team for a series.
 
-    When category is None (All Categories mode), includes category info per rider
-    and deduplicates riders registered for multiple fields. Count reflects unique
-    humans, not total registrations.
+    Args:
+        category: Single category name (exact match).
+        categories: List of category name variants to match (any of them).
+        When both are None (All Fields mode), includes category info per rider
+        and deduplicates riders registered for multiple fields.
     """
     from raceanalyzer.db.models import Startlist
 
     query = session.query(Startlist).filter(Startlist.series_id == series_id)
-    if category:
+    if categories:
+        query = query.filter(Startlist.category.in_(categories))
+    elif category:
         query = query.filter(Startlist.category == category)
     entries = query.all()
 
@@ -2807,7 +2816,7 @@ def get_startlist_team_blocks(session, series_id, category=None, team_name=None)
                 cats.append(e.category)
 
     # Build blocks; count = unique riders, not registrations
-    is_all_categories = category is None
+    is_all_categories = category is None and categories is None
     blocks = []
     for team_name_val, riders_dict in sorted(teams.items(), key=lambda x: -len(x[1])):
         riders = list(riders_dict.values())

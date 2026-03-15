@@ -16,20 +16,9 @@ _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _GEOCODE_CACHE: dict[str, tuple[float, float] | None] = {}
 
 
-def geocode_location(
-    location: str, state: str = "",
-) -> tuple[float, float] | None:
-    """Geocode a location string via Nominatim. Returns (lat, lon) or None.
-
-    Results are cached in-memory for the session.
-    """
-    query = f"{location}, {state}" if state else location
-    if not query.strip():
-        return None
-
-    if query in _GEOCODE_CACHE:
-        return _GEOCODE_CACHE[query]
-
+@st.cache_data(ttl=86400, show_spinner=False)
+def _geocode_nominatim(query: str) -> tuple[float, float] | None:
+    """Call Nominatim for a single query. Cached across reruns for 24h."""
     try:
         resp = requests.get(
             "https://nominatim.openstreetmap.org/search",
@@ -39,14 +28,29 @@ def geocode_location(
         )
         if resp.ok and resp.json():
             data = resp.json()[0]
-            result = (float(data["lat"]), float(data["lon"]))
-            _GEOCODE_CACHE[query] = result
-            return result
+            return (float(data["lat"]), float(data["lon"]))
     except Exception:
         logger.debug("Geocoding failed for %s", query)
-
-    _GEOCODE_CACHE[query] = None
     return None
+
+
+def geocode_location(
+    location: str, state: str = "",
+) -> tuple[float, float] | None:
+    """Geocode a location string via Nominatim. Returns (lat, lon) or None.
+
+    Results are cached via st.cache_data (persists across reruns).
+    """
+    query = f"{location}, {state}" if state else location
+    if not query.strip():
+        return None
+
+    if query in _GEOCODE_CACHE:
+        return _GEOCODE_CACHE[query]
+
+    result = _geocode_nominatim(query)
+    _GEOCODE_CACHE[query] = result
+    return result
 
 
 # --- Sprint 013: Utility functions ---
@@ -91,29 +95,32 @@ _STATE_CENTROIDS: dict[str, tuple[float, float]] = {
 }
 
 
-def _get_item_coords(item: dict) -> tuple[float, float] | None:
+def _get_item_coords(
+    item: dict, *, allow_geocode: bool = True,
+) -> tuple[float, float] | None:
     """Get coordinates for a feed item.
 
     Tries polyline centroid, then geocoding, then state fallback.
+    Set allow_geocode=False to skip slow HTTP calls (for feed map).
     """
-    # Try polyline centroid first
+    # Try polyline centroid first (fast, local)
     polyline = item.get("rwgps_encoded_polyline")
     if polyline:
         result = polyline_centroid(polyline)
         if result:
             return result
 
-    # Try geocoding
-    loc = item.get("location", "")
+    # State centroid fallback (fast, no network)
     state = item.get("state_province", "")
-    if loc:
+    if state and state.upper() in _STATE_CENTROIDS:
+        return _STATE_CENTROIDS[state.upper()]
+
+    # Try geocoding (slow, HTTP call) — only if allowed
+    loc = item.get("location", "")
+    if allow_geocode and loc:
         result = geocode_location(loc, state)
         if result:
             return result
-
-    # State centroid fallback
-    if state:
-        return _STATE_CENTROIDS.get(state.upper())
 
     return None
 
@@ -126,10 +133,10 @@ def render_feed_map(items: list[dict]):
 
     from raceanalyzer.ui.components import FINISH_TYPE_COLORS
 
-    # Collect pins
+    # Collect pins (skip geocoding for fast load)
     pins = []
     for item in items:
-        coords = _get_item_coords(item)
+        coords = _get_item_coords(item, allow_geocode=False)
         if not coords:
             continue
         ft = item.get("predicted_finish_type") or "unknown"
@@ -328,10 +335,28 @@ def _render_fallback_profile(
     distances = [p["d"] / 1000 for p in profile_points]
     elevations = [p["e"] for p in profile_points]
 
+    # Smart Y-axis: bottom at a round number below the min elevation,
+    # leaving ~20% padding below the lowest point so the change in
+    # elevation is visually prominent (not squished against a 0 baseline)
+    min_e = min(elevations)
+    max_e = max(elevations)
+    e_range = max_e - min_e
+    # Round down to a nice interval below the minimum
+    padding = max(e_range * 0.2, 5)  # at least 5m below
+    y_min = max(0, min_e - padding)
+    # Round to nearest 10
+    y_min = int(y_min // 10) * 10
+    y_max = max_e + padding
+
     fig = go.Figure()
+    # Invisible baseline trace (must come first for fill="tonexty")
+    fig.add_trace(go.Scatter(
+        x=distances, y=[y_min] * len(distances),
+        mode="lines", line=dict(width=0), showlegend=False,
+    ))
     fig.add_trace(go.Scatter(
         x=distances, y=elevations,
-        mode="lines", fill="tozeroy",
+        mode="lines", fill="tonexty",
         fillcolor="rgba(37, 99, 235, 0.12)",
         line=dict(color="#2563EB", width=2),
         name="Elevation",
@@ -349,6 +374,7 @@ def _render_fallback_profile(
     fig.update_layout(
         xaxis_title="Distance (km)",
         yaxis_title="Elevation (m)",
+        yaxis_range=[y_min, y_max],
         margin=dict(l=40, r=10, t=10, b=40),
         height=400,
         showlegend=False,

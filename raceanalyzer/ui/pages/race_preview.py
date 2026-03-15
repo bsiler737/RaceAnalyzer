@@ -178,8 +178,11 @@ def render():
     # --- Re-fetch preview data if a specific field is chosen ---
     # Use the first raw category name for querying (any variant will match)
     query_category = None
+    # All raw category name variants for this canonical field
+    query_category_variants: list[str] = []
     if chosen_field and chosen_field in canon_to_raws:
-        query_category = canon_to_raws[chosen_field][0]
+        query_category_variants = canon_to_raws[chosen_field]
+        query_category = query_category_variants[0]
 
     if query_category:
         preview = queries.get_race_preview(
@@ -436,12 +439,12 @@ def render():
     # === 4. Spooky Riders (field-gated) ===
     with st.container(border=True):
         st.subheader("Spooky Riders")
-        scary_cat = query_category if is_field_mode else None
-        if scary_cat:
+        if is_field_mode:
             latest_race = queries.get_latest_race_for_series(session, int(series_id))
             if latest_race:
                 scary_racers = queries.get_scary_racers(
-                    session, latest_race.id, category=scary_cat
+                    session, latest_race.id,
+                    categories=query_category_variants or None,
                 )
                 if not scary_racers.empty:
                     source = scary_racers["source"].iloc[0]
@@ -465,9 +468,10 @@ def render():
     with st.container(border=True):
         st.subheader("Startlist")
         team_name = st.session_state.get("team", "") or st.query_params.get("team", "")
-        startlist_cat = query_category if is_field_mode else None
         team_blocks = queries.get_startlist_team_blocks(
-            session, int(series_id), category=startlist_cat, team_name=team_name,
+            session, int(series_id),
+            categories=query_category_variants if is_field_mode else None,
+            team_name=team_name,
         )
         if team_blocks:
             render_team_startlist(team_blocks, user_team_name=team_name)
