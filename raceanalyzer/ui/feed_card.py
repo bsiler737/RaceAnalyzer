@@ -420,12 +420,9 @@ def inject_feed_styles():
     <style>
     /* Feed row styles (Sprint 019) */
 
-    /* Constrain feed content to consistent width; left-align (Sprint 020) */
+    /* Constrain feed content to consistent width */
     section[data-testid="stMain"] .block-container {
         max-width: 1060px !important;
-        margin-left: 0 !important;
-        margin-right: auto !important;
-        padding-left: 1rem !important;
     }
 
     /* Row press micro-animation */

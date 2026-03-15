@@ -780,8 +780,6 @@ def render_racer_profile_filters(session) -> dict:
         elif team_name and len(team_name.strip()) < 3:
             st.caption("Enter at least 3 characters")
 
-        st.divider()
-
         # Sprint 020: Category pills — NO default= (widget key owns state)
         cat_options = ["All", "1", "2", "3", "4", "5"]
         chosen_cat = st.pills(

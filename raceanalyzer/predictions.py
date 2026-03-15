@@ -496,22 +496,39 @@ def calculate_typical_speeds(
     if route_distance_m < 5000:
         return None
 
-    # Sprint 020: Pre-load CategoryDetail distances for all editions
-    # so we can use total race distance instead of single-lap route distance
+    # Sprint 020: Pre-load CategoryDetail distances from ANY race in the series
+    # (upcoming editions often have CategoryDetail even when past editions don't)
     from raceanalyzer.db.models import CategoryDetail
-    race_ids = [r.id for r in editions]
-    cat_details = (
-        session.query(CategoryDetail)
-        .filter(CategoryDetail.race_id.in_(race_ids))
+    from raceanalyzer.queries import normalize_field_name
+
+    all_series_races = (
+        session.query(Race.id)
+        .filter(Race.series_id == series_id)
         .all()
     )
-    # Map (race_id, category) -> distance_m
-    cat_dist_map: dict[tuple[int, str | None], float] = {}
+    all_race_ids = [r.id for r in all_series_races]
+    cat_details = (
+        session.query(CategoryDetail)
+        .filter(CategoryDetail.race_id.in_(all_race_ids))
+        .all()
+    ) if all_race_ids else []
+
+    # Build normalized_category -> distance_m (best known distance per field)
+    # Use the most recent CategoryDetail per normalized field name
+    field_dist_map: dict[str, float] = {}
     for cd in cat_details:
         if cd.distance is not None:
             dist_m = _cat_detail_distance_to_meters(cd.distance, cd.distance_unit)
             if dist_m and dist_m > 0:
-                cat_dist_map[(cd.race_id, cd.category)] = dist_m
+                norm = normalize_field_name(cd.category)
+                # Keep the largest distance for each field (most laps)
+                if norm not in field_dist_map or dist_m > field_dist_map[norm]:
+                    field_dist_map[norm] = dist_m
+
+    # Determine if the route is a single lap (much shorter than known race distances)
+    is_multi_lap = bool(
+        field_dist_map and max(field_dist_map.values()) > route_distance_m * 1.5
+    )
 
     per_edition_winner_speeds = []
     per_edition_field_speeds = []
@@ -550,19 +567,23 @@ def calculate_typical_speeds(
         if not results:
             continue
 
-        # Sprint 020: Prefer CategoryDetail.distance (total race distance)
-        # over Course.distance_m (single-lap route) for multi-lap races
-        race_distance_m = route_distance_m
+        # Sprint 020: Use CategoryDetail distance (total race distance) when available.
+        # For multi-lap races, the route distance is a single lap — use known
+        # field distances from CategoryDetail (may come from a different edition).
+        race_distance_m = None
         if category:
-            cat_d = cat_dist_map.get((race.id, category))
-            if cat_d:
-                race_distance_m = cat_d
+            norm_cat = normalize_field_name(category)
+            race_distance_m = field_dist_map.get(norm_cat)
         else:
-            # No category filter: use any CategoryDetail distance for this race
-            for (rid, _cat), d in cat_dist_map.items():
-                if rid == race.id:
-                    race_distance_m = d
-                    break
+            # No category filter: use the longest known field distance
+            if field_dist_map:
+                race_distance_m = max(field_dist_map.values())
+
+        # Fall back to route distance only for non-multi-lap courses
+        if race_distance_m is None:
+            if is_multi_lap:
+                continue  # Can't compute speed without knowing total distance
+            race_distance_m = route_distance_m
 
         # Front group proxy: top K finishers
         top_k = results[:settings.speed_top_k]

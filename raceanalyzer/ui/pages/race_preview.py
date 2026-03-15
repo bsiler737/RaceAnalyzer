@@ -105,68 +105,86 @@ def render():
     st.title(series["display_name"])
     st.caption("Race Preview")
 
-    # === Sprint 020: Smart Field Picker ===
-    categories = preview["categories"]
+    # === Sprint 020: Smart Field Picker with deduplication ===
+    raw_categories = preview["categories"]
     chosen_field = None  # None = "All Categories" mode
+    # Map from canonical display name back to raw category names for queries
+    canon_to_raws: dict[str, list[str]] = {}
 
-    if categories and len(categories) > 1:
-        # Partition into matched and other fields
-        matched_set = set(matched_categories or [])
-        matched_fields = [c for c in categories if c in matched_set]
-        other_fields = [c for c in categories if c not in matched_set]
+    if raw_categories:
+        from raceanalyzer.queries import deduplicate_field_names, normalize_field_name
 
-        cat_options: list = [None]  # None = "All Categories"
-        if matched_fields:
-            cat_options += matched_fields
-        if other_fields:
+        categories, canon_to_raws = deduplicate_field_names(raw_categories)
+
+        # Normalize matched_categories into canonical space
+        matched_canon = set()
+        for mc in (matched_categories or []):
+            mc_norm = normalize_field_name(mc)
+            if mc_norm in canon_to_raws:
+                matched_canon.add(mc_norm)
+
+        if len(categories) > 1:
+            matched_set = matched_canon
+            matched_fields = [c for c in categories if c in matched_set]
+            other_fields = [c for c in categories if c not in matched_set]
+
+            cat_options: list = [None]  # None = "All Categories"
             if matched_fields:
-                cat_options.append(_FIELD_DIVIDER)
-            cat_options += other_fields
+                cat_options += matched_fields
+            if other_fields:
+                if matched_fields:
+                    cat_options.append(_FIELD_DIVIDER)
+                cat_options += other_fields
 
-        def _format_field(x):
-            if x is None:
-                return "All Categories"
-            if x == _FIELD_DIVIDER:
-                return _FIELD_DIVIDER
-            if x in matched_set:
-                return f"\u2605 {x}"
-            return f"  {x}"
+            def _format_field(x):
+                if x is None:
+                    return "All Categories"
+                if x == _FIELD_DIVIDER:
+                    return _FIELD_DIVIDER
+                if x in matched_set:
+                    return f"\u2605 {x}"
+                return f"  {x}"
 
-        # Restore field from URL params
-        url_field = st.query_params.get("field")
-        default_idx = 0
-        if url_field and url_field in categories:
-            default_idx = cat_options.index(url_field)
+            # Restore field from URL params
+            url_field = st.query_params.get("field")
+            default_idx = 0
+            if url_field and url_field in categories:
+                default_idx = cat_options.index(url_field)
 
-        raw_choice = st.selectbox(
-            "Field",
-            options=cat_options,
-            index=default_idx,
-            format_func=_format_field,
-        )
+            raw_choice = st.selectbox(
+                "Field",
+                options=cat_options,
+                index=default_idx,
+                format_func=_format_field,
+            )
 
-        # Divider selection is a no-op — revert to previous
-        if raw_choice == _FIELD_DIVIDER:
-            raw_choice = url_field if url_field in categories else None
+            # Divider selection is a no-op — revert to previous
+            if raw_choice == _FIELD_DIVIDER:
+                raw_choice = url_field if url_field in categories else None
 
-        chosen_field = raw_choice
+            chosen_field = raw_choice
 
-        # Persist to URL
-        if chosen_field:
-            st.query_params["field"] = chosen_field
-        else:
-            st.query_params.pop("field", None)
+            # Persist to URL
+            if chosen_field:
+                st.query_params["field"] = chosen_field
+            else:
+                st.query_params.pop("field", None)
 
-    elif categories and len(categories) == 1:
-        # Single field: auto-select, hide picker
-        chosen_field = categories[0]
+        elif len(categories) == 1:
+            # Single field: auto-select, hide picker
+            chosen_field = categories[0]
     # else: no categories at all
 
     # --- Re-fetch preview data if a specific field is chosen ---
-    if chosen_field:
+    # Use the first raw category name for querying (any variant will match)
+    query_category = None
+    if chosen_field and chosen_field in canon_to_raws:
+        query_category = canon_to_raws[chosen_field][0]
+
+    if query_category:
         preview = queries.get_race_preview(
             session, int(series_id),
-            category=chosen_field,
+            category=query_category,
             matched_categories=None,  # field-specific, not multi-match
             racer_profile_label=racer_profile_label,
         )
@@ -326,15 +344,6 @@ def render():
 
             # Sprint 020 PP-05: No render_course_map() here either
 
-    # Standalone course map (not inside Course Profile container)
-    if series.get("encoded_polyline"):
-        with st.container(border=True):
-            st.subheader("Course Map")
-            render_course_map(
-                series["encoded_polyline"], series["display_name"],
-                climbs=climbs,
-            )
-
     # === 3. Two-column: Predicted Finish Type details + Historical Stats ===
     col_pred, col_stats = st.columns(2)
     with col_pred:
@@ -362,7 +371,7 @@ def render():
                 # Historical finish type pattern
                 detail = queries.get_feed_item_detail(
                     session, int(series_id),
-                    category=chosen_field if is_field_mode else initial_cat,
+                    category=query_category if is_field_mode else initial_cat,
                 )
                 if detail and detail.get("editions_summary"):
                     st.markdown("**Historical Pattern:**")
@@ -424,7 +433,7 @@ def render():
     # === 4. Scary Riders (category-gated) ===
     with st.container(border=True):
         st.subheader("Scary Riders")
-        scary_cat = chosen_field if is_field_mode else initial_cat
+        scary_cat = query_category if is_field_mode else initial_cat
         if scary_cat:
             latest_race = queries.get_latest_race_for_series(session, int(series_id))
             if latest_race:
@@ -456,7 +465,7 @@ def render():
     with st.container(border=True):
         st.subheader("Startlist")
         team_name = st.session_state.get("team", "") or st.query_params.get("team", "")
-        startlist_cat = chosen_field if is_field_mode else initial_cat
+        startlist_cat = query_category if is_field_mode else initial_cat
         team_blocks = queries.get_startlist_team_blocks(
             session, int(series_id), category=startlist_cat, team_name=team_name,
         )
@@ -496,7 +505,7 @@ def render():
                 index=0,
             )
 
-            feedback_cat = chosen_field or initial_cat or ""
+            feedback_cat = query_category or initial_cat or ""
             if st.button("Submit Feedback"):
                 _save_feedback(
                     session, int(series_id), feedback_cat,

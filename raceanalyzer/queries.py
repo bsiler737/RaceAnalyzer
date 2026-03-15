@@ -1133,12 +1133,14 @@ def get_race_preview(
         else:
             prediction["prediction_source"] = None
 
-    # Categories across all editions
-    all_categories = sorted(set(
-        cls.category
-        for race in series.races
-        for cls in race.classifications
-    ))
+    # Categories from the most recent edition that has classifications
+    # (upcoming editions may not have classifications yet)
+    all_categories = []
+    for race in sorted(series.races, key=lambda r: r.date or datetime.min, reverse=True):
+        cats = [cls.category for cls in race.classifications]
+        if cats:
+            all_categories = sorted(set(cats))
+            break
 
     # Contenders (need a category)
     contenders = pd.DataFrame(
@@ -1760,6 +1762,151 @@ def _normalize_category(name: str) -> str:
     return " ".join(name.lower().split())
 
 
+import re as _re
+
+# Patterns for normalize_field_name
+_GENDER_PATS = [
+    (_re.compile(r"\bwom[ae]n'?s?\b", _re.I), "Women"),
+    (_re.compile(r"\bmen'?s?\b", _re.I), "Men"),
+    (_re.compile(r"\bmixed\b", _re.I), "Mixed"),
+]
+_MASTERS_PAT = _re.compile(
+    r"\b(?:masters?|mst|mstr)\b", _re.I
+)
+_JUNIOR_PAT = _re.compile(
+    r"\b(?:juniors?|jrs?\.?)\b", _re.I
+)
+_SENIOR_PAT = _re.compile(r"\bsenior\b", _re.I)
+_PRO_PAT = _re.compile(r"\bpro\b", _re.I)
+_CAT_LABEL_PAT = _re.compile(r"\b(?:cat(?:egory)?|categories)\b", _re.I)
+# Cat levels like "1/2", "3-4", "1,2,3", "1/2/3/4/5"
+_CAT_LEVELS_PAT = _re.compile(r"(?<!\d)([1-5])(?:\s*[/\-,]\s*([1-5])(?:\s*[/\-,]\s*([1-5])(?:\s*[/\-,]\s*([1-5])(?:\s*[/\-,]\s*([1-5]))?)?)?)?\b")
+# Age bracket like "35+", "40-49", "35-99"
+_AGE_PAT = _re.compile(r"\b(\d{2,3})\s*[\-\+]\s*(\d{2,3})?\+?(?=\s|$)")
+# Noise patterns to strip
+_NOISE_PATS = [
+    _re.compile(r"\b(?:open|combined|overall|field)\b", _re.I),
+    _re.compile(r"\(\d+(?:\.\d+)?[`']?\s*(?:miles?|mi)\)", _re.I),  # "(26.5 Miles)"
+    _re.compile(r"\b\d+(?:am|pm)\b", _re.I),  # "10am", "530pm"
+    _re.compile(r"\b(?:hc|road race|stage race|time trial)\b", _re.I),
+]
+
+
+def normalize_field_name(raw: str) -> str:
+    """Normalize a category/field name into a canonical display form.
+
+    Collapses variants like "Men Cat 1/2 Senior", "Men Senior Cat Pro/1/2",
+    "Men Category 1/2" into "Men Cat 1/2".
+
+    Rules:
+    - "Senior" is stripped (it means non-masters, non-junior — the default)
+    - "Pro" combined with cat levels is absorbed (Pro races with 1/2)
+    - "Category" → "Cat"
+    - Separators normalized: "1-2" → "1/2"
+    - Word order standardized: Gender [Masters age+] Cat levels [Junior age]
+    """
+    s = raw.strip()
+    if not s:
+        return s
+
+    # Extract gender
+    gender = ""
+    for pat, label in _GENDER_PATS:
+        if pat.search(s):
+            gender = label
+            s = pat.sub("", s)
+            break
+
+    # Extract masters
+    is_masters = bool(_MASTERS_PAT.search(s))
+    s = _MASTERS_PAT.sub("", s)
+
+    # Extract junior
+    is_junior = bool(_JUNIOR_PAT.search(s))
+    s = _JUNIOR_PAT.sub("", s)
+
+    # Strip "Senior" (default, not informative)
+    s = _SENIOR_PAT.sub("", s)
+
+    # Strip "Pro" (absorbed into cat levels)
+    s = _PRO_PAT.sub("", s)
+
+    # Strip "Cat"/"Category" label (we'll re-add it)
+    s = _CAT_LABEL_PAT.sub("", s)
+
+    # Strip noise words
+    for pat in _NOISE_PATS:
+        s = pat.sub("", s)
+
+    # Extract age bracket (e.g., "35+", "40-49")
+    age_str = ""
+    age_match = _AGE_PAT.search(s)
+    if age_match:
+        lo = age_match.group(1)
+        hi = age_match.group(2)
+        if hi and int(hi) >= 90:
+            # "35-99" style → treat as "35+"
+            age_str = f"{lo}+"
+        elif hi:
+            age_str = f"{lo}-{hi}"
+        else:
+            age_str = f"{lo}+"
+        s = s[:age_match.start()] + s[age_match.end():]
+
+    # Extract cat levels
+    cat_levels = ""
+    # Clean separators for level extraction
+    s_clean = " ".join(s.split())
+    level_match = _CAT_LEVELS_PAT.search(s_clean)
+    if level_match:
+        levels = [g for g in level_match.groups() if g]
+        cat_levels = "/".join(levels)
+        s_clean = s_clean[:level_match.start()] + s_clean[level_match.end():]
+
+    # Build canonical form
+    parts = []
+    if gender:
+        parts.append(gender)
+    if is_masters:
+        parts.append("Masters")
+        if age_str:
+            parts.append(age_str)
+    elif is_junior:
+        parts.append("Junior")
+        if age_str:
+            parts.append(age_str)
+    if cat_levels:
+        parts.append(f"Cat {cat_levels}")
+
+    if not parts:
+        # Couldn't parse — return cleaned original
+        return " ".join(raw.split())
+
+    return " ".join(parts)
+
+
+def deduplicate_field_names(raw_categories: list[str]) -> tuple[list[str], dict[str, list[str]]]:
+    """Deduplicate category names by normalizing them.
+
+    Returns:
+        (canonical_list, canonical_to_raw_map)
+        - canonical_list: deduplicated list of canonical field names, in order
+        - canonical_to_raw_map: maps each canonical name to all raw names that
+          normalize to it (for querying with any of the raw names)
+    """
+    canonical_to_raws: dict[str, list[str]] = {}
+    seen_order: list[str] = []
+
+    for raw in raw_categories:
+        canon = normalize_field_name(raw)
+        if canon not in canonical_to_raws:
+            canonical_to_raws[canon] = []
+            seen_order.append(canon)
+        canonical_to_raws[canon].append(raw)
+
+    return seen_order, canonical_to_raws
+
+
 def _resolve_category_distance(
     cat_details: list, category: str | None
 ) -> tuple[float | None, str | None]:
@@ -1771,15 +1918,21 @@ def _resolve_category_distance(
         return (None, None)
 
     norm_cat = _normalize_category(category)
+    field_norm = normalize_field_name(category)
 
     # Exact match first
     for cd in cat_details:
         if cd.category == category and cd.distance is not None:
             return (cd.distance, cd.distance_unit)
 
-    # Normalized match
+    # Normalized match (simple whitespace/case)
     for cd in cat_details:
         if _normalize_category(cd.category) == norm_cat and cd.distance is not None:
+            return (cd.distance, cd.distance_unit)
+
+    # Field-name normalized match (handles Senior/Pro/Category variants)
+    for cd in cat_details:
+        if normalize_field_name(cd.category) == field_norm and cd.distance is not None:
             return (cd.distance, cd.distance_unit)
 
     return (None, None)
