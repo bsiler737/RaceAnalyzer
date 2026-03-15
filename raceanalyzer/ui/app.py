@@ -31,27 +31,22 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # RWGPS-inspired light mode: warm gray background, white surfaces
+    # RWGPS-inspired light mode: warm gray background, white card surfaces
     st.markdown(
         """<style>
-        /* Sidebar */
+        /* Sidebar: darker warm gray */
         [data-testid="stSidebar"],
         [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
             background-color: #e2ddd8 !important;
         }
 
-        /* Bordered containers (cards, info boxes): white surface */
+        /* Bordered containers (feed cards, info boxes, preview sections): white */
         div[data-testid="stVerticalBlockBorderWrapper"] {
             background-color: #ffffff !important;
             border-radius: 8px !important;
         }
 
-        /* Button rows: keep parent transparent, only the button itself white */
-        [data-testid="stHorizontalBlock"] {
-            background-color: transparent !important;
-        }
-
-        /* Popover, alerts, expanders: white */
+        /* Popover and expander content: white */
         [data-testid="stPopoverBody"],
         [data-testid="stExpander"] {
             background-color: #ffffff !important;
