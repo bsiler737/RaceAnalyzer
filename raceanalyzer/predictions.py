@@ -842,11 +842,13 @@ def finish_type_teaser(
     Handles hedged text for course_profile and race_type_only sources.
     Returns empty string if no suitable text.
     """
+    # TTs have no group racing dynamic — always use TT-specific text
+    if race_type == "time_trial":
+        return "It's a TT \u2014 ride fast!"
+
     if not finish_type or finish_type == "unknown":
         if race_type == "criterium":
             return "Fast laps on a short circuit \u2014 expect close racing"
-        if race_type == "time_trial":
-            return "Solo effort against the clock"
         return ""
 
     if prediction_source == "course_profile":

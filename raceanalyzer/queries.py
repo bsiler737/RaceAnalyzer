@@ -1313,6 +1313,7 @@ def get_race_preview(
         matched_categories=matched_categories or [],
         course_type=ct,
         racer_profile_label=racer_profile_label,
+        race_type=race_type_val.value if race_type_val else None,
     )
 
     # Build field_forecasts for multi-match preview
@@ -1817,7 +1818,9 @@ def _expand_feed_items(
                         "course_type": child_info.get("course_type"),
                         "ai_sez_text": "",
                     }
-                    child["ai_context"]["ai_sez_text"] = build_ai_sez_text(child["ai_context"])
+                    child["ai_context"]["ai_sez_text"] = build_ai_sez_text(
+                        child["ai_context"], race_type=child_info.get("race_type"),
+                    )
                 else:
                     # No prediction — use race type fallback
                     child["ai_context"] = {
@@ -1831,7 +1834,9 @@ def _expand_feed_items(
                         "course_type": child_info.get("course_type"),
                         "ai_sez_text": "",
                     }
-                    child["ai_context"]["ai_sez_text"] = build_ai_sez_text(child["ai_context"])
+                    child["ai_context"]["ai_sez_text"] = build_ai_sez_text(
+                        child["ai_context"], race_type=child_info.get("race_type"),
+                    )
                 expanded.append(child)
             continue
 
@@ -2223,6 +2228,7 @@ def _select_feed_prediction_context(
     course_type: Optional[str] = None,
     racer_profile_label: str = "",
     force_overall: bool = False,
+    race_type: Optional[str] = None,
 ) -> dict:
     """Build an ai_context dict for a feed item.
 
@@ -2259,7 +2265,7 @@ def _select_feed_prediction_context(
                 "edition_count": getattr(pred, "edition_count", None),
                 "ai_sez_text": "",
             }
-            ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+            ctx["ai_sez_text"] = build_ai_sez_text(ctx, race_type=race_type)
             return ctx
         return _fallback_context(course_type=course_type)
 
@@ -2301,7 +2307,7 @@ def _select_feed_prediction_context(
             "edition_count": getattr(pred, "edition_count", None),
             "ai_sez_text": "",
         }
-        ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+        ctx["ai_sez_text"] = build_ai_sez_text(ctx, race_type=race_type)
         return ctx
 
     if len(race_fields) > 1:
@@ -2325,7 +2331,7 @@ def _select_feed_prediction_context(
             "edition_count": getattr(overall_pred, "edition_count", None) if overall_pred else None,
             "ai_sez_text": "",
         }
-        ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+        ctx["ai_sez_text"] = build_ai_sez_text(ctx, race_type=race_type)
         return ctx
 
     # No matching fields for this race — fall back to overall
@@ -2342,7 +2348,7 @@ def _select_feed_prediction_context(
             "edition_count": getattr(overall_pred, "edition_count", None) if overall_pred else None,
             "ai_sez_text": "",
         }
-        ctx["ai_sez_text"] = build_ai_sez_text(ctx)
+        ctx["ai_sez_text"] = build_ai_sez_text(ctx, race_type=race_type)
         return ctx
 
     return _fallback_context(course_type=course_type)
@@ -2701,6 +2707,7 @@ def get_feed_items_batch(
             course_type=course_type,
             racer_profile_label=racer_profile_label,
             force_overall=True,
+            race_type=race_type_str,
         )
         item["ai_context"] = ai_context
 
