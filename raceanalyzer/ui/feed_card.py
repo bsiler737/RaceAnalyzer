@@ -1045,44 +1045,21 @@ def _build_chip_row(item: dict) -> list[str]:
         '<line x1="13" y1="5" x2="13" y2="9"'
         ' stroke="currentColor" stroke-width="1.5"/></svg>'
     )
-    # Sprint 020: Always show cross-field range, then Course.distance_m fallback
+    # Distance: prefer registration data (BikeReg/road-results CategoryDetail ranges).
+    # RWGPS Course.distance_m is per-lap and unreliable as race distance.
     metric = _is_metric(item)
     dist_range = item.get("distance_range")
     if dist_range:
         chips.append(_chip("distance", _DIST_ICON, html.escape(dist_range)))
-    elif item.get("distance_m") is not None:
-        chips.append(_chip("distance", _DIST_ICON, _format_distance(item["distance_m"], metric)))
-    elif is_upcoming:
-        unit = "km" if metric else "mi"
-        chips.append(
-            '<span class="feed-card-chip" style="opacity:0.5;'
-            'display:inline-flex;align-items:center;gap:3px;'
-            'background:var(--secondary-background-color,#f0f2f6);'
-            'padding:2px 8px;border-radius:4px;'
-            f'color:var(--text-color,#444);">'
-            f'\U0001f4cf -- {unit}</span>'
-        )
 
+    # Elevation: only show from registration data, not RWGPS (which is per-lap).
+    # RWGPS elevation powers the course profile chart, not the race stats chip.
     _ELEV_ICON = (
         '<svg width="14" height="14" viewBox="0 0 14 14">'
         '<path d="M1 12 L7 3 L13 12"'
         ' fill="none" stroke="currentColor" stroke-width="1.5"'
         ' stroke-linejoin="round"/></svg>'
     )
-    if item.get("total_gain_m") is not None:
-        chips.append(
-            _chip("elevation", _ELEV_ICON, _format_elevation(item["total_gain_m"], metric))
-        )
-    elif is_upcoming:
-        unit = "m \u2191" if metric else "ft \u2191"
-        chips.append(
-            '<span class="feed-card-chip" style="opacity:0.5;'
-            'display:inline-flex;align-items:center;gap:3px;'
-            'background:var(--secondary-background-color,#f0f2f6);'
-            'padding:2px 8px;border-radius:4px;'
-            f'color:var(--text-color,#444);">'
-            f'\u26f0\ufe0f -- {unit}</span>'
-        )
 
     if item.get("course_type"):
         from raceanalyzer.elevation import course_type_display

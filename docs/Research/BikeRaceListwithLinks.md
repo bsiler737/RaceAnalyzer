@@ -137,7 +137,7 @@ Year in provided list: **Unspecified** (file context suggests 2026)
 
 | Official Site | BikeReg | Course Links | Stage details | Current DB RWGPS |
 |---|---|---|---|---|
-| `https://www.apexracingseattle.org/ravensdale-cycling-classic` | `https://www.bikereg.com/ravensdale-2026` | RideWithGPS (community / legacy course reference): `https://ridewithgps.com/trips/1325571` | Single-day road race | "Ravensdale Road Race" (id=266): `https://ridewithgps.com/routes/53908537` (106km, 641m, ROLLING); "Ravensdale Spring Classic" (id=720): None |
+| `https://www.apexracingseattle.org/ravensdale-cycling-classic` | `https://www.bikereg.com/ravensdale-2026` | RideWithGPS (community / legacy course reference): `https://ridewithgps.com/trips/1325571` | Single-day road race | "Ravensdale Road Race" (id=266): `https://ridewithgps.com/routes/45920582` (31mi, 1412ft, ROLLING) — canonical 2026 course; "Ravensdale Spring Classic" (id=720): None |
 
 Course link provenance: A RideWithGPS trip titled “Ravensdale Road Race” is indexed and provides a concrete route to reference; treat as “best available map,” not necessarily the exact 2026 championship configuration. citeturn16search0  
 
@@ -311,7 +311,7 @@ Official positioning: The race site describes multiple road races, a TT, and a d
 |---|---|---|---|---|
 | Stage 1 — Catherine Creek Road Race | Road race | RWGPS (official account): `https://ridewithgps.com/routes/45958894` | RWGPS route is published by “Baker City Cycling Classic” and is associated with an “upcoming event” dated June 2026. citeturn68search0turn69search2 | id=527: `routes/45958894` (126km, 1148m, ROLLING) |
 | Stage 2 — (not named in available snippet) | Likely TT or short road stage | RWGPS: `https://ridewithgps.com/routes/43722746` | Indexed as “Stage 2 of the 2025 Baker City Cycling Classic” with ~11.9 mi distance; treat as a probable TT route reference pending 2026 confirmation. citeturn69search3 | id=502: `routes/27945531` (136km, 2406m, MOUNTAINOUS) — likely shared route |
-| Stage 3 — Downtown Criterium | Criterium | **Not found in accessible sources** | Official site indicates a downtown criterium exists, but no authoritative RWGPS/Strava route link was located in available sources. citeturn67search1turn67search5 | id=707: `routes/27945531` — shared route, likely wrong for crit |
+| Stage 3 — Downtown Criterium | Criterium | **RWGPS (canonical):** `https://ridewithgps.com/routes/27808423` | Downtown Baker City crit circuit, but no authoritative RWGPS/Strava route link was located in available sources. citeturn67search1turn67search5 | id=707: `routes/27945531` — shared route, likely wrong for crit |
 | Stage 4 — Dooley Mountain Road Race | Road race (summit finish) | RWGPS: `https://ridewithgps.com/routes/39662231` | Indexed as “Stage 4 of the Baker City Cycling Classic,” ~100.4 mi with heavy climbing. citeturn69search6 | id=503: `routes/27945531` (136km, 2406m, MOUNTAINOUS) — likely shared route |
 
 Alternate mapping: A “Pocahontas Rd. Loop” RideWithGPS trip exists (`https://ridewithgps.com/trips/11400986`) and may relate to a TT corridor, but it is not labeled as an official BCCC stage in the available snippet. citeturn69search1  

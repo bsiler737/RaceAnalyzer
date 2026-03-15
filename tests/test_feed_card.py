@@ -229,8 +229,8 @@ class TestBuildCardHtml:
         assert "Banana Belt RR" in card
         assert "Maryhill" in card
         assert "Road Race" in card
-        assert "53 mi" in card  # US race: imperial
-        assert "2789 ft" in card  # US race: feet
+        # Distance/elevation chips only show from registration data, not RWGPS
+        assert "Rolling" in card  # Terrain chip still shows (from course classification)
         assert "Drop rate" in card
         assert "sprint" in card.lower()
 
@@ -594,15 +594,19 @@ class TestMissingDataChips:
         base.update(overrides)
         return base
 
-    def test_upcoming_missing_distance_shows_placeholder(self):
+    def test_upcoming_missing_distance_no_placeholder(self):
+        """No distance placeholder when no registration data — RWGPS is not race distance."""
         item = self._make_item(is_upcoming=True, distance_m=None)
         card = build_card_html(item)
-        assert "-- mi" in card or "-- km" in card
+        # No distance chip at all without registration data
+        assert "-- mi" not in card
+        assert "-- km" not in card
 
-    def test_upcoming_missing_elevation_shows_placeholder(self):
-        item = self._make_item(is_upcoming=True, total_gain_m=None)
+    def test_distance_range_from_registration_shows(self):
+        """Registration-sourced distance_range still shows."""
+        item = self._make_item(is_upcoming=True, distance_range="24-60 mi")
         card = build_card_html(item)
-        assert "-- ft" in card or "-- m" in card
+        assert "24-60 mi" in card
 
     def test_upcoming_missing_duration_shows_placeholder(self):
         item = self._make_item(
@@ -621,11 +625,11 @@ class TestMissingDataChips:
         card = build_card_html(item)
         assert "-- m" not in card
 
-    def test_zero_distance_still_shows(self):
-        """Truthy check fix: distance_m=0 should still render."""
+    def test_zero_distance_no_chip_without_registration(self):
+        """RWGPS distance_m=0 should NOT render as race distance."""
         item = self._make_item(is_upcoming=True, distance_m=0)
         card = build_card_html(item)
-        assert "0 mi" in card or "0 km" in card
+        assert "0 mi" not in card
 
 
 # --- Sprint 015: Two-column layout tests ---
@@ -841,25 +845,27 @@ class TestRaceLengthDisplay:
         card = build_card_html(item)
         assert "30-60 mi" in card
 
-    def test_fallback_to_course_distance(self):
+    def test_rwgps_distance_not_shown_as_race_distance(self):
+        """RWGPS Course.distance_m should NOT appear as race distance chip."""
         item = self._make_item(distance_m=85000)
         card = build_card_html(item)
-        assert "53 mi" in card  # default state=None -> imperial
+        assert "53 mi" not in card
+        assert "85 km" not in card
 
-    def test_fallback_to_course_distance_metric(self):
-        item = self._make_item(distance_m=85000, state_province="BC", location="Vancouver, BC")
+    def test_registration_range_shows(self):
+        """Registration-sourced distance_range shows as race distance."""
+        item = self._make_item(distance_range="30-60 mi")
         card = build_card_html(item)
-        assert "85 km" in card  # BC -> metric
+        assert "30-60 mi" in card
 
-    def test_range_takes_priority_over_course_distance(self):
-        """Sprint 020: distance_range always wins over Course.distance_m."""
+    def test_range_takes_priority(self):
+        """distance_range always wins; RWGPS distance never shown."""
         item = self._make_item(
             distance_range="30-60 mi",
             distance_m=85000,
         )
         card = build_card_html(item)
         assert "30-60 mi" in card
-        assert "53 mi" not in card  # range takes priority
 
 
 class TestEstimatedTime:

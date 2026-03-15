@@ -417,8 +417,8 @@ def render():
                 ct_display = course_type_display(course["course_type"])
                 col1.metric("Terrain", ct_display)
                 if course.get("total_gain_m"):
-                    col2.metric("Elevation", _fmt_elev(course["total_gain_m"]))
-                # Sprint 020: Show field-specific distance if available, else range/course
+                    col2.metric("Elevation / lap", _fmt_elev(course["total_gain_m"]))
+                # Distance: prefer registration data (actual race distance)
                 if is_field_mode and cat_distance is not None:
                     from raceanalyzer.queries import _format_unit_label
                     unit_label = _format_unit_label(cat_distance_unit)
@@ -427,7 +427,7 @@ def render():
                 elif distance_range:
                     col3.metric("Distance", distance_range)
                 elif course.get("distance_m"):
-                    col3.metric("Distance", _fmt_dist(course["distance_m"]))
+                    col3.metric("Course length", _fmt_dist(course["distance_m"]))
 
             if climbs:
                 render_climb_legend()
@@ -454,9 +454,11 @@ def render():
             ct_display = course_type_display(course["course_type"])
             col1.metric("Terrain", ct_display)
             if course.get("total_gain_m"):
-                col2.metric("Elevation", _fmt_elev(course["total_gain_m"]))
-            if course.get("distance_m"):
-                col3.metric("Distance", _fmt_dist(course["distance_m"]))
+                col2.metric("Elevation / lap", _fmt_elev(course["total_gain_m"]))
+            if distance_range:
+                col3.metric("Distance", distance_range)
+            elif course.get("distance_m"):
+                col3.metric("Course length", _fmt_dist(course["distance_m"]))
 
             desc = COURSE_TYPE_DESCRIPTIONS.get(course["course_type"], "")
             if desc:

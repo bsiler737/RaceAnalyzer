@@ -31,6 +31,26 @@ def main():
             unsafe_allow_html=True,
         )
 
+    # RWGPS-inspired light mode: warm gray background, white cards, darker sidebar
+    st.markdown(
+        """<style>
+        /* Sidebar: slightly darker than main background */
+        [data-testid="stSidebar"] {
+            background-color: #e2ddd8 !important;
+        }
+        /* Card containers: white surface like RWGPS info boxes */
+        [data-testid="stLayoutWrapper"] > div[data-testid="stVerticalBlock"] {
+            border-color: #d9d4cf !important;
+        }
+        /* Bordered containers get white background */
+        [data-testid="stLayoutWrapper"]:has(> div[style*="border"]) {
+            background-color: #ffffff !important;
+            border-radius: 8px;
+        }
+        </style>""",
+        unsafe_allow_html=True,
+    )
+
     # Seed global session state from query params (Sprint 010)
     st.session_state.setdefault("global_category", st.query_params.get("category"))
     st.session_state.setdefault("search_query", st.query_params.get("q", ""))
