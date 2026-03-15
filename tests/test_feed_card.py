@@ -801,7 +801,7 @@ class TestResolveRacerProfile:
 
 
 class TestRaceLengthDisplay:
-    """Sprint 018: Category-specific distance in chips."""
+    """Sprint 020: Feed chips always show cross-field range, never category-specific."""
 
     def _make_item(self, **overrides):
         base = {
@@ -829,29 +829,12 @@ class TestRaceLengthDisplay:
             "typical_field_duration_min": 120,
             "rwgps_encoded_polyline": None,
             "distribution_json": None,
-            "category_distance": None,
-            "category_distance_unit": None,
             "distance_range": None,
             "estimated_time_range": None,
             "hide_estimated_time": False,
         }
         base.update(overrides)
         return base
-
-    def test_category_specific_miles(self):
-        item = self._make_item(category_distance=50.0, category_distance_unit="miles")
-        card = build_card_html(item)
-        assert "50 mi" in card
-
-    def test_category_specific_km(self):
-        item = self._make_item(category_distance=80.0, category_distance_unit="km")
-        card = build_card_html(item)
-        assert "80 km" in card
-
-    def test_category_specific_minutes(self):
-        item = self._make_item(category_distance=60.0, category_distance_unit="minutes")
-        card = build_card_html(item)
-        assert "60 min" in card
 
     def test_distance_range(self):
         item = self._make_item(distance_range="30-60 mi")
@@ -863,14 +846,15 @@ class TestRaceLengthDisplay:
         card = build_card_html(item)
         assert "85 km" in card
 
-    def test_category_distance_priority_over_range(self):
+    def test_range_takes_priority_over_course_distance(self):
+        """Sprint 020: distance_range always wins over Course.distance_m."""
         item = self._make_item(
-            category_distance=50.0,
-            category_distance_unit="miles",
             distance_range="30-60 mi",
+            distance_m=85000,
         )
         card = build_card_html(item)
-        assert "50 mi" in card
+        assert "30-60 mi" in card
+        assert "85 km" not in card
 
 
 class TestEstimatedTime:

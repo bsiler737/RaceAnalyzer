@@ -1192,3 +1192,19 @@ class TestSelectFeedPredictionContext:
         ctx = queries._select_feed_prediction_context({}, 1, ["Cat 3"])
         assert ctx["mode"] == "fallback"
         assert ctx["ai_sez_text"] == ""
+
+    def test_force_overall_skips_matched_categories(self):
+        """Sprint 020: force_overall=True always produces overall mode."""
+        pred_map = {
+            (1, "Cat 3"): _FakePred(
+                1, "Cat 3", "breakaway", "high", 3, "time_gap"
+            ),
+            (1, None): _FakePred(
+                1, None, "bunch_sprint", "high", 5, "time_gap"
+            ),
+        }
+        ctx = queries._select_feed_prediction_context(
+            pred_map, 1, ["Cat 3"], force_overall=True,
+        )
+        assert ctx["mode"] == "overall"
+        assert ctx["best_finish_type"] == "bunch_sprint"

@@ -206,15 +206,16 @@ class TestExpandedTier1Fields:
             assert "field_size_median" in item
 
     def test_category_distance_keys_present(self, seeded_series_session):
-        """Sprint 018: Feed items include category distance keys."""
+        """Sprint 020: Feed items use cross-field range (no category_distance)."""
         from raceanalyzer.precompute import precompute_all
 
         precompute_all(seeded_series_session)
 
         items = queries.get_feed_items_batch(seeded_series_session)
         for item in items:
-            assert "category_distance" in item
-            assert "category_distance_unit" in item
+            # Sprint 020: category_distance removed from feed items
+            assert "category_distance" not in item
+            assert "category_distance_unit" not in item
             assert "distance_range" in item
             assert "estimated_time_range" in item
             assert "hide_estimated_time" in item
