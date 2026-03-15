@@ -710,7 +710,7 @@ def _init_filters_from_params():
     if "racer_gender_pills" not in st.session_state:
         param_gender = st.query_params.get("gender")
         st.session_state["racer_gender_pills"] = (
-            param_gender if param_gender in ("M", "W") else "All"
+            param_gender if param_gender in ("M", "W", "NB") else "All"
         )
     if "racer_masters_toggle" not in st.session_state:
         st.session_state["racer_masters_toggle"] = (
@@ -800,7 +800,7 @@ def render_racer_profile_filters(session) -> dict:
             st.session_state.pop("cat", None)
 
         # Sprint 020: Gender pills — NO default=
-        gender_options = ["All", "M", "W"]
+        gender_options = ["All", "M", "W", "NB"]
         chosen_gender = st.pills(
             "Gender",
             gender_options,

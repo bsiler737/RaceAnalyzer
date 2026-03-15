@@ -417,6 +417,13 @@ def resolve_racer_profile_matches(
                 c for c in candidates
                 if not _re.search(r'\bwom[ae]n\b', c, _re.IGNORECASE)
             ]
+    elif gender == "NB":
+        nb_filtered = [
+            c for c in candidates
+            if _re.search(r'\bnon[\s-]?binary\b|\bNB\b|\benby\b', c, _re.IGNORECASE)
+        ]
+        if nb_filtered:
+            candidates = nb_filtered
 
     # Filter by masters
     if masters_on:
@@ -2205,6 +2212,8 @@ def build_racer_profile_label(
         parts.append("men")
     elif gender == "W":
         parts.append("women")
+    elif gender == "NB":
+        parts.append("non-binary")
     if masters_on:
         if masters_age:
             parts.append(f"masters {masters_age}+")
