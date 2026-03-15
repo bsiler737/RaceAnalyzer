@@ -109,39 +109,27 @@ def render():
     st.title(series["display_name"])
     st.caption("Race Preview")
 
-    # === Sprint 021: Stage Navigation Pills ===
+    # === Sprint 021: Stage Navigation Pills (clickable) ===
     siblings = series.get("siblings", [])
     if siblings and len(siblings) > 1:
-        pills_html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 16px 0;">'
-        for sib in siblings:
+        cols = st.columns(len(siblings))
+        for i, sib in enumerate(siblings):
             sib_name = sib["display_name"].split(": ", 1)[-1] if ": " in sib["display_name"] else sib["display_name"]
             label = f"Stage {sib['stage_number']}: {sib_name}"
-            if sib["is_current"]:
-                pills_html += (
-                    f'<span style="display:inline-block;padding:4px 12px;'
-                    f'background:#ff6b35;color:white;border-radius:16px;'
-                    f'font-size:0.85rem;font-weight:600;">{label}</span>'
-                )
-            else:
-                pills_html += (
-                    f'<span style="display:inline-block;padding:4px 12px;'
-                    f'background:rgba(255,107,53,0.1);border:1px solid #ff6b35;'
-                    f'border-radius:16px;font-size:0.85rem;color:#ff6b35;'
-                    f'cursor:pointer;">{label}</span>'
-                )
-        pills_html += '</div>'
-        st.markdown(pills_html, unsafe_allow_html=True)
-
-        # Stage navigation buttons (Streamlit can't do clickable HTML links, use buttons)
-        non_current = [s for s in siblings if not s["is_current"]]
-        if non_current:
-            cols = st.columns(len(non_current))
-            for i, sib in enumerate(non_current):
-                sib_label = sib["display_name"].split(": ", 1)[-1] if ": " in sib["display_name"] else sib["display_name"]
-                with cols[i]:
-                    if st.button(
-                        f"→ {sib_label}",
+            with cols[i]:
+                if sib["is_current"]:
+                    st.button(
+                        label,
                         key=f"stage_nav_{sib['series_id']}",
+                        type="primary",
+                        use_container_width=True,
+                        disabled=True,
+                    )
+                else:
+                    if st.button(
+                        label,
+                        key=f"stage_nav_{sib['series_id']}",
+                        use_container_width=True,
                     ):
                         st.query_params["series_id"] = str(sib["series_id"])
                         st.rerun()
