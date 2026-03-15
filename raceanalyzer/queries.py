@@ -2256,6 +2256,7 @@ def _select_feed_prediction_context(
                 "overall_finish_type": pred.predicted_finish_type,
                 "prediction_source": getattr(pred, "prediction_source", None),
                 "course_type": course_type,
+                "edition_count": getattr(pred, "edition_count", None),
                 "ai_sez_text": "",
             }
             ctx["ai_sez_text"] = build_ai_sez_text(ctx)
@@ -2297,6 +2298,7 @@ def _select_feed_prediction_context(
             "overall_finish_type": overall_ft,
             "prediction_source": getattr(pred, "prediction_source", None),
             "course_type": course_type,
+            "edition_count": getattr(pred, "edition_count", None),
             "ai_sez_text": "",
         }
         ctx["ai_sez_text"] = build_ai_sez_text(ctx)
@@ -2320,6 +2322,7 @@ def _select_feed_prediction_context(
             "overall_finish_type": best_ft,
             "prediction_source": best_source,
             "course_type": course_type,
+            "edition_count": getattr(overall_pred, "edition_count", None) if overall_pred else None,
             "ai_sez_text": "",
         }
         ctx["ai_sez_text"] = build_ai_sez_text(ctx)
@@ -2336,6 +2339,7 @@ def _select_feed_prediction_context(
             "overall_finish_type": overall_ft,
             "prediction_source": overall_source,
             "course_type": course_type,
+            "edition_count": getattr(overall_pred, "edition_count", None) if overall_pred else None,
             "ai_sez_text": "",
         }
         ctx["ai_sez_text"] = build_ai_sez_text(ctx)

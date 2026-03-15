@@ -123,21 +123,20 @@ class TestStageMigrationDB:
         )
         # Stage 1 is a hill climb with RWGPS
         assert children[0].stage_number == 1
-        assert children[0].rwgps_route_id == 2398131
-        # Stage 5 has no RWGPS
-        assert children[4].rwgps_route_id is None
-        # Stage 6 has no RWGPS
-        assert children[5].rwgps_route_id is None
+        assert children[0].rwgps_route_id == 49479652
+        # All 6 stages now have RWGPS routes
+        assert children[4].rwgps_route_id == 53849275  # Stage 5 TT
+        assert children[5].rwgps_route_id == 53849172  # Stage 6 Ed Farrar
 
-    def test_no_rwgps_stages(self, session):
-        """Stages without rwgps_route_id have null rwgps_route_id."""
+    def test_all_tdb_stages_have_rwgps(self, session):
+        """All TdB stages now have rwgps_route_id (updated 2026 routes)."""
         parent = _create_parent_series(session, "Tour de Bloom", "tour de bloom")
         from raceanalyzer.stages import load_stage_schedule
         stages = load_stage_schedule("tour_de_bloom")
 
         for stage in stages:
             child = RaceSeries(
-                normalized_name=f"tdb_null_{stage.number}",
+                normalized_name=f"tdb_routes_{stage.number}",
                 display_name=f"TdB: {stage.name}",
                 rwgps_route_id=stage.rwgps_route_id,
                 parent_series_id=parent.id,
@@ -146,18 +145,14 @@ class TestStageMigrationDB:
             session.add(child)
         session.commit()
 
-        no_route = (
+        all_children = (
             session.query(RaceSeries)
-            .filter(
-                RaceSeries.parent_series_id == parent.id,
-                RaceSeries.rwgps_route_id.is_(None),
-            )
+            .filter(RaceSeries.parent_series_id == parent.id)
             .all()
         )
-        # TdB stages 5 and 6 have no route
-        assert len(no_route) == 2
-        stage_nums = {s.stage_number for s in no_route}
-        assert stage_nums == {5, 6}
+        # All 6 TdB stages have RWGPS routes
+        for child in all_children:
+            assert child.rwgps_route_id is not None, f"Stage {child.stage_number} missing RWGPS"
 
     def test_idempotent_migration(self, session):
         """Running migration twice does not create duplicates."""

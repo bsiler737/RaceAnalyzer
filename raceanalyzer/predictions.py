@@ -835,6 +835,7 @@ def finish_type_teaser(
     prediction_source: Optional[str] = None,
     race_type: Optional[str] = None,
     course_type: Optional[str] = None,
+    edition_count: Optional[int] = None,
 ) -> str:
     """Generate a one-liner teaser for a finish type prediction.
 
@@ -849,15 +850,16 @@ def finish_type_teaser(
         return ""
 
     if prediction_source == "course_profile":
-        # Hedged: "Hard to say since this is the first edition — {insight}"
+        # Hedged text — distinguish first edition from inconclusive history
         insight = ""
         if course_type and course_type in _HEDGED_COURSE:
             insight = _HEDGED_COURSE[course_type].get(finish_type, "")
         if not insight:
-            # Fallback to confident teaser lowercased
             base = _CONFIDENT_TEASERS.get(finish_type, "")
             insight = _lowercase_lead(base) if base else ""
         if insight:
+            if edition_count and edition_count > 1:
+                return f"Past results were inconclusive \u2014 {insight}"
             return f"Hard to say since this is the first edition \u2014 {insight}"
         return ""
 
@@ -886,6 +888,7 @@ def build_ai_sez_text(ai_context: dict, race_type: Optional[str] = None) -> str:
     prediction_source = ai_context.get("prediction_source")
     best_category = ai_context.get("best_category")
     course_type = ai_context.get("course_type")
+    edition_count = ai_context.get("edition_count")
 
     if mode == "single_match" and best_category and best_ft:
         teaser = finish_type_teaser(
@@ -893,6 +896,7 @@ def build_ai_sez_text(ai_context: dict, race_type: Optional[str] = None) -> str:
             prediction_source=prediction_source,
             race_type=race_type,
             course_type=course_type,
+            edition_count=edition_count,
         )
         return teaser
 
@@ -905,6 +909,7 @@ def build_ai_sez_text(ai_context: dict, race_type: Optional[str] = None) -> str:
             prediction_source=prediction_source,
             race_type=race_type,
             course_type=course_type,
+            edition_count=edition_count,
         )
         count_text = f"{n_fields} fields" if n_fields > 1 else "multiple fields"
         subject = f"{profile_label} can race" if profile_label else "You can race"
@@ -921,6 +926,7 @@ def build_ai_sez_text(ai_context: dict, race_type: Optional[str] = None) -> str:
             prediction_source=prediction_source,
             race_type=race_type,
             course_type=course_type,
+            edition_count=edition_count,
         )
 
     # overall mode (default)
@@ -929,6 +935,7 @@ def build_ai_sez_text(ai_context: dict, race_type: Optional[str] = None) -> str:
         prediction_source=prediction_source,
         race_type=race_type,
         course_type=course_type,
+        edition_count=edition_count,
     )
 
 
