@@ -16,6 +16,7 @@ from raceanalyzer.ui.components import (
     render_confidence_badge,
     render_empty_state,
     render_finish_pattern,
+    render_racer_profile_filters,
     render_scary_racer_card,
     render_selectivity_badge,
     render_similar_races,
@@ -31,8 +32,13 @@ def render():
     # Sprint 018: Initialize filters from URL params
     _init_filters_from_params()
 
+    # Sprint 020: Render sidebar filters (same as feed page)
+    racer_profile = render_racer_profile_filters(session)
+
     # Back navigation (restore feed scroll position)
     if st.button("Back to Feed"):
+        # Clear preview-specific state on back-nav
+        st.query_params.pop("field", None)
         # Restore pagination to where user left off
         scroll_idx = st.session_state.get("feed_scroll_index")
         if scroll_idx:
@@ -46,7 +52,7 @@ def render():
         render_empty_state("No series selected for preview.")
         return
 
-    # Sprint 018/019: Resolve category + matched categories from racer profile
+    # Sprint 020: Resolve category + matched categories from racer profile dict
     selected_cat = st.query_params.get("category")
     if not selected_cat:
         selected_cat = st.session_state.get("global_category")
@@ -56,10 +62,10 @@ def render():
         if all_cats:
             matched_categories = queries.resolve_racer_profile_matches(
                 all_cats,
-                cat_level=st.session_state.get("cat_level"),
-                gender=st.session_state.get("gender"),
-                masters_on=st.session_state.get("masters_on", False),
-                masters_age=st.session_state.get("masters_age"),
+                cat_level=racer_profile.get("cat_level"),
+                gender=racer_profile.get("gender"),
+                masters_on=racer_profile.get("masters_on", False),
+                masters_age=racer_profile.get("masters_age"),
             )
             if matched_categories:
                 selected_cat = min(matched_categories, key=len)
@@ -69,10 +75,10 @@ def render():
                     selected_cat = resolved
 
     racer_profile_label = queries.build_racer_profile_label(
-        cat_level=st.session_state.get("cat_level"),
-        gender=st.session_state.get("gender"),
-        masters_on=st.session_state.get("masters_on", False),
-        masters_age=st.session_state.get("masters_age"),
+        cat_level=racer_profile.get("cat_level"),
+        gender=racer_profile.get("gender"),
+        masters_on=racer_profile.get("masters_on", False),
+        masters_age=racer_profile.get("masters_age"),
     )
     preview = queries.get_race_preview(
         session, int(series_id),
