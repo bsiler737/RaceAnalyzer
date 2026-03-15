@@ -34,6 +34,10 @@ _FIELD_DIVIDER = "\u2500\u2500\u2500 Other Fields \u2500\u2500\u2500"
 
 
 def render():
+    if "db_session" not in st.session_state:
+        st.switch_page("pages/feed.py")
+        return
+
     session = st.session_state.db_session
 
     # Sprint 018: Initialize filters from URL params
