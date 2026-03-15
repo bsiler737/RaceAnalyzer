@@ -45,6 +45,11 @@ def main():
         [data-testid="stExpander"] {
             background-color: #ffffff !important;
         }
+
+        /* Pill-style filter buttons: white background */
+        [data-testid="stBaseButton-pills"] {
+            background-color: #ffffff !important;
+        }
         </style>""",
         unsafe_allow_html=True,
     )
