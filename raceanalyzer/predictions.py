@@ -575,9 +575,13 @@ def calculate_typical_speeds(
             norm_cat = normalize_field_name(category)
             race_distance_m = field_dist_map.get(norm_cat)
         else:
-            # No category filter: use the longest known field distance
+            # No category filter: only use a single distance if all fields
+            # race the same distance. Otherwise speeds are meaningless.
             if field_dist_map:
-                race_distance_m = max(field_dist_map.values())
+                unique_dists = set(field_dist_map.values())
+                if len(unique_dists) == 1:
+                    race_distance_m = unique_dists.pop()
+                # else: fields have different distances, can't compute overall
 
         # Fall back to route distance only for non-multi-lap courses
         if race_distance_m is None:

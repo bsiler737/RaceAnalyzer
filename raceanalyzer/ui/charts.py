@@ -61,6 +61,7 @@ def build_distribution_bar_chart(dist_df: pd.DataFrame) -> go.Figure:
         yaxis_title="",
         xaxis_title="Count",
         margin=dict(t=20, b=40, l=20, r=20),
+        yaxis=dict(categoryorder="total ascending"),
     )
     return fig
 

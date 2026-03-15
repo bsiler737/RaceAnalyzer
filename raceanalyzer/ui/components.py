@@ -924,7 +924,11 @@ def render_similar_races(similar_items):
 
 
 def render_team_startlist(team_blocks, user_team_name=None):
-    """Render startlist grouped by team with user's team highlighted."""
+    """Render startlist grouped by team with user's team highlighted.
+
+    When show_categories is True (All Categories mode), riders are grouped
+    by category within each team with subheaders.
+    """
     if not team_blocks:
         st.info("No startlist data available.")
         return
@@ -933,6 +937,7 @@ def render_team_startlist(team_blocks, user_team_name=None):
         team = block["team"]
         riders = block["riders"]
         count = block["count"]
+        show_categories = block.get("show_categories", False)
 
         # Highlight user's team
         is_user_team = (
@@ -946,7 +951,18 @@ def render_team_startlist(team_blocks, user_team_name=None):
             header = f"⭐ {header}"
 
         st.markdown(header)
-        for rider in riders:
-            pts = rider.get("carried_points")
-            pts_str = f" — {pts:.0f} pts" if pts else ""
-            st.caption(f"  {rider['name']}{pts_str}")
+
+        if show_categories:
+            # Group riders by category within the team
+            current_cat = None
+            for rider in riders:
+                cats = rider.get("categories", [])
+                rider_cat = cats[0] if cats else ""
+                if rider_cat != current_cat:
+                    current_cat = rider_cat
+                    if current_cat:
+                        st.caption(f"  *{html.escape(current_cat)}*")
+                st.caption(f"    {rider['name']}")
+        else:
+            for rider in riders:
+                st.caption(f"  {rider['name']}")

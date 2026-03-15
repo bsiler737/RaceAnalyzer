@@ -465,7 +465,7 @@ def render():
     with st.container(border=True):
         st.subheader("Startlist")
         team_name = st.session_state.get("team", "") or st.query_params.get("team", "")
-        startlist_cat = query_category if is_field_mode else initial_cat
+        startlist_cat = query_category if is_field_mode else None
         team_blocks = queries.get_startlist_team_blocks(
             session, int(series_id), category=startlist_cat, team_name=team_name,
         )

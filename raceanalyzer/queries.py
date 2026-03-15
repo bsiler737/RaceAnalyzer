@@ -2774,7 +2774,12 @@ def get_similar_series(session, series_id, all_items=None, top_n=3, min_score=50
 
 
 def get_startlist_team_blocks(session, series_id, category=None, team_name=None):
-    """Get startlist grouped by team for a series."""
+    """Get startlist grouped by team for a series.
+
+    When category is None (All Categories mode), includes category info per rider
+    and deduplicates riders registered for multiple fields. Count reflects unique
+    humans, not total registrations.
+    """
     from raceanalyzer.db.models import Startlist
 
     query = session.query(Startlist).filter(Startlist.series_id == series_id)
@@ -2785,26 +2790,36 @@ def get_startlist_team_blocks(session, series_id, category=None, team_name=None)
     if not entries:
         return []
 
-    teams = {}
+    # Group by team, dedup riders by name within each team
+    teams: dict[str, dict[str, dict]] = {}  # team -> {rider_name -> rider_info}
     for e in entries:
         team = e.team or "Unattached"
-        teams.setdefault(team, []).append(
-            {
-                "name": e.rider_name,
-                "carried_points": e.carried_points,
+        rider_name = e.rider_name
+        team_riders = teams.setdefault(team, {})
+        if rider_name not in team_riders:
+            team_riders[rider_name] = {
+                "name": rider_name,
+                "categories": [],
             }
-        )
+        if e.category:
+            cats = team_riders[rider_name]["categories"]
+            if e.category not in cats:
+                cats.append(e.category)
 
-    # Sort teams by size descending
+    # Build blocks; count = unique riders, not registrations
+    is_all_categories = category is None
     blocks = []
-    for team_name_val, riders in sorted(teams.items(), key=lambda x: -len(x[1])):
+    for team_name_val, riders_dict in sorted(teams.items(), key=lambda x: -len(x[1])):
+        riders = list(riders_dict.values())
+        if is_all_categories:
+            # Sort by first category name for grouping
+            riders.sort(key=lambda r: (r["categories"][0] if r["categories"] else ""))
         blocks.append(
             {
                 "team": team_name_val,
-                "riders": sorted(
-                    riders, key=lambda r: -(r.get("carried_points") or 0)
-                ),
+                "riders": riders,
                 "count": len(riders),
+                "show_categories": is_all_categories,
             }
         )
 
