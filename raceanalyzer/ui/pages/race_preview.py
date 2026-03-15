@@ -1,4 +1,8 @@
-"""Race Preview page -- forward-looking race analysis (Sprint 011)."""
+"""Race Preview page -- forward-looking race analysis (Sprint 011).
+
+Sprint 020: Field-aware pivot — smart field picker, per-section data pivot,
+per-section empty states, duplicate course map removal.
+"""
 
 from __future__ import annotations
 
@@ -24,6 +28,9 @@ from raceanalyzer.ui.components import (
     resolve_effective_category,
 )
 from raceanalyzer.ui.maps import render_course_map, render_interactive_course_profile
+
+# Divider constant for the field picker selectbox
+_FIELD_DIVIDER = "\u2500\u2500\u2500 Other fields \u2500\u2500\u2500"
 
 
 def render():
@@ -52,27 +59,19 @@ def render():
         render_empty_state("No series selected for preview.")
         return
 
-    # Sprint 020: Resolve category + matched categories from racer profile dict
-    selected_cat = st.query_params.get("category")
-    if not selected_cat:
-        selected_cat = st.session_state.get("global_category")
+    # Sprint 020: Resolve matched categories from racer profile dict
     matched_categories = []
-    if not selected_cat:
-        all_cats = queries.get_categories(session)
-        if all_cats:
-            matched_categories = queries.resolve_racer_profile_matches(
-                all_cats,
-                cat_level=racer_profile.get("cat_level"),
-                gender=racer_profile.get("gender"),
-                masters_on=racer_profile.get("masters_on", False),
-                masters_age=racer_profile.get("masters_age"),
-            )
-            if matched_categories:
-                selected_cat = min(matched_categories, key=len)
-            else:
-                resolved, _ = resolve_effective_category(all_cats)
-                if resolved:
-                    selected_cat = resolved
+    all_cats = queries.get_categories(session)
+    if all_cats and any(
+        racer_profile.get(k) for k in ("cat_level", "gender", "masters_on")
+    ):
+        matched_categories = queries.resolve_racer_profile_matches(
+            all_cats,
+            cat_level=racer_profile.get("cat_level"),
+            gender=racer_profile.get("gender"),
+            masters_on=racer_profile.get("masters_on", False),
+            masters_age=racer_profile.get("masters_age"),
+        )
 
     racer_profile_label = queries.build_racer_profile_label(
         cat_level=racer_profile.get("cat_level"),
@@ -80,9 +79,21 @@ def render():
         masters_on=racer_profile.get("masters_on", False),
         masters_age=racer_profile.get("masters_age"),
     )
+
+    # First fetch with no specific field to get the category list and overall data
+    initial_cat = None
+    if matched_categories:
+        initial_cat = min(matched_categories, key=len)
+    elif not st.session_state.get("global_category"):
+        if all_cats:
+            resolved, _ = resolve_effective_category(all_cats)
+            initial_cat = resolved
+    else:
+        initial_cat = st.session_state.get("global_category")
+
     preview = queries.get_race_preview(
         session, int(series_id),
-        category=selected_cat,
+        category=initial_cat,
         matched_categories=matched_categories or None,
         racer_profile_label=racer_profile_label,
     )
@@ -94,25 +105,78 @@ def render():
     st.title(series["display_name"])
     st.caption("Race Preview")
 
-    # Category selector
+    # === Sprint 020: Smart Field Picker ===
     categories = preview["categories"]
-    if categories:
-        cat_options = [None] + categories
-        default_idx = 0
-        if selected_cat and selected_cat in categories:
-            default_idx = categories.index(selected_cat) + 1
+    chosen_field = None  # None = "All Categories" mode
 
-        chosen_cat = st.selectbox(
-            "Category",
+    if categories and len(categories) > 1:
+        # Partition into matched and other fields
+        matched_set = set(matched_categories or [])
+        matched_fields = [c for c in categories if c in matched_set]
+        other_fields = [c for c in categories if c not in matched_set]
+
+        cat_options: list = [None]  # None = "All Categories"
+        if matched_fields:
+            cat_options += matched_fields
+        if other_fields:
+            if matched_fields:
+                cat_options.append(_FIELD_DIVIDER)
+            cat_options += other_fields
+
+        def _format_field(x):
+            if x is None:
+                return "All Categories"
+            if x == _FIELD_DIVIDER:
+                return _FIELD_DIVIDER
+            if x in matched_set:
+                return f"\u2605 {x}"
+            return f"  {x}"
+
+        # Restore field from URL params
+        url_field = st.query_params.get("field")
+        default_idx = 0
+        if url_field and url_field in categories:
+            default_idx = cat_options.index(url_field)
+
+        raw_choice = st.selectbox(
+            "Field",
             options=cat_options,
             index=default_idx,
-            format_func=lambda x: "All Categories" if x is None else x,
+            format_func=_format_field,
         )
-        if chosen_cat != selected_cat:
-            st.query_params["category"] = chosen_cat or ""
-            st.rerun()
 
-    # --- Sprint 018/019: Restructured layout ---
+        # Divider selection is a no-op — revert to previous
+        if raw_choice == _FIELD_DIVIDER:
+            raw_choice = url_field if url_field in categories else None
+
+        chosen_field = raw_choice
+
+        # Persist to URL
+        if chosen_field:
+            st.query_params["field"] = chosen_field
+        else:
+            st.query_params.pop("field", None)
+
+    elif categories and len(categories) == 1:
+        # Single field: auto-select, hide picker
+        chosen_field = categories[0]
+    # else: no categories at all
+
+    # --- Re-fetch preview data if a specific field is chosen ---
+    if chosen_field:
+        preview = queries.get_race_preview(
+            session, int(series_id),
+            category=chosen_field,
+            matched_categories=None,  # field-specific, not multi-match
+            racer_profile_label=racer_profile_label,
+        )
+        if preview is None:
+            render_empty_state("Series not found.")
+            return
+
+    is_field_mode = chosen_field is not None
+
+    # --- Extract preview data ---
     profile_points = preview.get("profile_points")
     climbs = preview.get("climbs")
     pred = preview["prediction"]
@@ -122,6 +186,10 @@ def render():
     narrative = preview.get("narrative", "")
     ai_context = preview.get("ai_context", {})
     field_forecasts = preview.get("field_forecasts", [])
+    cat_distance = preview.get("category_distance")
+    cat_distance_unit = preview.get("category_distance_unit")
+    distance_range = preview.get("distance_range")
+    est_time_range = preview.get("estimated_time_range")
 
     # === 1. Two-column: What to Expect + Predicted Finish Type summary ===
     col_wte, col_pft = st.columns(2)
@@ -129,31 +197,38 @@ def render():
         with st.container(border=True):
             st.subheader("What to Expect")
 
-            # Sprint 019: Category-aware narrative rendering
-            mode = ai_context.get("mode", "overall") if ai_context else "overall"
-            if mode == "single_match" and ai_context.get("best_category"):
+            if is_field_mode:
+                # Sprint 020: Single-field narrative
                 if narrative:
-                    st.markdown(
-                        f"**For {ai_context['best_category']}:** {narrative}"
-                    )
-            elif mode == "multi_match":
-                if narrative:
-                    st.write(narrative)
-                if field_forecasts:
-                    finish_types = {f["finish_type"] for f in field_forecasts}
-                    if len(finish_types) == 1:
+                    st.markdown(f"**For {chosen_field}:** {narrative}")
+                else:
+                    st.info(f"No prediction available for {chosen_field}")
+            else:
+                # Multi-match / overall narrative
+                mode = ai_context.get("mode", "overall") if ai_context else "overall"
+                if mode == "single_match" and ai_context.get("best_category"):
+                    if narrative:
                         st.markdown(
-                            "Your matched fields all point to the same outcome."
+                            f"**For {ai_context['best_category']}:** {narrative}"
                         )
-                    else:
-                        st.markdown("**Field-specific forecasts:**")
-                        for forecast in field_forecasts:
+                elif mode == "multi_match":
+                    if narrative:
+                        st.write(narrative)
+                    if field_forecasts:
+                        finish_types = {f["finish_type"] for f in field_forecasts}
+                        if len(finish_types) == 1:
                             st.markdown(
-                                f"- **{forecast['category']}**: "
-                                f"{forecast['teaser']}"
+                                "Your matched fields all point to the same outcome."
                             )
-            elif narrative:
-                st.write(narrative)
+                        else:
+                            st.markdown("**Field-specific forecasts:**")
+                            for forecast in field_forecasts:
+                                st.markdown(
+                                    f"- **{forecast['category']}**: "
+                                    f"{forecast['teaser']}"
+                                )
+                elif narrative:
+                    st.write(narrative)
 
             from raceanalyzer.predictions import racer_type_long_form
 
@@ -188,9 +263,14 @@ def render():
                 )
                 st.caption(f"Based on {pred['edition_count']} previous edition(s)")
             else:
-                st.info("No historical data for predictions yet.")
+                if is_field_mode:
+                    st.info(f"No prediction available for {chosen_field}")
+                else:
+                    st.info("No historical data for predictions yet.")
 
     # === 2. Course Profile (hero interactive chart + climb breakdown) ===
+    # Sprint 020 PP-04: Course data does NOT pivot per field (series-level)
+    # Sprint 020 PP-05: Remove duplicate render_course_map() from inside Course Profile
     if profile_points and len(profile_points) > 1:
         with st.container(border=True):
             st.subheader("Course Profile")
@@ -200,7 +280,15 @@ def render():
                 col1.metric("Terrain", ct_display)
                 if course.get("total_gain_m"):
                     col2.metric("Elevation", f"{course['total_gain_m']:.0f}m gain")
-                if course.get("distance_m"):
+                # Sprint 020: Show field-specific distance if available, else range/course
+                if is_field_mode and cat_distance is not None:
+                    from raceanalyzer.queries import _format_unit_label
+                    unit_label = _format_unit_label(cat_distance_unit)
+                    dist_val = int(cat_distance) if cat_distance == int(cat_distance) else f"{cat_distance:.1f}"
+                    col3.metric("Distance", f"{dist_val} {unit_label}")
+                elif distance_range:
+                    col3.metric("Distance", distance_range)
+                elif course.get("distance_m"):
                     col3.metric("Distance", f"{course['distance_m']/1000:.1f} km")
 
             if climbs:
@@ -219,12 +307,7 @@ def render():
                     finish_type=pred_ft, drop_rate=drop_rate,
                 )
 
-            # Course map if available
-            if series.get("encoded_polyline"):
-                render_course_map(
-                    series["encoded_polyline"], series["display_name"],
-                    climbs=climbs,
-                )
+            # Sprint 020 PP-05: No render_course_map() here — standalone map below
     elif course:
         # Fallback: course metrics without profile
         with st.container(border=True):
@@ -241,10 +324,16 @@ def render():
             if desc:
                 st.caption(desc)
 
-            if series.get("encoded_polyline"):
-                render_course_map(
-                    series["encoded_polyline"], series["display_name"],
-                )
+            # Sprint 020 PP-05: No render_course_map() here either
+
+    # Standalone course map (not inside Course Profile container)
+    if series.get("encoded_polyline"):
+        with st.container(border=True):
+            st.subheader("Course Map")
+            render_course_map(
+                series["encoded_polyline"], series["display_name"],
+                climbs=climbs,
+            )
 
     # === 3. Two-column: Predicted Finish Type details + Historical Stats ===
     col_pred, col_stats = st.columns(2)
@@ -272,13 +361,19 @@ def render():
 
                 # Historical finish type pattern
                 detail = queries.get_feed_item_detail(
-                    session, int(series_id), category=selected_cat,
+                    session, int(series_id),
+                    category=chosen_field if is_field_mode else initial_cat,
                 )
                 if detail and detail.get("editions_summary"):
                     st.markdown("**Historical Pattern:**")
                     render_finish_pattern(detail["editions_summary"])
+                elif is_field_mode:
+                    st.info(f"No historical results for {chosen_field}")
             else:
-                st.info("No prediction data available.")
+                if is_field_mode:
+                    st.info(f"No prediction available for {chosen_field}")
+                else:
+                    st.info("No prediction data available.")
 
     with col_stats:
         with st.container(border=True):
@@ -316,14 +411,25 @@ def render():
             else:
                 st.info("No historical stats available yet.")
 
+    # Sprint 020 PP-13: Field forecasts only in "All Categories" mode
+    if not is_field_mode and field_forecasts:
+        with st.container(border=True):
+            st.subheader("Field Forecasts")
+            for forecast in field_forecasts:
+                ft_display = finish_type_display_name(forecast["finish_type"])
+                st.markdown(
+                    f"**{forecast['category']}**: {ft_display} — {forecast['teaser']}"
+                )
+
     # === 4. Scary Riders (category-gated) ===
     with st.container(border=True):
         st.subheader("Scary Riders")
-        if selected_cat:
+        scary_cat = chosen_field if is_field_mode else initial_cat
+        if scary_cat:
             latest_race = queries.get_latest_race_for_series(session, int(series_id))
             if latest_race:
                 scary_racers = queries.get_scary_racers(
-                    session, latest_race.id, category=selected_cat
+                    session, latest_race.id, category=scary_cat
                 )
                 if not scary_racers.empty:
                     source = scary_racers["source"].iloc[0]
@@ -334,7 +440,10 @@ def render():
                     for _, racer in scary_racers.iterrows():
                         render_scary_racer_card(racer.to_dict())
                 else:
-                    st.info("No scary rider data for this category.")
+                    if is_field_mode:
+                        st.info(f"No registered riders found for {chosen_field}")
+                    else:
+                        st.info("No scary rider data for this category.")
             else:
                 st.info("No scary rider data for this category.")
         else:
@@ -347,13 +456,17 @@ def render():
     with st.container(border=True):
         st.subheader("Startlist")
         team_name = st.session_state.get("team", "") or st.query_params.get("team", "")
+        startlist_cat = chosen_field if is_field_mode else initial_cat
         team_blocks = queries.get_startlist_team_blocks(
-            session, int(series_id), category=selected_cat, team_name=team_name,
+            session, int(series_id), category=startlist_cat, team_name=team_name,
         )
         if team_blocks:
             render_team_startlist(team_blocks, user_team_name=team_name)
         else:
-            st.info("No startlist data available yet.")
+            if is_field_mode:
+                st.info(f"No startlist data for {chosen_field}")
+            else:
+                st.info("No startlist data available yet.")
 
     # === 6. Similar Races ===
     with st.container(border=True):
@@ -383,9 +496,10 @@ def render():
                 index=0,
             )
 
+            feedback_cat = chosen_field or initial_cat or ""
             if st.button("Submit Feedback"):
                 _save_feedback(
-                    session, int(series_id), selected_cat or "",
+                    session, int(series_id), feedback_cat,
                     pred["predicted_finish_type"], choice, options,
                 )
                 st.success(
