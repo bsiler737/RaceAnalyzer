@@ -1923,6 +1923,7 @@ def _select_feed_prediction_context(
     matched_categories: list[str],
     course_type: Optional[str] = None,
     racer_profile_label: str = "",
+    force_overall: bool = False,
 ) -> dict:
     """Build an ai_context dict for a feed item.
 
@@ -1936,7 +1937,8 @@ def _select_feed_prediction_context(
 
     null_pred = pred_map.get((series_id, None))
 
-    if not matched_categories:
+    # Sprint 020: force_overall skips matched_categories logic entirely
+    if force_overall or not matched_categories:
         # Overall mode
         pred = null_pred
         if not pred:
@@ -2287,18 +2289,15 @@ def get_feed_items_batch(
         edition_count = pred.edition_count if pred else len(races)
         encoded_polyline = series.rwgps_encoded_polyline
 
-        # Sprint 018: Category-aware distance and estimated time
+        # Sprint 020: Always show cross-field ranges on feed (not category-specific)
         series_cat_details = cat_detail_by_series.get(sid, [])
-        cat_distance, cat_distance_unit = _resolve_category_distance(
-            series_cat_details, category
-        )
         distance_range = _format_distance_range(series_cat_details)
         is_duration = _is_duration_race(series_cat_details)
         is_crit = race_type_str == "criterium"
         hide_est_time = is_crit or is_duration
         est_time_range = (
             None if hide_est_time
-            else _format_time_range(pred_map, sid, category)
+            else _format_time_range(pred_map, sid, category=None)
         )
 
         item = {
@@ -2338,9 +2337,7 @@ def get_feed_items_batch(
             "typical_field_duration_min": typical_field_duration,
             "rwgps_encoded_polyline": encoded_polyline,
             "distribution_json": distribution_json_val,
-            # Sprint 018: Category distance & time
-            "category_distance": cat_distance,
-            "category_distance_unit": cat_distance_unit,
+            # Sprint 020: Always cross-field ranges on feed
             "distance_range": distance_range,
             "estimated_time_range": est_time_range,
             "hide_estimated_time": hide_est_time,
@@ -2353,11 +2350,13 @@ def get_feed_items_batch(
             c for c in (matched_categories or [])
             if c in series_recent_cats
         ]
+        # Sprint 020: Feed always uses overall AI sez mode
         ai_context = _select_feed_prediction_context(
             pred_map, sid,
             matched_categories=scoped_matches,
             course_type=course_type,
             racer_profile_label=racer_profile_label,
+            force_overall=True,
         )
         item["ai_context"] = ai_context
 

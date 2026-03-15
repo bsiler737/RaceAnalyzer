@@ -431,6 +431,27 @@ def calculate_drop_rate(
     }
 
 
+def _cat_detail_distance_to_meters(distance: float, distance_unit: str | None) -> float | None:
+    """Convert a CategoryDetail distance + unit to meters."""
+    if not distance or distance <= 0:
+        return None
+    if not distance_unit:
+        # Assume km if no unit
+        return distance * 1000.0
+    u = distance_unit.strip().lower()
+    if u in ("miles", "mile", "mi"):
+        return distance * 1609.344
+    if u in ("km", "kilometers", "kilometer"):
+        return distance * 1000.0
+    if u in ("m", "meters", "meter"):
+        return distance
+    # Time-based units (duration races) — can't compute speed
+    if u in ("minutes", "min", "hours", "hr", "hrs"):
+        return None
+    # Unknown unit, assume km
+    return distance * 1000.0
+
+
 def calculate_typical_speeds(
     session: Session,
     series_id: int,
@@ -445,7 +466,7 @@ def calculate_typical_speeds(
     if settings is None:
         settings = Settings()
 
-    # Get course distance
+    # Get course distance (route-level, may be single-lap)
     course = (
         session.query(Course)
         .filter(Course.series_id == series_id)
@@ -454,7 +475,7 @@ def calculate_typical_speeds(
     if not course or not course.distance_m:
         return None
 
-    distance_m = course.distance_m
+    route_distance_m = course.distance_m
 
     # Check race type - suppress for criteriums
     editions = (
@@ -472,8 +493,25 @@ def calculate_typical_speeds(
             return None
 
     # Suppress for very short non-crit courses (likely single lap)
-    if distance_m < 5000:
+    if route_distance_m < 5000:
         return None
+
+    # Sprint 020: Pre-load CategoryDetail distances for all editions
+    # so we can use total race distance instead of single-lap route distance
+    from raceanalyzer.db.models import CategoryDetail
+    race_ids = [r.id for r in editions]
+    cat_details = (
+        session.query(CategoryDetail)
+        .filter(CategoryDetail.race_id.in_(race_ids))
+        .all()
+    )
+    # Map (race_id, category) -> distance_m
+    cat_dist_map: dict[tuple[int, str | None], float] = {}
+    for cd in cat_details:
+        if cd.distance is not None:
+            dist_m = _cat_detail_distance_to_meters(cd.distance, cd.distance_unit)
+            if dist_m and dist_m > 0:
+                cat_dist_map[(cd.race_id, cd.category)] = dist_m
 
     per_edition_winner_speeds = []
     per_edition_field_speeds = []
@@ -512,12 +550,26 @@ def calculate_typical_speeds(
         if not results:
             continue
 
+        # Sprint 020: Prefer CategoryDetail.distance (total race distance)
+        # over Course.distance_m (single-lap route) for multi-lap races
+        race_distance_m = route_distance_m
+        if category:
+            cat_d = cat_dist_map.get((race.id, category))
+            if cat_d:
+                race_distance_m = cat_d
+        else:
+            # No category filter: use any CategoryDetail distance for this race
+            for (rid, _cat), d in cat_dist_map.items():
+                if rid == race.id:
+                    race_distance_m = d
+                    break
+
         # Front group proxy: top K finishers
         top_k = results[:settings.speed_top_k]
         speeds = []
         for r in top_k:
             if r.race_time_seconds and r.race_time_seconds > 0:
-                speed_kph = distance_m / r.race_time_seconds * 3.6
+                speed_kph = race_distance_m / r.race_time_seconds * 3.6
                 if settings.speed_min_kph <= speed_kph <= settings.speed_max_kph:
                     speeds.append(speed_kph)
 

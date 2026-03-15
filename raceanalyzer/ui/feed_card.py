@@ -420,6 +420,14 @@ def inject_feed_styles():
     <style>
     /* Feed row styles (Sprint 019) */
 
+    /* Constrain feed content to consistent width; left-align (Sprint 020) */
+    section[data-testid="stMain"] .block-container {
+        max-width: 1060px !important;
+        margin-left: 0 !important;
+        margin-right: auto !important;
+        padding-left: 1rem !important;
+    }
+
     /* Row press micro-animation */
     div[data-testid="stVerticalBlock"] > div:has(.feed-row) {
         transition: transform 150ms ease, opacity 150ms ease;
@@ -797,7 +805,7 @@ def build_row_html(item: dict) -> str:
     parts.append(
         f'<div class="feed-row" style="display:grid;{grid_cols}gap:14px;'
         f'align-items:center;border-left:4px solid {accent_color};'
-        f'padding-left:12px;">'
+        f'padding-left:12px;padding-bottom:8px;">'
     )
 
     # === DATE COLUMN ===
@@ -901,7 +909,7 @@ def build_row_html(item: dict) -> str:
 
     if ai_sez_text:
         parts.append(
-            f'<div class="feed-row-ai" style="margin-top:4px;font-weight:500;'
+            f'<div class="feed-row-ai" style="margin-top:10px;font-weight:500;'
             f'font-size:1.0rem;display:flex;align-items:center;gap:6px;">'
             f'{ft_icon_20}'
             f'<span style="color:var(--text-color,#888);font-weight:400;'
@@ -943,7 +951,7 @@ def build_row_html(item: dict) -> str:
     if chips:
         parts.append(
             '<div class="feed-card-chips" style="display:flex;flex-wrap:wrap;gap:6px;'
-            'margin-top:6px;font-size:0.82em;">'
+            'margin-top:10px;font-size:0.82em;">'
             + "".join(chips)
             + "</div>"
         )
@@ -959,7 +967,7 @@ def build_row_html(item: dict) -> str:
             else "var(--secondary-background-color,#e0e0e0)"
         )
         parts.append(
-            '<div style="margin-top:6px;display:flex;align-items:center;'
+            '<div style="margin-top:10px;display:flex;align-items:center;'
             'gap:6px;">'
             '<span style="font-size:0.78em;'
             'color:var(--text-color,#666);min-width:70px;">'
@@ -1012,16 +1020,9 @@ def _build_chip_row(item: dict) -> list[str]:
         '<line x1="13" y1="5" x2="13" y2="9"'
         ' stroke="currentColor" stroke-width="1.5"/></svg>'
     )
-    # Sprint 018: Prefer category-specific distance, then range, then Course.distance_m
-    cat_dist = item.get("category_distance")
-    cat_unit = item.get("category_distance_unit")
+    # Sprint 020: Always show cross-field range, then Course.distance_m fallback
     dist_range = item.get("distance_range")
-    if cat_dist is not None:
-        from raceanalyzer.queries import _format_unit_label
-        unit_label = _format_unit_label(cat_unit)
-        dist_val = int(cat_dist) if cat_dist == int(cat_dist) else f"{cat_dist:.1f}"
-        chips.append(_chip("distance", _DIST_ICON, f"{dist_val} {unit_label}"))
-    elif dist_range:
+    if dist_range:
         chips.append(_chip("distance", _DIST_ICON, html.escape(dist_range)))
     elif item.get("distance_m") is not None:
         km = item["distance_m"] / 1000
