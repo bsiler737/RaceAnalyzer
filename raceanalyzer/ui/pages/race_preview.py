@@ -30,7 +30,7 @@ from raceanalyzer.ui.components import (
 from raceanalyzer.ui.maps import render_course_map, render_interactive_course_profile
 
 # Divider constant for the field picker selectbox
-_FIELD_DIVIDER = "\u2500\u2500\u2500 Other fields \u2500\u2500\u2500"
+_FIELD_DIVIDER = "\u2500\u2500\u2500 Other Fields \u2500\u2500\u2500"
 
 
 def render():
@@ -107,7 +107,7 @@ def render():
 
     # === Sprint 020: Smart Field Picker with deduplication ===
     raw_categories = preview["categories"]
-    chosen_field = None  # None = "All Categories" mode
+    chosen_field = None  # None = "All Fields" mode
     # Map from canonical display name back to raw category names for queries
     canon_to_raws: dict[str, list[str]] = {}
 
@@ -128,7 +128,7 @@ def render():
             matched_fields = [c for c in categories if c in matched_set]
             other_fields = [c for c in categories if c not in matched_set]
 
-            cat_options: list = [None]  # None = "All Categories"
+            cat_options: list = [None]  # None = "All Fields"
             if matched_fields:
                 cat_options += matched_fields
             if other_fields:
@@ -138,7 +138,7 @@ def render():
 
             def _format_field(x):
                 if x is None:
-                    return "All Categories"
+                    return "All Fields"
                 if x == _FIELD_DIVIDER:
                     return _FIELD_DIVIDER
                 if x in matched_set:
@@ -387,40 +387,43 @@ def render():
     with col_stats:
         with st.container(border=True):
             st.subheader("Historical Stats")
-            if drop_rate or typical_speed:
-                if drop_rate:
-                    rate_pct = round(drop_rate["drop_rate"] * 100)
-                    c1, c2 = st.columns([2, 1])
-                    c1.metric("Drop Rate", f"{rate_pct}%")
-                    with c2:
-                        render_selectivity_badge(drop_rate["label"])
-                    st.caption(
-                        f"Based on {drop_rate['edition_count']} edition(s) "
-                        f"({drop_rate['total_starters']} total starters, "
-                        f"{drop_rate['total_dropped']} dropped)"
-                    )
+            if drop_rate:
+                rate_pct = round(drop_rate["drop_rate"] * 100)
+                c1, c2 = st.columns([2, 1])
+                c1.metric("Drop Rate", f"{rate_pct}%")
+                with c2:
+                    render_selectivity_badge(drop_rate["label"])
+                st.caption(
+                    f"Based on {drop_rate['edition_count']} edition(s) "
+                    f"({drop_rate['total_starters']} total starters, "
+                    f"{drop_rate['total_dropped']} dropped)"
+                )
 
-                if typical_speed:
-                    if drop_rate:
-                        st.divider()
-                    c1, c2 = st.columns(2)
-                    c1.metric(
-                        "Winning Speed",
-                        f"{typical_speed['median_winner_speed_mph']} mph",
-                    )
-                    c2.metric(
-                        "Field Speed",
-                        f"{typical_speed['median_field_speed_mph']} mph",
-                    )
-                    st.caption(
-                        f"Median across {typical_speed['edition_count']} edition(s). "
-                        f"({typical_speed['median_winner_speed_kph']} / "
-                        f"{typical_speed['median_field_speed_kph']} kph)"
-                    )
-            else:
+            if typical_speed:
+                if drop_rate:
+                    st.divider()
+                c1, c2 = st.columns(2)
+                c1.metric(
+                    "Winning Speed",
+                    f"{typical_speed['median_winner_speed_mph']} mph",
+                )
+                c2.metric(
+                    "Field Speed",
+                    f"{typical_speed['median_field_speed_mph']} mph",
+                )
+                st.caption(
+                    f"Median across {typical_speed['edition_count']} edition(s). "
+                    f"({typical_speed['median_winner_speed_kph']} / "
+                    f"{typical_speed['median_field_speed_kph']} kph)"
+                )
+            elif not is_field_mode:
+                if drop_rate:
+                    st.divider()
+                st.info("Pick a field to see the avg speeds for your field.")
+            elif not drop_rate:
                 st.info("No historical stats available yet.")
 
-    # Sprint 020 PP-13: Field forecasts only in "All Categories" mode
+    # Sprint 020 PP-13: Field forecasts only in "All Fields" mode
     if not is_field_mode and field_forecasts:
         with st.container(border=True):
             st.subheader("Field Forecasts")
@@ -430,10 +433,10 @@ def render():
                     f"**{forecast['category']}**: {ft_display} — {forecast['teaser']}"
                 )
 
-    # === 4. Scary Riders (category-gated) ===
+    # === 4. Spooky Riders (field-gated) ===
     with st.container(border=True):
-        st.subheader("Scary Riders")
-        scary_cat = query_category if is_field_mode else initial_cat
+        st.subheader("Spooky Riders")
+        scary_cat = query_category if is_field_mode else None
         if scary_cat:
             latest_race = queries.get_latest_race_for_series(session, int(series_id))
             if latest_race:
@@ -449,16 +452,13 @@ def render():
                     for _, racer in scary_racers.iterrows():
                         render_scary_racer_card(racer.to_dict())
                 else:
-                    if is_field_mode:
-                        st.info(f"No registered riders found for {chosen_field}")
-                    else:
-                        st.info("No scary rider data for this category.")
+                    st.info(f"No registered riders found for {chosen_field}")
             else:
-                st.info("No scary rider data for this category.")
+                st.info(f"No spooky rider data for {chosen_field}")
         else:
             st.info(
-                "Pick a category to see the :ghost: spooky riders :ghost: "
-                "for your category."
+                "Pick a field to see the :ghost: spooky riders :ghost: "
+                "for your field."
             )
 
     # === 5. Startlist (actual registrations only) ===
