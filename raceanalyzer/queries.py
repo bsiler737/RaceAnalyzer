@@ -1397,6 +1397,7 @@ def get_race_preview(
         # Sprint 021: Stage race support
         "registration_url": reg_url,
         "history_banner": history_banner,
+        "race_type": race_type_val.value if race_type_val else None,
     }
 
 

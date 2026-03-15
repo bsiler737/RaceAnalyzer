@@ -134,10 +134,7 @@ def render():
                         st.query_params["series_id"] = str(sib["series_id"])
                         st.rerun()
 
-    # === Sprint 021: History banner for stage fallback ===
-    history_banner = preview.get("history_banner")
-    if history_banner:
-        st.info(history_banner)
+    # Sprint 021: History banner removed — per-stage preview is the default view
 
     # === Sprint 021: Registration URL (inherited from parent for stages) ===
     reg_url = preview.get("registration_url")
@@ -281,6 +278,8 @@ def render():
     cat_distance_unit = preview.get("category_distance_unit")
     distance_range = preview.get("distance_range")
     est_time_range = preview.get("estimated_time_range")
+    preview_race_type = preview.get("race_type")
+    is_tt = preview_race_type == "time_trial"
 
     # === 1. Two-column: What to Expect + Predicted Finish Type summary ===
     col_wte, col_pft = st.columns(2)
@@ -288,14 +287,43 @@ def render():
         with st.container(border=True):
             st.subheader("What to Expect")
 
-            if is_field_mode:
-                # Sprint 020: Single-field narrative
+            if is_tt:
+                # TT-specific narrative based on course
+                ct = course["course_type"] if course else None
+                dist_km = course["distance_m"] / 1000.0 if course and course.get("distance_m") else None
+                gain_m = course.get("total_gain_m") if course else None
+                tt_parts = ["It's a time trial \u2014 a solo effort against the clock."]
+                if dist_km and gain_m:
+                    tt_parts.append(
+                        f"The {dist_km:.0f} km course has {gain_m:.0f}m of climbing."
+                    )
+                if ct == "mountainous":
+                    tt_parts.append(
+                        "This is a mountain TT \u2014 strong climbers with good pacing will dominate."
+                    )
+                elif ct == "hilly":
+                    tt_parts.append(
+                        "The hills make this a climber's TT \u2014 riders who can sustain power uphill have the edge."
+                    )
+                elif ct == "rolling":
+                    tt_parts.append(
+                        "A steady-state effort on rolling terrain. Power-to-weight matters less than raw watts here."
+                    )
+                elif ct == "flat":
+                    tt_parts.append(
+                        "Flat and fast \u2014 aero position and sustained power are everything."
+                    )
+                st.write(" ".join(tt_parts))
+                st.markdown(
+                    "**Who does well here?** Strong time trialists who can pace "
+                    "evenly and sustain threshold power for the full distance."
+                )
+            elif is_field_mode:
                 if narrative:
                     st.markdown(f"**For {chosen_field}:** {narrative}")
                 else:
                     st.info(f"No prediction available for {chosen_field}")
             else:
-                # Multi-match / overall narrative
                 mode = ai_context.get("mode", "overall") if ai_context else "overall"
                 if mode == "single_match" and ai_context.get("best_category"):
                     if narrative:
@@ -321,21 +349,25 @@ def render():
                 elif narrative:
                     st.write(narrative)
 
-            from raceanalyzer.predictions import racer_type_long_form
+                from raceanalyzer.predictions import racer_type_long_form
 
-            ct = course["course_type"] if course else None
-            pred_ft = pred["predicted_finish_type"] if pred else None
-            edition_count = pred["edition_count"] if pred else 0
-            long_desc = racer_type_long_form(
-                ct, pred_ft, drop_rate=drop_rate, edition_count=edition_count,
-            )
-            if long_desc:
-                st.markdown(f"**Who does well here?** {long_desc}")
+                ct = course["course_type"] if course else None
+                pred_ft = pred["predicted_finish_type"] if pred else None
+                edition_count = pred["edition_count"] if pred else 0
+                long_desc = racer_type_long_form(
+                    ct, pred_ft, drop_rate=drop_rate, edition_count=edition_count,
+                )
+                if long_desc:
+                    st.markdown(f"**Who does well here?** {long_desc}")
 
     with col_pft:
         with st.container(border=True):
-            st.subheader("Predicted Finish Type")
-            if pred:
+            if is_tt:
+                st.subheader("Race Format")
+                st.markdown("### Individual Time Trial")
+                st.caption("Solo effort \u2014 no drafting, no group tactics")
+            elif pred:
+                st.subheader("Predicted Finish Type")
                 ft_display = finish_type_display_name(pred["predicted_finish_type"])
                 st.markdown(f"### {ft_display}")
 
@@ -354,6 +386,7 @@ def render():
                 )
                 st.caption(f"Based on {pred['edition_count']} previous edition(s)")
             else:
+                st.subheader("Predicted Finish Type")
                 if is_field_mode:
                     st.info(f"No prediction available for {chosen_field}")
                 else:
