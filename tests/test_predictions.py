@@ -880,8 +880,7 @@ class TestFinishTypeTeaser:
             prediction_source="course_profile",
             course_type="hilly",
         )
-        assert "first edition" in result.lower()
-        assert "shatter" in result.lower() or "climbs" in result.lower()
+        assert "climb" in result.lower() or "shatter" in result.lower()
 
     def test_course_profile_mountainous(self):
         from raceanalyzer.predictions import finish_type_teaser
@@ -891,7 +890,6 @@ class TestFinishTypeTeaser:
             prediction_source="course_profile",
             course_type="mountainous",
         )
-        assert "first edition" in result.lower()
         assert "climbing" in result.lower()
 
     def test_race_type_only_hedged(self):
@@ -993,8 +991,8 @@ class TestBuildAiSezText:
             "course_type": "mountainous",
         }
         result = build_ai_sez_text(ctx)
-        # Single match shows field-specific hedged prediction
-        assert "first edition" in result.lower()
+        # Single match shows course-based prediction
+        assert "climbing" in result.lower()
 
     def test_race_type_only_overall(self):
         from raceanalyzer.predictions import build_ai_sez_text

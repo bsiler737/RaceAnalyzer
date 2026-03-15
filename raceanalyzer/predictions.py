@@ -782,22 +782,22 @@ def generate_narrative(
 
 _HEDGED_COURSE: dict[str, dict[str, str]] = {
     "mountainous": {
-        "breakaway_selective": "big climbs might drive attrition",
-        "gc_selective": "the sustained climbing should be selective",
+        "breakaway_selective": "Expect a war of attrition on the hardest terrain",
+        "gc_selective": "The sustained climbing should blow the race apart",
     },
     "hilly": {
-        "breakaway_selective": "the late climbs could shatter the field",
-        "reduced_sprint": "the hills will probably thin the pack",
+        "breakaway_selective": "The late climbs could shatter the field",
+        "reduced_sprint": "The hills will probably thin the pack",
         "small_group_sprint": (
-            "repeated climbs might whittle it down to a small group sprint"
+            "Repeated climbs might whittle it down to a small group sprint"
         ),
     },
     "rolling": {
-        "bunch_sprint": "rolling terrain usually stays together for a sprint",
-        "reduced_sprint": "the long distance might thin things out",
+        "bunch_sprint": "Rolling terrain usually stays together for a sprint",
+        "reduced_sprint": "The long distance might thin things out",
     },
     "flat": {
-        "bunch_sprint": "flat course likely means a field sprint",
+        "bunch_sprint": "Flat course likely means a field sprint",
     },
 }
 
@@ -850,18 +850,14 @@ def finish_type_teaser(
         return ""
 
     if prediction_source == "course_profile":
-        # Hedged text — distinguish first edition from inconclusive history
+        # Course-based prediction — describe what the terrain suggests
         insight = ""
         if course_type and course_type in _HEDGED_COURSE:
             insight = _HEDGED_COURSE[course_type].get(finish_type, "")
         if not insight:
             base = _CONFIDENT_TEASERS.get(finish_type, "")
-            insight = _lowercase_lead(base) if base else ""
-        if insight:
-            if edition_count and edition_count > 1:
-                return f"Hard to say from past results \u2014 {insight}"
-            return f"Hard to say since this is the first edition \u2014 {insight}"
-        return ""
+            insight = base if base else ""
+        return insight
 
     if prediction_source == "race_type_only":
         # Lighter hedge: "No course data yet, but {race_type_insight}"
