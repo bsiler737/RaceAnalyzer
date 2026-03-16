@@ -37,3 +37,11 @@ Thumbs.db
 
 # Ruff
 .ruff_cache/
+
+# Dev artifacts (not for production/GitHub)
+docs/
+examples/
+screenshots/
+reviews/
+littleUXfixes.md
+*.log
