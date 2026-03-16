@@ -1,9 +1,12 @@
 """Route handlers for RaceAnalyzer web app."""
 from __future__ import annotations
 
+import copy
 import json
 import os
+import time
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +17,30 @@ from sqlalchemy.orm import Session
 from raceanalyzer.db.engine import get_session
 
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# Feed query cache — base feed items (no filters) cached for 5 minutes.
+# Filters, team search, and enrichment are applied post-cache.
+# ---------------------------------------------------------------------------
+_feed_cache: dict = {"items": None, "states": None, "ts": 0}
+_FEED_CACHE_TTL = 300  # 5 minutes
+
+
+def _get_cached_feed(session: Session) -> tuple[list[dict], list[str]]:
+    """Return (items, available_states) from cache or fresh query."""
+    from raceanalyzer import queries
+
+    now = time.monotonic()
+    if _feed_cache["items"] is not None and (now - _feed_cache["ts"]) < _FEED_CACHE_TTL:
+        # Return deep copies so enrichment doesn't mutate the cache
+        return copy.deepcopy(_feed_cache["items"]), _feed_cache["states"]
+
+    items = queries.get_feed_items_batch(session)
+    available_states = queries.get_available_states(session)
+    _feed_cache["items"] = items
+    _feed_cache["states"] = available_states
+    _feed_cache["ts"] = now
+    return copy.deepcopy(items), available_states
 
 
 def get_db():
@@ -195,27 +222,42 @@ def feed(
     from raceanalyzer import queries
     from raceanalyzer.web.helpers import enrich_items
 
-    # Build filter params
-    race_type_filter = None
-    if race_type:
-        race_type_filter = [rt.strip() for rt in race_type.split(",") if rt.strip()]
+    # Use cached base feed; apply filters/search/team post-cache
+    if q or (team and len(team.strip()) >= 3):
+        # Search and team queries need the full query pipeline
+        race_type_filter = None
+        if race_type:
+            race_type_filter = [rt.strip() for rt in race_type.split(",") if rt.strip()]
+        state_filter = None
+        if states:
+            state_filter = [s.strip() for s in states.split(",") if s.strip()]
+        items = queries.get_feed_items_batch(
+            session,
+            category=cat,
+            search_query=q or None,
+            race_type_filter=race_type_filter,
+            state_filter=state_filter,
+            team_name=team if team and len(team.strip()) >= 3 else None,
+        )
+        if race_type_filter:
+            items = [i for i in items if i.get("race_type") in race_type_filter]
+        available_states = queries.get_available_states(session)
+    else:
+        # Fast path: use cached base feed, apply lightweight filters
+        items, available_states = _get_cached_feed(session)
 
-    state_filter = None
-    if states:
-        state_filter = [s.strip() for s in states.split(",") if s.strip()]
+        # Apply race type filter
+        if race_type:
+            race_type_filter = [rt.strip() for rt in race_type.split(",") if rt.strip()]
+            items = [i for i in items if i.get("race_type") in race_type_filter]
 
-    items = queries.get_feed_items_batch(
-        session,
-        category=cat,
-        search_query=q or None,
-        race_type_filter=race_type_filter,
-        state_filter=state_filter,
-        team_name=team if team and len(team.strip()) >= 3 else None,
-    )
-
-    # Exclude unclassified races when a race type filter is active
-    if race_type_filter:
-        items = [i for i in items if i.get("race_type") in race_type_filter]
+        # Apply state filter
+        if states:
+            state_filter = [s.strip() for s in states.split(",") if s.strip()]
+            items = [
+                i for i in items
+                if i.get("state_province") in state_filter
+            ]
 
     # Deep-link isolation
     if series_id:
@@ -239,9 +281,6 @@ def feed(
     enrich_items(past_page_items)
     for _header, group_items in upcoming_month_groups:
         enrich_items(group_items)
-
-    # Available states for filter pills
-    available_states = queries.get_available_states(session)
 
     total_items = len(items)
 
