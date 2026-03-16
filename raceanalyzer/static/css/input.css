@@ -4,8 +4,9 @@
 
 @layer components {
   .ra-card {
-    @apply bg-ra-surface rounded-lg border border-gray-200 p-4 shadow-sm
+    @apply rounded-lg border border-gray-200 p-4 shadow-sm
            dark:bg-gray-800 dark:border-gray-700;
+    background-color: #ffffff;
   }
   .ra-pill {
     @apply inline-block px-3 py-1 rounded-full text-sm font-medium cursor-pointer
@@ -13,14 +14,16 @@
            dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600;
   }
   .ra-pill-active {
-    @apply bg-ra-accent text-white hover:bg-orange-600
-           dark:bg-ra-accent dark:text-white;
+    @apply text-white hover:bg-orange-600
+           dark:text-white;
+    background-color: #ff6b35;
   }
   .ra-badge {
     @apply inline-block px-2 py-0.5 rounded text-xs font-medium text-white;
   }
   .ra-section {
-    @apply bg-ra-surface rounded-lg border border-gray-200 p-6 mb-4
+    @apply rounded-lg border border-gray-200 p-6 mb-4
            dark:bg-gray-800 dark:border-gray-700;
+    background-color: #ffffff;
   }
 }
