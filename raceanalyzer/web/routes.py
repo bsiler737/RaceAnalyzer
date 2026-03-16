@@ -196,9 +196,9 @@ def feed(
     from raceanalyzer.web.helpers import enrich_items
 
     # Build filter params
-    discipline_filter = None
+    race_type_filter = None
     if race_type:
-        discipline_filter = [rt.strip() for rt in race_type.split(",") if rt.strip()]
+        race_type_filter = [rt.strip() for rt in race_type.split(",") if rt.strip()]
 
     state_filter = None
     if states:
@@ -208,10 +208,14 @@ def feed(
         session,
         category=cat,
         search_query=q or None,
-        discipline_filter=discipline_filter,
+        race_type_filter=race_type_filter,
         state_filter=state_filter,
         team_name=team if team and len(team.strip()) >= 3 else None,
     )
+
+    # Exclude unclassified races when a race type filter is active
+    if race_type_filter:
+        items = [i for i in items if i.get("race_type") in race_type_filter]
 
     # Deep-link isolation
     if series_id:
