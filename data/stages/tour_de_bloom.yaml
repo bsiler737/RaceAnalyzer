@@ -4,7 +4,7 @@ stages:
     name: "Mission Ridge Hill Climb"
     race_type: "hill_climb"
     date: "2026-05-14"
-    rwgps_route_id: 2398131
+    rwgps_route_id: 49479652
   - stage: 2
     name: "Waterville Road Race"
     race_type: "road_race"
@@ -14,19 +14,21 @@ stages:
     name: "Downtown Wenatchee Criterium"
     race_type: "criterium"
     date: "2026-05-16"
-    rwgps_route_id: 45882433
+    rwgps_route_id: 49480179
   - stage: 4
     name: "Plain Road Race"
     race_type: "road_race"
     date: "2026-05-17"
-    rwgps_route_id: 45882468
+    rwgps_route_id: 54018545
   - stage: 5
     name: "19 km Time Trial"
     race_type: "time_trial"
     date: "2026-05-18"
+    rwgps_route_id: 53849275
     elites_only: true
   - stage: 6
     name: "Ed Farrar Queen Stage"
     race_type: "road_race"
     date: "2026-05-19"
+    rwgps_route_id: 53849172
     elites_only: true

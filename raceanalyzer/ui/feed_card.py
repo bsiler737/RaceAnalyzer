@@ -509,6 +509,14 @@ def inject_feed_styles():
         100% { background: rgba(255, 111, 0, 0.08); }
     }
 
+    /* Light mode: ensure readable text on white cards */
+    .feed-row {
+        color: var(--text-color, #333);
+    }
+    .feed-row span {
+        color: var(--text-color, #444);
+    }
+
     /* Dark mode surface differentiation */
     @media (prefers-color-scheme: dark) {
         .feed-row {
@@ -627,7 +635,7 @@ def build_card_html(item: dict) -> str:
         try:
             date_str = html.escape(f"last raced {item['most_recent_date']:%b %Y}")
             countdown_pill = (
-                f'<span style="color:var(--text-color,#888);'
+                f'<span style="color:var(--text-color,#666);'
                 f'font-size:0.8em;margin-left:6px;">{date_str}</span>'
             )
         except (TypeError, ValueError):
@@ -637,6 +645,7 @@ def build_card_html(item: dict) -> str:
         f'<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;'
         f'max-width:calc(100% - 30px);">'
         f'<span style="font-weight:700;font-size:1.3em;line-height:1.2;'
+        f'color:var(--text-color,#333);'
         f'overflow:hidden;text-overflow:ellipsis;">{name}</span>'
         f'{countdown_pill}'
         f'</div>'
@@ -667,7 +676,7 @@ def build_card_html(item: dict) -> str:
     if loc_str:
         parts.append(
             f'<div style="margin-top:2px;'
-            f'font-size:0.85em;color:var(--text-color,#666);">'
+            f'font-size:0.85em;color:var(--text-color,#555);">'
             f'{loc_str}'
             f'</div>'
         )
@@ -745,10 +754,10 @@ def build_card_html(item: dict) -> str:
             f'<div style="width:{min(drop_pct, 100)}%;height:100%;'
             f'background:{bar_color};'
             'border-radius:4px;"></div></div>'
-            f'<span style="font-size:0.78em;font-weight:500;">'
+            f'<span style="font-size:0.78em;font-weight:500;color:var(--text-color,#444);">'
             f'{drop_pct}%</span>'
             '<span style="font-size:0.72em;'
-            f'color:var(--text-color,#888);">'
+            f'color:var(--text-color,#666);">'
             f'({html.escape(drop_label)})</span>'
             '</div>'
         )
@@ -764,9 +773,9 @@ def build_card_html(item: dict) -> str:
             f'<div class="feed-card-prediction" style="margin-top:6px;font-weight:500;'
             f'font-size:0.92em;display:flex;align-items:center;gap:6px;">'
             f'{ft_icon_20}'
-            f'<span style="color:var(--text-color,#888);font-weight:400;'
+            f'<span style="color:var(--text-color,#666);font-weight:400;'
             f'font-size:0.85em;">AI sez:</span> '
-            f'<span>{html.escape(wte)}</span>'
+            f'<span style="color:var(--text-color,#444);">{html.escape(wte)}</span>'
             f'</div>'
         )
 
@@ -852,11 +861,11 @@ def build_row_html(item: dict) -> str:
         f'<div class="feed-row-date" style="text-align:center;{date_opacity}">'
         f'<div class="feed-row-month" style="font-size:0.75em;font-weight:600;'
         f'text-transform:uppercase;line-height:1.1;'
-        f'color:color-mix(in srgb, var(--text-color) 55%, transparent);">'
+        f'color:var(--text-color,#999);">'
         f'{month_str}</div>'
         f'<div class="feed-row-day" style="font-size:1.9em;font-weight:700;'
         f'line-height:1.1;'
-        f'color:color-mix(in srgb, var(--text-color) 55%, transparent);">'
+        f'color:var(--text-color,#999);">'
         f'{day_str}</div>'
         f'</div>'
     )
@@ -882,6 +891,7 @@ def build_row_html(item: dict) -> str:
     parts.append(
         f'<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;">'
         f'<span style="font-weight:700;font-size:1.3em;line-height:1.2;'
+        f'color:var(--text-color,#333);'
         f'overflow:hidden;text-overflow:ellipsis;">{name}</span>'
         f'{countdown_pill}'
         f'</div>'
@@ -898,7 +908,7 @@ def build_row_html(item: dict) -> str:
 
     if loc_str:
         parts.append(
-            f'<div style="font-size:0.85em;color:var(--text-color,#666);">'
+            f'<div style="font-size:0.85em;color:var(--text-color,#555);">'
             f'{loc_str}</div>'
         )
 
@@ -937,9 +947,9 @@ def build_row_html(item: dict) -> str:
             f'<div class="feed-row-ai" style="margin-top:10px;font-weight:500;'
             f'font-size:1.0rem;display:flex;align-items:center;gap:6px;">'
             f'{ft_icon_20}'
-            f'<span style="color:var(--text-color,#888);font-weight:400;'
+            f'<span style="color:var(--text-color,#666);font-weight:400;'
             f'font-size:0.85em;">AI sez:</span> '
-            f'<span>{html.escape(ai_sez_text)}</span>'
+            f'<span style="color:var(--text-color,#444);">{html.escape(ai_sez_text)}</span>'
             f'</div>'
         )
 
@@ -1003,10 +1013,10 @@ def build_row_html(item: dict) -> str:
             f'<div style="width:{min(drop_pct, 100)}%;height:100%;'
             f'background:{bar_color};'
             'border-radius:4px;"></div></div>'
-            f'<span style="font-size:0.78em;font-weight:500;">'
+            f'<span style="font-size:0.78em;font-weight:500;color:var(--text-color,#444);">'
             f'{drop_pct}%</span>'
             '<span style="font-size:0.72em;'
-            f'color:var(--text-color,#888);">'
+            f'color:var(--text-color,#666);">'
             f'({html.escape(drop_label)})</span>'
             '</div>'
         )

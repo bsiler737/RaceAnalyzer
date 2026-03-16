@@ -223,6 +223,89 @@ def _parse_date(date_str: str) -> Optional[datetime]:
     return None
 
 
+def fetch_event_categories(event_id: int) -> list[dict]:
+    """Fetch per-category details (distance, start time) from the GraphQL API.
+
+    Returns: [{"name", "distance", "distance_unit", "start_time", "description",
+               "bikereg_race_rec_id"}]
+    """
+    query = """
+    query ($eventId: Int!, $appType: ApplicationType!) {
+      athleticEvent(id: $eventId, appType: $appType) {
+        categories {
+          name
+          raceRecId
+          distance
+          distanceUnit
+          startTime
+          description
+        }
+      }
+    }
+    """
+
+    headers = {
+        "Content-Type": "application/json",
+        "apollographql-client-name": "crossresults",
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+    }
+
+    try:
+        resp = requests.post(
+            _GRAPHQL_URL,
+            json={
+                "query": query,
+                "variables": {"eventId": event_id, "appType": "BIKEREG"},
+            },
+            headers=headers,
+            timeout=15,
+        )
+
+        if not resp.ok:
+            logger.warning("GraphQL categories returned %d for event %d", resp.status_code, event_id)
+            return []
+
+        data = resp.json()
+        categories = (
+            data.get("data", {})
+            .get("athleticEvent", {})
+            .get("categories", [])
+        )
+
+        result = []
+        for cat in categories:
+            name = cat.get("name")
+            if not name:
+                continue
+
+            distance = cat.get("distance")
+            try:
+                distance = float(distance) if distance else None
+            except (ValueError, TypeError):
+                distance = None
+
+            start_time = _parse_date(cat.get("startTime", ""))
+
+            result.append({
+                "name": name,
+                "distance": distance,
+                "distance_unit": cat.get("distanceUnit"),
+                "start_time": start_time,
+                "description": cat.get("description", ""),
+                "bikereg_race_rec_id": cat.get("raceRecId"),
+            })
+
+        logger.info("Fetched %d categories for event %d", len(result), event_id)
+        return result
+
+    except Exception:
+        logger.warning("Failed to fetch categories for event %d", event_id, exc_info=True)
+        return []
+
+
 def match_event_to_series(
     event_name: str,
     series_names: list[str],

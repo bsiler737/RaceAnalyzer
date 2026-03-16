@@ -14,6 +14,7 @@ stages:
     name: "Downtown Criterium"
     race_type: "criterium"
     date: "2026-06-28"
+    rwgps_route_id: 27808423
   - stage: 4
     name: "Dooley Mountain Road Race"
     race_type: "road_race"
