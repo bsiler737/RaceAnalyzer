@@ -17,4 +17,4 @@ EXPOSE 8000
 # Copy seed DB to volume if volume is empty, then start server
 CMD ["sh", "-c", \
   "if [ ! -f /data/raceanalyzer.db ]; then cp /app/seed/raceanalyzer.db /data/raceanalyzer.db; fi && \
-   python -m raceanalyzer serve --host 0.0.0.0 --port 8000"]
+   python -m raceanalyzer --db /data/raceanalyzer.db serve --host 0.0.0.0 --port 8000"]
