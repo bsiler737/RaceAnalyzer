@@ -54,20 +54,20 @@
 
   {# Stage navigation pills #}
   {% if siblings and siblings | length > 1 %}
-  <div class="flex gap-2 mb-6 overflow-x-auto">
+  <div class="flex flex-wrap gap-1.5 mb-6">
     {% for sib in siblings %}
       {% set sib_name = sib.display_name.split(': ')[-1] if ': ' in sib.display_name else sib.display_name %}
       {% if sib.is_current %}
-        <span class="px-4 py-2 rounded-full text-sm font-medium bg-[var(--accent)] text-white whitespace-nowrap">
-          Stage {{ sib.stage_number }}: {{ sib_name }}
+        <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-[var(--accent)] text-white text-center leading-tight">
+          S{{ sib.stage_number }}: {{ sib_name }}
         </span>
       {% else %}
         <a href="/preview/{{ sib.series_id }}{% if chosen_field %}?field={{ chosen_field | urlencode }}{% endif %}"
            hx-get="/preview/{{ sib.series_id }}{% if chosen_field %}?field={{ chosen_field | urlencode }}{% endif %}"
            hx-target="#preview-content"
            hx-push-url="true"
-           class="px-4 py-2 rounded-full text-sm font-medium bg-gray-200 dark:bg-gray-700 text-ra-text dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 whitespace-nowrap">
-          Stage {{ sib.stage_number }}: {{ sib_name }}
+           class="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-700 text-ra-text dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 text-center leading-tight">
+          S{{ sib.stage_number }}: {{ sib_name }}
         </a>
       {% endif %}
     {% endfor %}
