@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+  <h1 class="text-3xl font-extrabold mb-2 dark:text-white">PNW Bike Races</h1>
+
+  {% block feed_content %}
+  <div id="feed-content">
+    {% include "partials/_feed_cards.html" %}
+  </div>
+  {% endblock %}
+</div>
+{% endblock %}

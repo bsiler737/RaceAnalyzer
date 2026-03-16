@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}RaceAnalyzer{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js" defer></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+  <script src="/static/js/charts.js" defer></script>
+  <script src="/static/js/maps.js" defer></script>
+  <style>
+    :root {
+      --bg-primary: #f0edea;
+      --bg-surface: #ffffff;
+      --bg-sidebar: #e2ddd8;
+      --accent: #ff6b35;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-primary: #1a1a2e;
+        --bg-surface: #16213e;
+        --bg-sidebar: #0f3460;
+        --accent: #ff6b35;
+      }
+    }
+  </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-ra-text dark:text-gray-200 min-h-screen">
+  <nav class="bg-[var(--bg-surface)] border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex items-center justify-between">
+    <span class="text-xl font-bold text-[var(--accent)]">RaceAnalyzer</span>
+    <div class="flex gap-4">
+      {% for item in nav_items %}
+      <a href="{{ item.href }}"
+         class="px-3 py-1 rounded-md text-sm font-medium
+                {% if current_path == item.href %}bg-[var(--accent)] text-white{% else %}text-ra-text dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
+        {{ item.label }}
+      </a>
+      {% endfor %}
+    </div>
+  </nav>
+  <div class="flex">
+    <aside id="sidebar" class="w-64 min-h-[calc(100vh-3rem)] bg-[var(--bg-sidebar)] border-r border-gray-200 dark:border-gray-700 p-4 hidden md:block">
+      {% block sidebar %}{% endblock %}
+    </aside>
+    <main id="content" class="flex-1 p-6">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

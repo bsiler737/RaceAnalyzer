@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .ra-card {
+    @apply bg-ra-surface rounded-lg border border-gray-200 p-4 shadow-sm
+           dark:bg-gray-800 dark:border-gray-700;
+  }
+  .ra-pill {
+    @apply inline-block px-3 py-1 rounded-full text-sm font-medium cursor-pointer
+           bg-gray-100 text-gray-700 hover:bg-gray-200
+           dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600;
+  }
+  .ra-pill-active {
+    @apply bg-ra-accent text-white hover:bg-orange-600
+           dark:bg-ra-accent dark:text-white;
+  }
+  .ra-badge {
+    @apply inline-block px-2 py-0.5 rounded text-xs font-medium text-white;
+  }
+  .ra-section {
+    @apply bg-ra-surface rounded-lg border border-gray-200 p-6 mb-4
+           dark:bg-gray-800 dark:border-gray-700;
+  }
+}

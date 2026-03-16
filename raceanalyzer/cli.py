@@ -202,13 +202,47 @@ def classify(ctx, race_id, classify_all, gap_threshold):
 
 
 @main.command()
+@click.option("--host", default="0.0.0.0", help="Host to bind.")
+@click.option("--port", default=8000, type=int, help="Port to bind.")
+@click.option("--reload", "use_reload", is_flag=True, help="Enable auto-reload for development.")
+@click.pass_context
+def serve(ctx, host, port, use_reload):
+    """Start the FastAPI web server."""
+    import os
+
+    import uvicorn
+
+    settings = ctx.obj["settings"]
+    os.environ["RACEANALYZER_DB_PATH"] = str(settings.db_path)
+    uvicorn.run(
+        "raceanalyzer.web.app:create_app",
+        host=host,
+        port=port,
+        reload=use_reload,
+        factory=True,
+    )
+
+
+@main.command()
 @click.option("--port", type=int, default=8501, help="Port for Streamlit server.")
 @click.pass_context
 def ui(ctx, port):
-    """Launch the Streamlit UI."""
+    """Launch the Streamlit UI (deprecated -- use 'serve' instead)."""
     import os
     import subprocess
     import sys
+    import warnings
+
+    warnings.warn(
+        "The 'ui' command is deprecated. Use 'raceanalyzer serve' instead.",
+        DeprecationWarning,
+        stacklevel=1,
+    )
+    click.echo(
+        "WARNING: 'raceanalyzer ui' is deprecated and will be removed in a future release. "
+        "Use 'raceanalyzer serve' instead.",
+        err=True,
+    )
 
     app_path = Path(__file__).parent / "ui" / "app.py"
     settings = ctx.obj["settings"]

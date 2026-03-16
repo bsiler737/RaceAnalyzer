@@ -1,0 +1,15 @@
+{% if items %}
+  {% for item in items %}
+    <div class="ra-card mb-3">
+      <div class="font-semibold dark:text-white">{{ item.display_name }}</div>
+      <div class="text-sm text-ra-text-muted dark:text-gray-400">
+        {{ item.location }}{% if item.state_province %}, {{ item.state_province }}{% endif %}
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="text-center py-12 text-ra-text-muted dark:text-gray-400">
+    <p class="text-lg">No races found.</p>
+    <p class="text-sm mt-2">Run <code>raceanalyzer scrape</code> to import data.</p>
+  </div>
+{% endif %}
