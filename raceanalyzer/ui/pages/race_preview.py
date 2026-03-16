@@ -156,29 +156,29 @@ def render():
                     return f"\u2605 {x}"
                 return f"  {x}"
 
-            # Restore field from URL params
+            # Restore field from URL params on first load only
             url_field = st.query_params.get("field")
-            default_idx = 0
-            if url_field and url_field in categories:
-                default_idx = cat_options.index(url_field)
+            if "field_select" not in st.session_state and url_field and url_field in categories:
+                st.session_state["field_select"] = url_field
 
             raw_choice = st.selectbox(
                 "Field",
                 options=cat_options,
-                index=default_idx,
+                key="field_select",
                 format_func=_format_field,
             )
 
             # Divider selection is a no-op — revert to previous
             if raw_choice == _FIELD_DIVIDER:
-                raw_choice = url_field if url_field in categories else None
+                raw_choice = None
 
             chosen_field = raw_choice
 
-            # Persist to URL
-            if chosen_field:
+            # Sync to URL (read-only, don't trigger reruns)
+            current_url_field = st.query_params.get("field")
+            if chosen_field and current_url_field != chosen_field:
                 st.query_params["field"] = chosen_field
-            else:
+            elif not chosen_field and current_url_field:
                 st.query_params.pop("field", None)
 
         elif len(categories) == 1:
