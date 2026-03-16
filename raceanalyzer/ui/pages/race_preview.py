@@ -278,6 +278,7 @@ def render():
     pred = preview["prediction"]
     course = preview.get("course")
     drop_rate = preview.get("drop_rate")
+    pred_ft = pred["predicted_finish_type"] if pred else None
     typical_speed = preview.get("typical_speed")
     narrative = preview.get("narrative", "")
     ai_context = preview.get("ai_context", {})
