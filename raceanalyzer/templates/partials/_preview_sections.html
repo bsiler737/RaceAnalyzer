@@ -4,7 +4,7 @@
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
 
   {# What to Expect #}
-  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+  <div class="ra-card rounded-xl p-5">
     <h2 class="text-lg font-bold mb-3 dark:text-white">What to Expect</h2>
 
     {% if is_tt %}
@@ -54,7 +54,7 @@
   </div>
 
   {# Predicted Finish Type #}
-  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+  <div class="ra-card rounded-xl p-5">
     {% if is_tt %}
       <h2 class="text-lg font-bold mb-3 dark:text-white">Race Format</h2>
       <p class="text-2xl font-bold dark:text-white">Individual Time Trial</p>
@@ -85,9 +85,21 @@
 </div>
 
 
-{# ===== 2. Course Profile ===== #}
+{# ===== 2. Course Map (above profile) ===== #}
+{% if map_coords_json %}
+<div class="ra-card rounded-xl p-5 mb-6">
+  <h2 class="text-lg font-bold mb-3 dark:text-white">Course Map</h2>
+  <div class="leaflet-map w-full rounded-lg"
+       data-leaflet-coords='{{ map_coords_json }}'
+       data-leaflet-climbs='{{ map_climbs_json }}'
+       style="height:350px;">
+  </div>
+</div>
+{% endif %}
+
+{# ===== 3. Course Profile (below map, shorter chart) ===== #}
 {% if (profile_points and profile_points | length > 1) or course %}
-<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+<div class="ra-card rounded-xl p-5 mb-6">
   <h2 class="text-lg font-bold mb-3 dark:text-white">Course Profile</h2>
 
   {% if course %}
@@ -131,12 +143,12 @@
   </div>
   {% endif %}
 
-  {# Elevation chart #}
+  {# Elevation chart — shorter than the map #}
   {% if elevation_chart_data %}
   <div class="plotly-chart w-full"
        data-plotly-data='{{ elevation_chart_data }}'
        data-plotly-layout='{{ elevation_chart_layout }}'
-       style="min-height:400px;">
+       style="min-height:250px;">
   </div>
   {% endif %}
 
@@ -159,22 +171,9 @@
 
 {% elif series.parent_series_id %}
   {# Stage without course data #}
-  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+  <div class="ra-card rounded-xl p-5 mb-6">
     <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No course data available for this stage.</p>
   </div>
-{% endif %}
-
-
-{# ===== 3. Course Map ===== #}
-{% if map_coords_json %}
-<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
-  <h2 class="text-lg font-bold mb-3 dark:text-white">Course Map</h2>
-  <div class="leaflet-map w-full rounded-lg"
-       data-leaflet-coords='{{ map_coords_json }}'
-       data-leaflet-climbs='{{ map_climbs_json }}'
-       style="height:350px;">
-  </div>
-</div>
 {% endif %}
 
 
@@ -182,7 +181,7 @@
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
 
   {# Finish Type Details #}
-  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+  <div class="ra-card rounded-xl p-5">
     <h2 class="text-lg font-bold mb-3 dark:text-white">Finish Type Details</h2>
 
     {% if pred and distribution_chart_data %}
@@ -211,7 +210,7 @@
   </div>
 
   {# Historical Stats #}
-  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+  <div class="ra-card rounded-xl p-5">
     <h2 class="text-lg font-bold mb-3 dark:text-white">Historical Stats</h2>
 
     {% if drop_rate %}
@@ -267,7 +266,7 @@
 
 {# ===== 5. Field Forecasts (All Fields mode only) ===== #}
 {% if not is_field_mode and field_forecasts %}
-<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+<div class="ra-card rounded-xl p-5 mb-6">
   <h2 class="text-lg font-bold mb-3 dark:text-white">Field Forecasts</h2>
   {% for ff in field_forecasts %}
     <p class="text-sm text-ra-text dark:text-gray-300 mb-1">
@@ -279,7 +278,7 @@
 
 
 {# ===== 6. Spooky Riders ===== #}
-<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+<div class="ra-card rounded-xl p-5 mb-6">
   <h2 class="text-lg font-bold mb-3 dark:text-white">Spooky Riders</h2>
 
   {% if is_field_mode %}
@@ -321,7 +320,7 @@
 
 
 {# ===== 7. Startlist ===== #}
-<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+<div class="ra-card rounded-xl p-5 mb-6">
   <h2 class="text-lg font-bold mb-3 dark:text-white">Startlist</h2>
 
   {% if team_blocks %}
@@ -363,7 +362,7 @@
 
 
 {# ===== 8. Similar Races ===== #}
-<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+<div class="ra-card rounded-xl p-5 mb-6">
   <h2 class="text-lg font-bold mb-3 dark:text-white">Similar Races</h2>
 
   {% if similar_races %}

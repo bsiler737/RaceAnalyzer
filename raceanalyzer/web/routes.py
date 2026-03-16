@@ -78,10 +78,11 @@ def build_elevation_chart_data(profile_points, climbs):
         "xaxis": {"title": "Distance (km)"},
         "yaxis": {"title": "Elevation (m)", "range": [y_min, y_max]},
         "margin": {"l": 40, "r": 10, "t": 10, "b": 40},
-        "height": 400,
+        "height": 250,
         "showlegend": False,
         "plot_bgcolor": "rgba(0,0,0,0)",
         "paper_bgcolor": "rgba(0,0,0,0)",
+        "font": {"color": "white"},
     }
 
     shapes = []
@@ -126,16 +127,19 @@ def build_distribution_chart_data(distribution):
         "orientation": "h", "type": "bar",
         "marker": {"color": colors},
         "text": values, "textposition": "outside",
+        "textfont": {"color": "white"},
     }]
 
     layout = {
         "showlegend": False,
-        "yaxis": {"title": ""},
-        "xaxis": {"title": "Count"},
-        "margin": {"l": 120, "r": 40, "t": 20, "b": 40},
+        "yaxis": {"title": "", "tickfont": {"color": "white"}},
+        "xaxis": {"title": "Count", "tickfont": {"color": "white"},
+                  "titlefont": {"color": "white"}},
+        "margin": {"l": 140, "r": 50, "t": 20, "b": 40},
         "height": max(200, len(sorted_items) * 40),
         "plot_bgcolor": "rgba(0,0,0,0)",
         "paper_bgcolor": "rgba(0,0,0,0)",
+        "font": {"color": "white"},
     }
 
     return traces, layout
@@ -216,14 +220,6 @@ def feed(
     # Group by month
     month_groups = queries.group_by_month(items)
 
-    # Separate racing-soon items
-    racing_soon = [
-        i for i in items
-        if i["is_upcoming"]
-        and i.get("days_until") is not None
-        and i["days_until"] <= 7
-    ]
-
     # Enrich all items with pre-computed template fields
     enrich_items(items)
     # Also enrich month_groups (they reference the same dicts, but be safe)
@@ -239,7 +235,6 @@ def feed(
 
     ctx_data = {
         "items": items,
-        "racing_soon": racing_soon,
         "month_groups": month_groups,
         "series_id": series_id,
         "cat": cat,
@@ -614,9 +609,12 @@ def preview(
         "fields_list": fields_list,
         "chosen_field": chosen_field,
         "is_field_mode": is_field_mode,
-        # Filter params for back link
+        # Filter params for back link + sidebar
         "cat": cat or "",
         "team": team or "",
+        "race_type": "",
+        "states": "",
+        "available_states": queries.get_available_states(session),
         # What to Expect
         "is_tt": is_tt,
         "tt_narrative": tt_narrative,
