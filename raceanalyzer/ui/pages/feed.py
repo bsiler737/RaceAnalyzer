@@ -28,6 +28,8 @@ FEED_PAGE_SIZE = 20
 
 
 def render():
+    from raceanalyzer.ui.app import ensure_db_session
+    ensure_db_session()
     session = st.session_state.db_session
 
     # Sprint 018: Initialize filters from URL params

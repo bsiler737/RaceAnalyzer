@@ -1,11 +1,12 @@
 [server]
 headless = true
+enableCORS = false
+enableXsrfProtection = false
+enableWebsocketCompression = true
 
 [ui]
 hideTopBar = true
 
 [theme]
+base = "dark"
 primaryColor = "#ff6b35"
-backgroundColor = "#f0edea"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#333333"

@@ -18,6 +18,8 @@ TILES_PER_PAGE = 12
 
 
 def render():
+    from raceanalyzer.ui.app import ensure_db_session
+    ensure_db_session()
     session = st.session_state.db_session
     filters = render_sidebar_filters(session)
 

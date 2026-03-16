@@ -11,9 +11,8 @@ from raceanalyzer.config import Settings
 from raceanalyzer.db.engine import get_session
 
 
-def main():
-    st.set_page_config(page_title="RaceAnalyzer", page_icon="\U0001f6b4", layout="wide")
-
+def ensure_db_session():
+    """Initialize db_session in session state if missing (handles reconnects)."""
     if "db_session" not in st.session_state:
         db_path = os.environ.get("RACEANALYZER_DB_PATH")
         if db_path:
@@ -23,6 +22,12 @@ def main():
         st.session_state.db_session = get_session(settings.db_path)
         st.session_state.settings = settings
 
+
+def main():
+    st.set_page_config(page_title="RaceAnalyzer", page_icon="\U0001f6b4", layout="wide")
+
+    ensure_db_session()
+
     # Sprint 018: Hide toolbar in production
     if os.environ.get("RACEANALYZER_PROD"):
         st.markdown(
@@ -30,55 +35,6 @@ def main():
             '[data-testid="stDecoration"] { display: none; }</style>',
             unsafe_allow_html=True,
         )
-
-    # RWGPS-inspired light mode: warm gray background, white card surfaces
-    st.markdown(
-        """<style>
-        /* Sidebar: darker warm gray */
-        [data-testid="stSidebar"],
-        [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
-            background-color: #e2ddd8 !important;
-        }
-
-        /* Popover and expander content: white */
-        [data-testid="stPopoverBody"],
-        [data-testid="stExpander"] {
-            background-color: #ffffff !important;
-        }
-
-        /* Pill-style filter buttons: white background */
-        [data-testid="stBaseButton-pills"] {
-            background-color: #ffffff !important;
-        }
-        </style>""",
-        unsafe_allow_html=True,
-    )
-
-    # JS to set white bg on bordered containers (Streamlit strips <script>
-    # from st.markdown, so use st.html which renders in an iframe that can
-    # access the parent document)
-    import streamlit.components.v1 as components
-    components.html(
-        """<script>
-        function whiteCards() {
-            const doc = window.parent.document;
-            doc.querySelectorAll('[data-testid="stVerticalBlock"]').forEach(el => {
-                if (window.parent.getComputedStyle(el).borderStyle !== 'none') {
-                    el.style.backgroundColor = '#ffffff';
-                    el.style.borderRadius = '8px';
-                }
-            });
-        }
-        // Run after Streamlit finishes rendering
-        setTimeout(whiteCards, 500);
-        setTimeout(whiteCards, 1500);
-        setTimeout(whiteCards, 3000);
-        new MutationObserver(whiteCards).observe(
-            window.parent.document.body, {childList: true, subtree: true}
-        );
-        </script>""",
-        height=0,
-    )
 
     # Seed global session state from query params (Sprint 010)
     st.session_state.setdefault("global_category", st.query_params.get("category"))

@@ -38,6 +38,8 @@ def render():
         st.switch_page("pages/feed.py")
         return
 
+    from raceanalyzer.ui.app import ensure_db_session
+    ensure_db_session()
     session = st.session_state.db_session
 
     # Sprint 018: Initialize filters from URL params

@@ -509,14 +509,6 @@ def inject_feed_styles():
         100% { background: rgba(255, 111, 0, 0.08); }
     }
 
-    /* Light mode: ensure readable text on white cards */
-    .feed-row {
-        color: var(--text-color, #333);
-    }
-    .feed-row span {
-        color: var(--text-color, #444);
-    }
-
     /* Dark mode surface differentiation */
     @media (prefers-color-scheme: dark) {
         .feed-row {

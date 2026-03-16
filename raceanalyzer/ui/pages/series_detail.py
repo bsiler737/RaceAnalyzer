@@ -15,6 +15,8 @@ from raceanalyzer.ui.maps import geocode_location, render_course_map, render_loc
 
 
 def render():
+    from raceanalyzer.ui.app import ensure_db_session
+    ensure_db_session()
     session = st.session_state.db_session
 
     # Back navigation

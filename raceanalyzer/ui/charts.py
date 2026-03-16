@@ -41,7 +41,7 @@ def build_distribution_pie_chart(dist_df: pd.DataFrame) -> go.Figure:
     )
     fig.update_traces(textposition="inside", textinfo="percent+label")
     fig.update_layout(showlegend=False, margin=dict(t=20, b=20, l=20, r=20),
-                      plot_bgcolor="white", paper_bgcolor="white")
+                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     return fig
 
 
@@ -63,8 +63,8 @@ def build_distribution_bar_chart(dist_df: pd.DataFrame) -> go.Figure:
         xaxis_title="Count",
         margin=dict(t=20, b=40, l=20, r=20),
         yaxis=dict(categoryorder="total ascending"),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
     )
     return fig
 
@@ -86,8 +86,8 @@ def build_trend_stacked_area_chart(trend_df: pd.DataFrame) -> go.Figure:
         xaxis_title="Year",
         legend_title="Finish Type",
         margin=dict(t=20, b=40, l=60, r=20),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
     )
     fig.update_xaxes(dtick=1)
     return fig
@@ -124,8 +124,8 @@ def build_group_structure_chart(results_df: pd.DataFrame) -> Optional[go.Figure]
         yaxis_title="Riders",
         showlegend=False,
         margin=dict(t=20, b=40, l=40, r=20),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
     )
     return fig
 
@@ -156,7 +156,7 @@ def build_series_classification_chart(trend_df: pd.DataFrame) -> Optional[go.Fig
         xaxis=dict(dtick=1),
         margin=dict(t=20, b=40, l=40, r=20),
         height=300,
-        plot_bgcolor="white",
-        paper_bgcolor="white",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
     )
     return fig

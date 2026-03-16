@@ -2,12 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies first (cached layer)
+# Copy source and install
 COPY pyproject.toml .
+COPY raceanalyzer/ raceanalyzer/
 RUN pip install --no-cache-dir .
 
-# Copy app code and data
-COPY raceanalyzer/ raceanalyzer/
+# Copy data and config
 COPY data/raceanalyzer.db data/
 COPY .streamlit/ .streamlit/
 
