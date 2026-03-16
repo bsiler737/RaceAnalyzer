@@ -675,7 +675,7 @@ def preview(
 def ics_download(series_id: int, session: Session = Depends(get_db)):
     """ICS calendar file download for a series."""
     from raceanalyzer import queries
-    from raceanalyzer.ui.feed_card import generate_ics
+    from raceanalyzer.web.helpers import generate_ics
 
     # Get the series info
     items = queries.get_feed_items_batch(session)
