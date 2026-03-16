@@ -359,7 +359,7 @@ Key settings in `fly.toml`:
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| `primary_region` | `sea` | Seattle (closest to PNW users) |
+| `primary_region` | `sjc` | San Jose (where our machine and volume live) |
 | `internal_port` | `8000` | FastAPI listens here |
 | `force_https` | `true` | Redirect HTTP to HTTPS |
 | `auto_stop_machines` | `stop` | Sleep when idle |

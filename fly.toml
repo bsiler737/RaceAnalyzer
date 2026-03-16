@@ -1,5 +1,5 @@
 app = "raceanalyzer"
-primary_region = "sea"  # Seattle -- closest to PNW users
+primary_region = "sjc"  # San Jose -- where our machine and volume live
 
 [build]
 
