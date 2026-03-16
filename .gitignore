@@ -43,5 +43,7 @@ docs/
 examples/
 screenshots/
 reviews/
+.claude/
+skills/
 littleUXfixes.md
 *.log
