@@ -111,16 +111,5 @@ function setTeam(val) {
   htmx.trigger(form.querySelector('input[name="q"]'), 'search');
 }
 
-// Sync sidebar inputs with hidden form fields
-document.addEventListener('DOMContentLoaded', function() {
-  const sidebarTeam = document.getElementById('sidebar-team-input');
-  if (sidebarTeam) {
-    sidebarTeam.addEventListener('input', function() {
-      if (this.value.length >= 3 || this.value.length === 0) {
-        setTeam(this.value);
-      }
-    });
-  }
-});
 </script>
 {% endblock %}

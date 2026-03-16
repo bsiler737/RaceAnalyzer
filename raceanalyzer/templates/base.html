@@ -67,6 +67,21 @@
       {% block content %}{% endblock %}
     </main>
   </div>
+  <script>
+  // Sidebar team input -> triggers feed reload (works on any page with sidebar)
+  document.addEventListener('DOMContentLoaded', function() {
+    var sidebarTeam = document.getElementById('sidebar-team-input');
+    if (sidebarTeam) {
+      sidebarTeam.addEventListener('input', function() {
+        var form = document.getElementById('feed-form');
+        if (form && (this.value.length >= 3 || this.value.length === 0)) {
+          form.querySelector('input[name="team"]').value = this.value;
+          htmx.trigger(form.querySelector('input[name="q"]'), 'search');
+        }
+      });
+    }
+  });
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

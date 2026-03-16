@@ -9,7 +9,6 @@ reviews/
 !README.md
 data/raw/
 .streamlit/
-raceanalyzer/ui/
 __pycache__/
 *.pyc
 .ruff_cache/
