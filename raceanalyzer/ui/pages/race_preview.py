@@ -196,9 +196,12 @@ def render():
         query_category_variants = list(canon_to_raws[chosen_field])
         # Also include startlist/CategoryDetail category names that
         # normalize to the same canonical field (they use different naming)
-        from raceanalyzer.db.models import CategoryDetail, Startlist
+        from raceanalyzer.db.models import (
+            CategoryDetail, RaceClassification, Startlist,
+        )
         from raceanalyzer.queries import normalize_field_name
         extra_cats = set()
+        # Startlist category names
         sl_cats = (
             session.query(Startlist.category)
             .filter(Startlist.series_id == int(series_id))
@@ -208,6 +211,7 @@ def render():
         for (c,) in sl_cats:
             if c and normalize_field_name(c) == chosen_field:
                 extra_cats.add(c)
+        # Registration (CategoryDetail) category names
         cd_cats = (
             session.query(CategoryDetail.category)
             .join(
@@ -221,10 +225,39 @@ def render():
         for (c,) in cd_cats:
             if c and normalize_field_name(c) == chosen_field:
                 extra_cats.add(c)
+        # Historical classification category names (for matching past results)
+        rc_cats = (
+            session.query(RaceClassification.category)
+            .join(
+                queries.Race,
+                RaceClassification.race_id == queries.Race.id,
+            )
+            .filter(queries.Race.series_id == int(series_id))
+            .distinct()
+            .all()
+        )
+        for (c,) in rc_cats:
+            if c and normalize_field_name(c) == chosen_field:
+                extra_cats.add(c)
         for c in extra_cats:
             if c not in query_category_variants:
                 query_category_variants.append(c)
+        # Pick the variant that has actual historical results (predictions)
+        # Registration names often differ from historical classification names
+        from raceanalyzer.db.models import SeriesPrediction
         query_category = query_category_variants[0]
+        for variant in query_category_variants:
+            has_pred = (
+                session.query(SeriesPrediction)
+                .filter(
+                    SeriesPrediction.series_id == int(series_id),
+                    SeriesPrediction.category == variant,
+                )
+                .first()
+            )
+            if has_pred:
+                query_category = variant
+                break
 
     if query_category:
         preview = queries.get_race_preview(
@@ -539,10 +572,24 @@ def render():
     with st.container(border=True):
         st.subheader("Spooky Riders")
         if is_field_mode:
-            latest_race = queries.get_latest_race_for_series(session, int(series_id))
-            if latest_race:
+            # Use first upcoming race for spooky riders — it typically has
+            # the most complete startlist (e.g., week 1 of a multi-week series)
+            first_upcoming = (
+                session.query(queries.Race)
+                .filter(
+                    queries.Race.series_id == int(series_id),
+                    queries.Race.is_upcoming.is_(True),
+                )
+                .order_by(queries.Race.date.asc())
+                .first()
+            )
+            # Fall back to latest race if no upcoming
+            spooky_race = first_upcoming or queries.get_latest_race_for_series(
+                session, int(series_id)
+            )
+            if spooky_race:
                 scary_racers = queries.get_scary_racers(
-                    session, latest_race.id,
+                    session, spooky_race.id,
                     categories=query_category_variants or None,
                 )
                 if not scary_racers.empty:
