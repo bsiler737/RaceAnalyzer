@@ -659,7 +659,7 @@ def build_card_html(item: dict) -> str:
         rt_name = html.escape(RACE_TYPE_DISPLAY.get(race_type, race_type.replace("_", " ").title()))
         rt_badge = (
             f'<span style="display:inline-flex;align-items:center;gap:3px;'
-            f'background:var(--secondary-background-color,#f0f2f6);padding:1px 8px;'
+            f'background:var(--secondary-background-color,#2d2d2d);padding:1px 8px;'
             f'border-radius:4px;font-size:0.8em;'
             f'color:var(--text-color,#e0e0e0);">'
             f'{rt_icon} {rt_name}</span>'
@@ -914,7 +914,7 @@ def build_row_html(item: dict) -> str:
         parts.append(
             f'<div style="margin-top:2px;">'
             f'<span style="display:inline-flex;align-items:center;gap:3px;'
-            f'background:var(--secondary-background-color,#f0f2f6);padding:1px 8px;'
+            f'background:var(--secondary-background-color,#2d2d2d);padding:1px 8px;'
             f'border-radius:4px;font-size:0.8em;'
             f'color:var(--text-color,#e0e0e0);">'
             f'{rt_icon} {rt_name}</span></div>'
@@ -1111,7 +1111,7 @@ def _build_chip_row(item: dict) -> list[str]:
             chips.append(
                 '<span class="feed-card-chip" style="opacity:0.5;'
                 'display:inline-flex;align-items:center;gap:3px;'
-                'background:var(--secondary-background-color,#f0f2f6);'
+                'background:var(--secondary-background-color,#2d2d2d);'
                 'padding:2px 8px;border-radius:4px;'
                 'color:var(--text-color,#ccc);">'
                 '\U0001f550 ~? min</span>'
@@ -1125,7 +1125,7 @@ def _chip(chip_type: str, icon_svg: str, label: str) -> str:
     return (
         f'<span class="feed-card-chip"'
         f' style="display:inline-flex;align-items:center;gap:3px;'
-        f'background:var(--secondary-background-color,#f0f2f6);'
+        f'background:var(--secondary-background-color,#2d2d2d);'
         f'padding:2px 8px;'
         f'border-radius:4px;color:var(--text-color,#ccc);">'
         f'{icon_svg} {label}</span>'

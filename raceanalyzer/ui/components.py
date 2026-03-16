@@ -719,7 +719,7 @@ def render_racer_profile_filters(session) -> dict:
     Syncs to URL param: team.
     """
     with st.sidebar.container(border=True):
-        st.markdown("**Tailored preview: my info**")
+        st.markdown("**My team**")
 
         team_name = st.text_input(
             "Team",

@@ -1176,7 +1176,7 @@ def get_race_preview(
 
     # Categories: prefer current registration fields (CategoryDetail) over
     # historical classifications, so the dropdown only shows fields you can
-    # actually register for.
+    # actually register for. For stage races, inherit from parent registration.
     all_categories = []
     upcoming_race = (
         session.query(Race)
@@ -1192,6 +1192,22 @@ def get_race_preview(
         )
         if reg_cats:
             all_categories = sorted(set(c[0] for c in reg_cats))
+    # Stage races: inherit registration categories from parent
+    if not all_categories and is_stage and parent:
+        parent_upcoming = (
+            session.query(Race)
+            .filter(Race.series_id == parent.id, Race.is_upcoming.is_(True))
+            .order_by(Race.date.asc())
+            .first()
+        )
+        if parent_upcoming:
+            reg_cats = (
+                session.query(CategoryDetail.category)
+                .filter(CategoryDetail.race_id == parent_upcoming.id)
+                .all()
+            )
+            if reg_cats:
+                all_categories = sorted(set(c[0] for c in reg_cats))
     if not all_categories:
         # Fallback to historical classifications
         for race in sorted(series.races, key=lambda r: r.date or datetime.min, reverse=True):
@@ -1954,6 +1970,7 @@ import re as _re
 # Patterns for normalize_field_name
 _GENDER_PATS = [
     (_re.compile(r"\bwom[ae]n'?s?\b", _re.I), "Women"),
+    (_re.compile(r"\bnon[\s-]?binary\b", _re.I), "Non-Binary"),
     (_re.compile(r"\bmen'?s?\b", _re.I), "Men"),
     (_re.compile(r"\bmixed\b", _re.I), "Mixed"),
 ]
