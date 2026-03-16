@@ -1,0 +1,40 @@
+{# Sidebar filter panel for the feed page #}
+<div class="space-y-6">
+  <div>
+    <h3 class="text-sm font-bold uppercase tracking-wider text-ra-text-muted dark:text-gray-400 mb-2">My Team</h3>
+    <input type="text" id="sidebar-team-input"
+           value="{{ team }}"
+           placeholder="e.g. Hagens Berman"
+           class="w-full px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600
+                  bg-white dark:bg-gray-800 text-sm text-ra-text dark:text-gray-200
+                  focus:outline-none focus:ring-1 focus:ring-ra-accent">
+    <p class="text-xs text-ra-text-muted dark:text-gray-500 mt-1">Min 3 characters</p>
+  </div>
+
+  <div>
+    <h3 class="text-sm font-bold uppercase tracking-wider text-ra-text-muted dark:text-gray-400 mb-2">Race Type</h3>
+    <div class="flex flex-wrap gap-1.5">
+      {% set race_types = [("criterium", "Criterium"), ("road_race", "Road Race"), ("gravel", "Gravel"), ("time_trial", "TT"), ("hill_climb", "Hill Climb")] %}
+      {% set active_types = race_type.split(",") if race_type else [] %}
+      {% for val, label in race_types %}
+      <button class="ra-pill text-xs {{ 'ra-pill-active' if val in active_types else '' }}"
+              onclick="toggleRaceType('{{ val }}'); this.classList.toggle('ra-pill-active');">
+        {{ label }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div>
+    <h3 class="text-sm font-bold uppercase tracking-wider text-ra-text-muted dark:text-gray-400 mb-2">State / Province</h3>
+    <div class="flex flex-wrap gap-1.5">
+      {% set active_states = states.split(",") if states else [] %}
+      {% for st in available_states %}
+      <button class="ra-pill text-xs {{ 'ra-pill-active' if st in active_states else '' }}"
+              onclick="toggleState('{{ st }}'); this.classList.toggle('ra-pill-active');">
+        {{ st }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+</div>

@@ -1,0 +1,43 @@
+{# SVG icon macros for race types and finish types #}
+
+{% macro race_type_icon(race_type) %}
+{% if race_type == "criterium" %}
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="7" fill="none" stroke="#E53935" stroke-width="2"/><path d="M7 10 L10 7 L13 10 L10 13 Z" fill="#E53935"/></svg>
+{% elif race_type == "road_race" %}
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 14 Q6 6 10 10 Q14 14 18 6" fill="none" stroke="#1E88E5" stroke-width="2" stroke-linecap="round"/></svg>
+{% elif race_type == "hill_climb" %}
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 16 L10 4 L18 16" fill="none" stroke="#43A047" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+{% elif race_type == "time_trial" %}
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="7" fill="none" stroke="#8E24AA" stroke-width="1.5"/><line x1="10" y1="10" x2="10" y2="5" stroke="#8E24AA" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="10" x2="14" y2="10" stroke="#8E24AA" stroke-width="1" stroke-linecap="round"/></svg>
+{% elif race_type == "gravel" %}
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="14" r="1.5" fill="#6D4C41"/><circle cx="10" cy="12" r="1.5" fill="#6D4C41"/><circle cx="14" cy="15" r="1.5" fill="#6D4C41"/><circle cx="8" cy="8" r="1" fill="#6D4C41" opacity="0.6"/><circle cx="13" cy="9" r="1" fill="#6D4C41" opacity="0.6"/><path d="M2 16 Q10 4 18 16" fill="none" stroke="#6D4C41" stroke-width="1.5" stroke-linecap="round"/></svg>
+{% elif race_type == "stage_race" %}
+<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="6" width="4" height="10" rx="1" fill="#FB8C00" opacity="0.5"/><rect x="8" y="4" width="4" height="12" rx="1" fill="#FB8C00" opacity="0.7"/><rect x="13" y="2" width="4" height="14" rx="1" fill="#FB8C00"/></svg>
+{% endif %}
+{% endmacro %}
+
+{% macro finish_type_icon(finish_type) %}
+{% if finish_type == "bunch_sprint" %}
+<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="10" r="2" fill="#E53935"/><circle cx="9" cy="13" r="2" fill="#E53935"/><circle cx="15" cy="13" r="2" fill="#E53935"/><circle cx="7" cy="16" r="2" fill="#E53935" opacity="0.7"/><circle cx="17" cy="16" r="2" fill="#E53935" opacity="0.7"/></svg>
+{% elif finish_type == "small_group_sprint" %}
+<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="10" r="2" fill="#FF9800"/><circle cx="11" cy="10" r="2" fill="#FF9800"/><circle cx="15" cy="10" r="2" fill="#FF9800"/></svg>
+{% elif finish_type == "breakaway" %}
+<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="12" r="2.5" fill="#4CAF50"/><line x1="10" y1="12" x2="14" y2="12" stroke="#4CAF50" stroke-width="1" stroke-dasharray="2,2"/><circle cx="17" cy="11" r="1.5" fill="#4CAF50" opacity="0.4"/><circle cx="19" cy="13" r="1.5" fill="#4CAF50" opacity="0.4"/></svg>
+{% elif finish_type == "breakaway_selective" %}
+<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="11" r="2" fill="#2E7D32"/><circle cx="9" cy="12" r="2" fill="#2E7D32"/><line x1="12" y1="12" x2="15" y2="12" stroke="#2E7D32" stroke-width="1" stroke-dasharray="2,2"/><circle cx="17" cy="10" r="1.5" fill="#2E7D32" opacity="0.4"/></svg>
+{% elif finish_type == "reduced_sprint" %}
+<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="11" r="2" fill="#1E88E5"/><circle cx="10" cy="11" r="2" fill="#1E88E5"/><circle cx="8" cy="14" r="2" fill="#1E88E5"/><circle cx="12" cy="13" r="2" fill="#1E88E5"/></svg>
+{% elif finish_type == "gc_selective" %}
+<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="4" cy="8" r="1.5" fill="#7B1FA2"/><circle cx="7" cy="9" r="1.5" fill="#7B1FA2"/><circle cx="11" cy="11" r="1.5" fill="#7B1FA2" opacity="0.7"/><circle cx="14" cy="10" r="1.5" fill="#7B1FA2" opacity="0.7"/></svg>
+{% elif finish_type == "individual_tt" %}
+<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" fill="none" stroke="#00ACC1" stroke-width="2"/><line x1="12" y1="12" x2="12" y2="6" stroke="#00ACC1" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="12" x2="16" y2="12" stroke="#00ACC1" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="1.5" fill="#00ACC1"/></svg>
+{% elif finish_type == "mixed" %}
+<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="8" r="2" fill="#78909C"/><circle cx="14" cy="12" r="2" fill="#78909C" opacity="0.7"/><circle cx="9" cy="16" r="2" fill="#78909C" opacity="0.5"/></svg>
+{% else %}
+<svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" fill="none" stroke="#9E9E9E" stroke-width="2"/><text x="12" y="16" text-anchor="middle" font-size="12" fill="#9E9E9E">?</text></svg>
+{% endif %}
+{% endmacro %}
+
+{% macro team_icon() %}
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;"><circle cx="6" cy="6" r="3" fill="#FF6F00"/><circle cx="11" cy="6" r="3" fill="#FF6F00" opacity="0.7"/><path d="M1 14 Q3 10 6 10 Q8 10 9 11 Q10 10 11 10 Q14 10 15 14" fill="#FF6F00" opacity="0.3"/></svg>
+{% endmacro %}

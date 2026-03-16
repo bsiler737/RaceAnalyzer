@@ -1,0 +1,145 @@
+{# Single feed card - 3-column grid: date | text+chips | sparklines #}
+{% from "partials/_icons.html" import race_type_icon, finish_type_icon, team_icon %}
+
+{% set accent = item._accent_color | default("#9E9E9E") %}
+{% set has_vis = item._has_visuals | default(false) %}
+
+<div class="ra-card mb-3 p-0 overflow-hidden hover:shadow-md transition-shadow duration-150"
+     style="border-left: 4px solid {{ accent }};">
+  <div class="p-4" style="display:grid; {{ 'grid-template-columns:72px minmax(0,1fr) 168px;' if has_vis else 'grid-template-columns:72px 1fr;' }} gap:14px; align-items:center;">
+
+    {# === DATE COLUMN === #}
+    <div class="text-center {{ 'opacity-45' if item._date_dim else '' }}">
+      <div class="text-xs font-semibold uppercase tracking-wide text-ra-text-muted dark:text-gray-400">
+        {{ item._month_str }}
+      </div>
+      <div class="text-3xl font-bold leading-tight text-ra-text-muted dark:text-gray-400">
+        {{ item._day_str }}
+      </div>
+      {% if item._pill_label %}
+      <span class="inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
+            style="background:{{ item._pill_bg }}; color:{{ item._pill_text }};">
+        {{ item._pill_label }}
+      </span>
+      {% endif %}
+    </div>
+
+    {# === TEXT COLUMN === #}
+    <div class="min-w-0">
+      {# Row 1: Race name #}
+      <div class="flex items-baseline gap-1 flex-wrap">
+        <a href="/preview/{{ item.series_id }}{% if cat_level %}?cat_level={{ cat_level }}{% endif %}{% if gender %}&gender={{ gender }}{% endif %}{% if team %}&team={{ team | urlencode }}{% endif %}"
+           class="font-bold text-lg leading-tight text-ra-text dark:text-white hover:text-ra-accent dark:hover:text-ra-accent transition-colors truncate">
+          {{ item.display_name }}
+        </a>
+      </div>
+
+      {# Row 2: Location #}
+      {% if item._location_str %}
+      <div class="text-sm text-ra-text-muted dark:text-gray-400 mt-0.5">
+        {{ item._location_str }}
+      </div>
+      {% endif %}
+
+      {# Row 3: Race type badge #}
+      {% if item.race_type %}
+      <div class="mt-1">
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs
+                     bg-gray-100 dark:bg-gray-700 text-ra-text dark:text-gray-200">
+          {{ item._rt_icon | safe }} {{ item._rt_name }}
+        </span>
+      </div>
+      {% endif %}
+
+      {# AI sez prediction teaser #}
+      {% if item._ai_sez %}
+      <div class="mt-2 flex items-center gap-1.5 text-sm">
+        {{ item._ft_icon_20 | safe }}
+        <span class="text-ra-text-muted dark:text-gray-400 text-xs">AI sez:</span>
+        <span class="text-ra-text dark:text-gray-200 font-medium">{{ item._ai_sez }}</span>
+      </div>
+      {% endif %}
+
+      {# Teammate presence #}
+      {% if item._team_text %}
+      <div class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-xs"
+           style="background:rgba(255,111,0,0.08); color:#E65100;">
+        {{ team_icon() }}
+        {{ item._team_text }}
+      </div>
+      {% endif %}
+
+      {# Chip row #}
+      {% if item._chips %}
+      <div class="flex flex-wrap gap-1.5 mt-2 text-xs">
+        {% for chip in item._chips %}
+          {{ chip | safe }}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# Drop rate meter #}
+      {% if item.drop_rate_pct is not none %}
+      <div class="flex items-center gap-1.5 mt-2">
+        <span class="text-xs text-ra-text-muted dark:text-gray-400" style="min-width:60px;">Drop rate</span>
+        <div class="flex-1 max-w-[120px] h-2 rounded-full overflow-hidden"
+             style="background: {{ '#E8F5E9' if item.drop_rate_pct < 15 else '#e0e0e0' }};">
+          <div class="h-full rounded-full" style="width:{{ item._drop_width }}%; background:{{ item._drop_color }};"></div>
+        </div>
+        <span class="text-xs font-medium text-ra-text dark:text-gray-300">{{ item.drop_rate_pct }}%</span>
+        {% if item.drop_rate_label %}
+        <span class="text-xs text-ra-text-muted dark:text-gray-500">({{ item.drop_rate_label }})</span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# Action buttons #}
+      <div class="flex items-center gap-2 mt-3">
+        <a href="/preview/{{ item.series_id }}{% if cat_level %}?cat_level={{ cat_level }}{% endif %}{% if gender %}&gender={{ gender }}{% endif %}{% if team %}&team={{ team | urlencode }}{% endif %}"
+           class="inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-medium
+                  bg-ra-accent text-white hover:bg-orange-600 transition-colors">
+          Preview
+        </a>
+        {% if item.registration_url %}
+        <a href="{{ item.registration_url }}" target="_blank" rel="noopener"
+           class="inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-medium
+                  border border-gray-300 dark:border-gray-600 text-ra-text dark:text-gray-200
+                  hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+          Register
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 9 L9 3 M9 3 L4 3 M9 3 L9 8"/>
+          </svg>
+        </a>
+        {% endif %}
+        {% if item.is_upcoming and item.upcoming_date %}
+        <a href="/api/ics/{{ item.series_id }}"
+           class="inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-medium
+                  border border-gray-300 dark:border-gray-600 text-ra-text dark:text-gray-200
+                  hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+           title="Download calendar event">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2">
+            <rect x="1" y="3" width="12" height="10" rx="1.5"/>
+            <line x1="4" y1="1" x2="4" y2="5"/>
+            <line x1="10" y1="1" x2="10" y2="5"/>
+            <line x1="1" y1="6" x2="13" y2="6"/>
+          </svg>
+          ICS
+        </a>
+        {% endif %}
+      </div>
+    </div>
+
+    {# === VISUALS COLUMN === #}
+    {% if has_vis %}
+    <div class="flex flex-col items-center gap-1.5 justify-center" style="min-width:130px;">
+      {% if item._route_svg %}
+      <div>{{ item._route_svg | safe }}</div>
+      {% endif %}
+      {% if item._sparkline_svg %}
+      <div>{{ item._sparkline_svg | safe }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+</div>

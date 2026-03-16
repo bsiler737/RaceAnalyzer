@@ -1,0 +1,29 @@
+{# Stage race group: parent header + child stage cards #}
+
+<div class="border-l-4 border-ra-accent bg-orange-50 dark:bg-orange-900/10 rounded-lg p-3 mb-2">
+  <div class="flex items-center justify-between">
+    <div class="font-bold text-lg text-ra-text dark:text-white">
+      {{ item.display_name }}
+      <span class="ml-2 inline-block px-2 py-0.5 rounded text-xs font-medium bg-ra-accent text-white">
+        {{ item.stage_count | default(0) }} stages
+      </span>
+    </div>
+    {% if item.registration_url %}
+    <a href="{{ item.registration_url }}" target="_blank" rel="noopener"
+       class="text-sm text-ra-accent hover:underline flex items-center gap-1">
+      Register
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 9 L9 3 M9 3 L4 3 M9 3 L9 8"/>
+      </svg>
+    </a>
+    {% endif %}
+  </div>
+  {% if item._location_str %}
+  <div class="text-sm text-ra-text-muted dark:text-gray-400 mt-1">{{ item._location_str }}</div>
+  {% endif %}
+</div>
+
+{% for stage in item.stages | default([]) %}
+  {% set item = stage %}
+  {% include "partials/_feed_card.html" %}
+{% endfor %}

@@ -4,6 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}RaceAnalyzer{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'ra-bg': '#f0edea',
+            'ra-surface': '#ffffff',
+            'ra-sidebar': '#e2ddd8',
+            'ra-accent': '#ff6b35',
+            'ra-text': '#333333',
+            'ra-text-muted': '#666666',
+          },
+        },
+      },
+    }
+  </script>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="/static/js/htmx.min.js" defer></script>

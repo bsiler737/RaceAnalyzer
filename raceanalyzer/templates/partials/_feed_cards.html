@@ -1,15 +1,61 @@
-{% if items %}
-  {% for item in items %}
-    <div class="ra-card mb-3">
-      <div class="font-semibold dark:text-white">{{ item.display_name }}</div>
-      <div class="text-sm text-ra-text-muted dark:text-gray-400">
-        {{ item.location }}{% if item.state_province %}, {{ item.state_province }}{% endif %}
-      </div>
+{# HTMX-swappable feed content: month headers, stage groups, individual cards #}
+
+{% if racing_soon is defined and racing_soon %}
+<div class="mb-6">
+  <div class="flex items-center gap-2 mb-3 px-2 py-1 rounded"
+       style="background: linear-gradient(90deg, #FFF3E0, transparent);">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <circle cx="10" cy="10" r="8" stroke="#F57C00" stroke-width="2"/>
+      <line x1="10" y1="5" x2="10" y2="10" stroke="#F57C00" stroke-width="2" stroke-linecap="round"/>
+      <line x1="10" y1="10" x2="14" y2="12" stroke="#F57C00" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <span class="font-bold text-sm text-orange-700 dark:text-orange-300 uppercase tracking-wide">
+      Racing Soon
+    </span>
+    <span class="text-xs text-orange-600 dark:text-orange-400">
+      {{ racing_soon | length }} race{{ 's' if racing_soon | length != 1 else '' }} this week
+    </span>
+  </div>
+</div>
+{% endif %}
+
+{% if month_groups is defined and month_groups %}
+  {% for header, group_items in month_groups %}
+  <div class="mb-6">
+    {# Month header - sticky #}
+    <div class="sticky top-0 z-10 py-2 px-1 mb-2 backdrop-blur-sm"
+         style="background: rgba(240, 237, 234, 0.9);">
+      <h2 class="text-lg font-bold text-ra-text dark:text-white">
+        {{ header }}
+        <span class="text-sm font-normal text-ra-text-muted dark:text-gray-400 ml-2">
+          {{ group_items | length }} race{{ 's' if group_items | length != 1 else '' }}
+        </span>
+      </h2>
     </div>
+
+    {% for item in group_items %}
+      {% if item.stages is defined and item.stages %}
+        {# Stage race group #}
+        {% include "partials/_stage_group.html" %}
+      {% else %}
+        {# Regular race card #}
+        {% include "partials/_feed_card.html" %}
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+{% elif items is defined and items %}
+  {# Fallback: render items without month groups #}
+  {% for item in items %}
+    {% if item.stages is defined and item.stages %}
+      {% include "partials/_stage_group.html" %}
+    {% else %}
+      {% include "partials/_feed_card.html" %}
+    {% endif %}
   {% endfor %}
 {% else %}
   <div class="text-center py-12 text-ra-text-muted dark:text-gray-400">
     <p class="text-lg">No races found.</p>
-    <p class="text-sm mt-2">Run <code>raceanalyzer scrape</code> to import data.</p>
+    <p class="text-sm mt-2">Try adjusting your filters or run <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">raceanalyzer scrape</code> to import data.</p>
   </div>
 {% endif %}

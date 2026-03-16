@@ -1,2 +1,125 @@
-/* Compiled Tailwind CSS - regenerate with: npx tailwindcss -i raceanalyzer/static/css/input.css -o raceanalyzer/static/css/style.css --minify */
-/* Placeholder - run Tailwind build to generate */
+/* RaceAnalyzer custom component styles */
+/* Tailwind utility classes are loaded via CDN in base.html */
+
+.ra-card {
+  background: var(--bg-surface, #ffffff);
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.dark .ra-card {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+.ra-pill {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: #f3f4f6;
+  color: #374151;
+  transition: background-color 0.15s;
+}
+
+.ra-pill:hover {
+  background: #e5e7eb;
+}
+
+.dark .ra-pill {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+.dark .ra-pill:hover {
+  background: #4b5563;
+}
+
+.ra-pill-active {
+  background: #ff6b35 !important;
+  color: white !important;
+}
+
+.ra-pill-active:hover {
+  background: #ea580c !important;
+}
+
+.ra-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: white;
+}
+
+/* Feed card chip styles (inherited from Streamlit version) */
+.feed-card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #f3f4f6;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #555;
+  font-size: 0.82em;
+}
+
+.dark .feed-card-chip {
+  background: #374151;
+  color: #d1d5db;
+}
+
+.feed-card-chip:hover {
+  filter: brightness(0.95);
+}
+
+.feed-card-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Sticky month header backdrop */
+@supports (backdrop-filter: blur(8px)) {
+  .backdrop-blur-sm {
+    backdrop-filter: blur(8px);
+  }
+}
+
+/* Racing soon pulse */
+@keyframes feed-soon-pulse {
+  0% { background: linear-gradient(90deg, #FFE0B2, transparent); }
+  50% { background: linear-gradient(90deg, #FFF3E0, transparent); }
+  100% { background: linear-gradient(90deg, #FFF3E0, transparent); }
+}
+
+/* AI prediction glow */
+@keyframes feed-pred-glow {
+  0% { background: rgba(255, 193, 7, 0.15); }
+  100% { background: transparent; }
+}
+
+.feed-row-ai {
+  animation: feed-pred-glow 1.5s ease-out;
+}
+
+/* Responsive: collapse visuals on narrow screens */
+@media (max-width: 700px) {
+  .ra-card > div[style*="grid-template-columns"] {
+    grid-template-columns: 56px 1fr !important;
+  }
+  .ra-card .flex-col[style*="min-width:130px"] {
+    display: none;
+  }
+}
+
+/* Dark mode overrides for inline Streamlit-style chips */
+@media (prefers-color-scheme: dark) {
+  .feed-card-chip {
+    background: #374151 !important;
+    color: #d1d5db !important;
+  }
+}

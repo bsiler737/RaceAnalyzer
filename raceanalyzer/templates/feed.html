@@ -1,13 +1,126 @@
 {% extends "base.html" %}
 
+{% block title %}Feed - RaceAnalyzer{% endblock %}
+
+{% block sidebar %}
+  {% include "partials/_sidebar.html" %}
+{% endblock %}
+
 {% block content %}
 <div class="max-w-4xl mx-auto">
-  <h1 class="text-3xl font-extrabold mb-2 dark:text-white">PNW Bike Races</h1>
+  {% if series_id %}
+  <div class="mb-4">
+    <a href="/feed{% if team %}?team={{ team | urlencode }}{% endif %}{% if race_type %}&race_type={{ race_type | urlencode }}{% endif %}{% if states %}&states={{ states | urlencode }}{% endif %}"
+       class="inline-flex items-center gap-1 text-sm text-ra-accent hover:underline">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10 2 L4 8 L10 14"/>
+      </svg>
+      Back to all races
+    </a>
+  </div>
+  {% endif %}
 
-  {% block feed_content %}
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-3xl font-extrabold dark:text-white">PNW Bike Races</h1>
+    {% if total_items is defined %}
+    <span class="text-sm text-ra-text-muted dark:text-gray-400">{{ total_items }} race{{ 's' if total_items != 1 else '' }}</span>
+    {% endif %}
+  </div>
+
+  {# Search bar #}
+  <form id="feed-form" class="mb-4">
+    {# Preserve hidden filter state for HTMX #}
+    <input type="hidden" name="team" value="{{ team }}">
+    <input type="hidden" name="race_type" value="{{ race_type }}">
+    <input type="hidden" name="states" value="{{ states }}">
+    {% if series_id %}<input type="hidden" name="series_id" value="{{ series_id }}">{% endif %}
+    {% if cat %}<input type="hidden" name="cat" value="{{ cat }}">{% endif %}
+    {% if gender %}<input type="hidden" name="gender" value="{{ gender }}">{% endif %}
+    {% if cat_level %}<input type="hidden" name="cat_level" value="{{ cat_level }}">{% endif %}
+
+    <div class="relative">
+      <input type="text" name="q" value="{{ q }}"
+             placeholder="Search races..."
+             class="w-full px-4 py-2 pl-10 rounded-lg border border-gray-300 dark:border-gray-600
+                    bg-ra-surface dark:bg-gray-800 text-ra-text dark:text-gray-200
+                    focus:outline-none focus:ring-2 focus:ring-ra-accent focus:border-transparent"
+             hx-get="/feed"
+             hx-include="#feed-form"
+             hx-trigger="input changed delay:300ms, search"
+             hx-target="#feed-content"
+             hx-push-url="true">
+      <svg class="absolute left-3 top-2.5 text-gray-400" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="8" cy="8" r="6"/>
+        <line x1="13" y1="13" x2="18" y2="18"/>
+      </svg>
+    </div>
+  </form>
+
+  {# Race type filter pills (visible on mobile, duplicated from sidebar) #}
+  <div class="flex flex-wrap gap-2 mb-4 md:hidden">
+    {% set race_types = [("criterium", "Criterium"), ("road_race", "Road Race"), ("gravel", "Gravel"), ("time_trial", "TT"), ("hill_climb", "Hill Climb")] %}
+    {% set active_types = race_type.split(",") if race_type else [] %}
+    {% for val, label in race_types %}
+    <button class="ra-pill text-xs {{ 'ra-pill-active' if val in active_types else '' }}"
+            onclick="toggleRaceType('{{ val }}')">
+      {{ label }}
+    </button>
+    {% endfor %}
+  </div>
+
+  {# Feed content area -- HTMX target #}
   <div id="feed-content">
     {% include "partials/_feed_cards.html" %}
   </div>
-  {% endblock %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleRaceType(val) {
+  const form = document.getElementById('feed-form');
+  const hidden = form.querySelector('input[name="race_type"]');
+  let current = hidden.value ? hidden.value.split(',').filter(Boolean) : [];
+  const idx = current.indexOf(val);
+  if (idx >= 0) {
+    current.splice(idx, 1);
+  } else {
+    current.push(val);
+  }
+  hidden.value = current.join(',');
+  htmx.trigger(form.querySelector('input[name="q"]'), 'search');
+}
+
+function toggleState(val) {
+  const form = document.getElementById('feed-form');
+  const hidden = form.querySelector('input[name="states"]');
+  let current = hidden.value ? hidden.value.split(',').filter(Boolean) : [];
+  const idx = current.indexOf(val);
+  if (idx >= 0) {
+    current.splice(idx, 1);
+  } else {
+    current.push(val);
+  }
+  hidden.value = current.join(',');
+  htmx.trigger(form.querySelector('input[name="q"]'), 'search');
+}
+
+function setTeam(val) {
+  const form = document.getElementById('feed-form');
+  form.querySelector('input[name="team"]').value = val;
+  htmx.trigger(form.querySelector('input[name="q"]'), 'search');
+}
+
+// Sync sidebar inputs with hidden form fields
+document.addEventListener('DOMContentLoaded', function() {
+  const sidebarTeam = document.getElementById('sidebar-team-input');
+  if (sidebarTeam) {
+    sidebarTeam.addEventListener('input', function() {
+      if (this.value.length >= 3 || this.value.length === 0) {
+        setTeam(this.value);
+      }
+    });
+  }
+});
+</script>
 {% endblock %}
