@@ -1174,14 +1174,31 @@ def get_race_preview(
         else:
             prediction["prediction_source"] = None
 
-    # Categories from the most recent edition that has classifications
-    # (upcoming editions may not have classifications yet)
+    # Categories: prefer current registration fields (CategoryDetail) over
+    # historical classifications, so the dropdown only shows fields you can
+    # actually register for.
     all_categories = []
-    for race in sorted(series.races, key=lambda r: r.date or datetime.min, reverse=True):
-        cats = [cls.category for cls in race.classifications]
-        if cats:
-            all_categories = sorted(set(cats))
-            break
+    upcoming_race = (
+        session.query(Race)
+        .filter(Race.series_id == series_id, Race.is_upcoming.is_(True))
+        .order_by(Race.date.asc())
+        .first()
+    )
+    if upcoming_race:
+        reg_cats = (
+            session.query(CategoryDetail.category)
+            .filter(CategoryDetail.race_id == upcoming_race.id)
+            .all()
+        )
+        if reg_cats:
+            all_categories = sorted(set(c[0] for c in reg_cats))
+    if not all_categories:
+        # Fallback to historical classifications
+        for race in sorted(series.races, key=lambda r: r.date or datetime.min, reverse=True):
+            cats = [cls.category for cls in race.classifications]
+            if cats:
+                all_categories = sorted(set(cats))
+                break
 
     # Contenders (need a category)
     contenders = pd.DataFrame(
