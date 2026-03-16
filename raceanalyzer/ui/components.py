@@ -690,39 +690,12 @@ def render_feed_filters(session) -> dict:
 
 
 def _init_filters_from_params():
-    """On page load, seed session state from URL params if not already set.
-
-    Sprint 020: Also seed widget keys (racer_cat_pills, racer_gender_pills,
-    racer_masters_toggle, racer_masters_age, team_name_input) so that
-    st.pills/st.toggle/st.text_input can own their state via key= without
-    needing default=/value= (fixes double-click race condition).
-    """
-    for key in ("cat", "gender", "masters", "age", "team", "states"):
+    """On page load, seed session state from URL params if not already set."""
+    for key in ("team", "states"):
         if key not in st.session_state and key in st.query_params:
             st.session_state[key] = st.query_params[key]
 
-    # Seed widget keys from URL params (only when absent in session state)
-    if "racer_cat_pills" not in st.session_state:
-        param_cat = st.query_params.get("cat")
-        st.session_state["racer_cat_pills"] = (
-            param_cat if param_cat in ("1", "2", "3", "4", "5") else "All"
-        )
-    if "racer_gender_pills" not in st.session_state:
-        param_gender = st.query_params.get("gender")
-        st.session_state["racer_gender_pills"] = (
-            param_gender if param_gender in ("M", "W", "NB") else "All"
-        )
-    if "racer_masters_toggle" not in st.session_state:
-        st.session_state["racer_masters_toggle"] = (
-            st.query_params.get("masters") == "1"
-        )
-    if "racer_masters_age" not in st.session_state:
-        try:
-            st.session_state["racer_masters_age"] = int(
-                st.query_params.get("age", "")
-            )
-        except (ValueError, TypeError):
-            pass  # leave unset; number_input will use its own default
+    # Seed widget key from URL params (only when absent in session state)
     if "team_name_input" not in st.session_state:
         param_team = st.query_params.get("team", "")
         if param_team:
@@ -733,35 +706,26 @@ def resolve_effective_category(categories: list[str]) -> tuple:
     """Read racer profile from session state, resolve to best-matching category.
 
     Returns (category_string | None, is_exact_match).
+    Kept for backward compatibility; returns (None, True) now that
+    cat/gender/masters filters have been removed.
     """
-    cat_level = st.session_state.get("cat")
-    gender = st.session_state.get("gender")
-    masters_on = st.session_state.get("masters") == "1"
-    masters_age = int(st.session_state.get("age", "0") or "0") or None
-    return queries.resolve_racer_profile(
-        categories,
-        cat_level=cat_level,
-        gender=gender,
-        masters_on=masters_on,
-        masters_age=masters_age,
-    )
+    return (None, True)
 
 
 def render_racer_profile_filters(session) -> dict:
-    """Render cohesive racer profile filters in a bordered sidebar container.
+    """Render racer profile filters in a bordered sidebar container.
 
-    Returns dict with keys: cat_level, gender, masters_on, masters_age, team_name.
-    Syncs to URL params: cat, gender, masters, age, team.
+    Returns dict with key: team_name.
+    Syncs to URL param: team.
     """
     with st.sidebar.container(border=True):
-        # Sprint 020: "My Info" header
         st.markdown("**Tailored preview: my info**")
 
-        # Sprint 020: Team search at top (before category pills)
         team_name = st.text_input(
-            "My Team",
+            "Team",
             placeholder="e.g. Hagens Berman",
             key="team_name_input",
+            label_visibility="collapsed",
         )
         current_team = st.query_params.get("team", "")
         if team_name != current_team:
@@ -780,79 +744,7 @@ def render_racer_profile_filters(session) -> dict:
         elif team_name and len(team_name.strip()) < 3:
             st.caption("Enter at least 3 characters")
 
-        # Sprint 020: Category pills — NO default= (widget key owns state)
-        cat_options = ["All", "1", "2", "3", "4", "5"]
-        chosen_cat = st.pills(
-            "Category",
-            cat_options,
-            key="racer_cat_pills",
-        )
-        cat_level = chosen_cat if chosen_cat and chosen_cat != "All" else None
-
-        # Sync cat to URL and session state
-        if cat_level:
-            if st.query_params.get("cat") != cat_level:
-                st.query_params["cat"] = cat_level
-            st.session_state["cat"] = cat_level
-        else:
-            if "cat" in st.query_params:
-                del st.query_params["cat"]
-            st.session_state.pop("cat", None)
-
-        # Sprint 020: Gender pills — NO default=
-        gender_options = ["All", "M", "W", "NB"]
-        chosen_gender = st.pills(
-            "Gender",
-            gender_options,
-            key="racer_gender_pills",
-        )
-        gender = chosen_gender if chosen_gender and chosen_gender != "All" else None
-
-        # Sync gender to URL and session state
-        if gender:
-            if st.query_params.get("gender") != gender:
-                st.query_params["gender"] = gender
-            st.session_state["gender"] = gender
-        else:
-            if "gender" in st.query_params:
-                del st.query_params["gender"]
-            st.session_state.pop("gender", None)
-
-        # Sprint 020: Masters toggle — NO value= (widget key owns state)
-        masters_on = st.toggle("Masters", key="racer_masters_toggle")
-
-        masters_age = None
-        if masters_on:
-            masters_age = st.number_input(
-                "Age",
-                min_value=30,
-                max_value=99,
-                value=45,
-                key="racer_masters_age",
-            )
-
-        # Sync masters/age to URL and session state
-        if masters_on:
-            if st.query_params.get("masters") != "1":
-                st.query_params["masters"] = "1"
-            st.session_state["masters"] = "1"
-            if masters_age and st.query_params.get("age") != str(masters_age):
-                st.query_params["age"] = str(masters_age)
-            if masters_age:
-                st.session_state["age"] = str(masters_age)
-        else:
-            if "masters" in st.query_params:
-                del st.query_params["masters"]
-            if "age" in st.query_params:
-                del st.query_params["age"]
-            st.session_state.pop("masters", None)
-            st.session_state.pop("age", None)
-
     return {
-        "cat_level": cat_level,
-        "gender": gender,
-        "masters_on": masters_on,
-        "masters_age": masters_age,
         "team_name": team_result,
     }
 

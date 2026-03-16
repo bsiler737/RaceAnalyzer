@@ -25,7 +25,6 @@ from raceanalyzer.ui.components import (
     render_selectivity_badge,
     render_similar_races,
     render_team_startlist,
-    resolve_effective_category,
 )
 from raceanalyzer.ui.maps import render_course_map, render_interactive_course_profile
 
@@ -65,37 +64,11 @@ def render():
         render_empty_state("No series selected for preview.")
         return
 
-    # Sprint 020: Resolve matched categories from racer profile dict
     matched_categories = []
-    all_cats = queries.get_categories(session)
-    if all_cats and any(
-        racer_profile.get(k) for k in ("cat_level", "gender", "masters_on")
-    ):
-        matched_categories = queries.resolve_racer_profile_matches(
-            all_cats,
-            cat_level=racer_profile.get("cat_level"),
-            gender=racer_profile.get("gender"),
-            masters_on=racer_profile.get("masters_on", False),
-            masters_age=racer_profile.get("masters_age"),
-        )
-
-    racer_profile_label = queries.build_racer_profile_label(
-        cat_level=racer_profile.get("cat_level"),
-        gender=racer_profile.get("gender"),
-        masters_on=racer_profile.get("masters_on", False),
-        masters_age=racer_profile.get("masters_age"),
-    )
+    racer_profile_label = ""
 
     # First fetch with no specific field to get the category list and overall data
-    initial_cat = None
-    if matched_categories:
-        initial_cat = min(matched_categories, key=len)
-    elif not st.session_state.get("global_category"):
-        if all_cats:
-            resolved, _ = resolve_effective_category(all_cats)
-            initial_cat = resolved
-    else:
-        initial_cat = st.session_state.get("global_category")
+    initial_cat = st.session_state.get("global_category")
 
     preview = queries.get_race_preview(
         session, int(series_id),

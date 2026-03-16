@@ -57,40 +57,18 @@ def render():
     if not isolated_series_id:
         racer_profile = render_racer_profile_filters(session)
 
-    # Resolve racer profile to category string + matched categories
+    # Resolve category from global filter or legacy query param
     category = st.session_state.get("global_category")
-    matched_categories = []
-    if racer_profile and any(
-        racer_profile.get(k) for k in ("cat_level", "gender", "masters_on")
-    ):
-        all_cats = queries.get_categories(session)
-        matched_categories = queries.resolve_racer_profile_matches(
-            all_cats,
-            cat_level=racer_profile.get("cat_level"),
-            gender=racer_profile.get("gender"),
-            masters_on=racer_profile.get("masters_on", False),
-            masters_age=racer_profile.get("masters_age"),
-        )
-        if matched_categories:
-            category = min(matched_categories, key=len)
-        else:
-            category = None
-    elif not category:
-        # FG-06: Legacy category deep-link param support
+    if not category:
         legacy_cat = st.query_params.get("category")
         if legacy_cat:
             category = legacy_cat
 
-    # Team name from profile dict (Sprint 018: moved into profile container)
-    team_name = racer_profile.get("team_name") if racer_profile else None
+    matched_categories = []
+    racer_profile_label = ""
 
-    # Build human-readable profile label for AI sez text
-    racer_profile_label = queries.build_racer_profile_label(
-        cat_level=racer_profile.get("cat_level") if racer_profile else None,
-        gender=racer_profile.get("gender") if racer_profile else None,
-        masters_on=racer_profile.get("masters_on", False) if racer_profile else False,
-        masters_age=racer_profile.get("masters_age") if racer_profile else None,
-    )
+    # Team name from profile dict
+    team_name = racer_profile.get("team_name") if racer_profile else None
 
     # --- Search bar ---
     search_query = st.query_params.get("q", "")

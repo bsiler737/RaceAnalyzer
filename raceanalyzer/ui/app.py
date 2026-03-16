@@ -36,6 +36,17 @@ def main():
             unsafe_allow_html=True,
         )
 
+    # Hide default Streamlit sidebar nav (multiple selectors for version compat)
+    st.markdown(
+        '<style>'
+        '[data-testid="stSidebarNav"], '
+        '[data-testid="stSidebarNavItems"], '
+        'section[data-testid="stSidebar"] nav, '
+        'section[data-testid="stSidebar"] ul { display: none !important; }'
+        '</style>',
+        unsafe_allow_html=True,
+    )
+
     # Seed global session state from query params (Sprint 010)
     st.session_state.setdefault("global_category", st.query_params.get("category"))
     st.session_state.setdefault("search_query", st.query_params.get("q", ""))
@@ -66,7 +77,8 @@ def main():
 
     # NS-02: Custom sidebar breadcrumbs
     st.sidebar.page_link(feed_page, label="Race Feed", icon="\U0001f3c1")
-    if pg != feed_page:
+    st.sidebar.page_link(preview_page, label="Race Preview", icon="\U0001f52e")
+    if pg not in (feed_page, preview_page):
         st.sidebar.page_link(pg, label=f"  \u21b3 {pg.title}")
 
     pg.run()
