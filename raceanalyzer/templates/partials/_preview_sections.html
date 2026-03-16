@@ -1,0 +1,393 @@
+{% from "partials/_icons.html" import finish_type_icon %}
+
+{# ===== 1. What to Expect + Predicted Finish Type ===== #}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+
+  {# What to Expect #}
+  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+    <h2 class="text-lg font-bold mb-3 dark:text-white">What to Expect</h2>
+
+    {% if is_tt %}
+      <p class="text-sm text-ra-text dark:text-gray-300 mb-3">{{ tt_narrative }}</p>
+      {% if who_does_well %}
+        <p class="text-sm"><strong>Who does well here?</strong> {{ who_does_well }}</p>
+      {% endif %}
+
+    {% elif is_field_mode %}
+      {% if narrative %}
+        <p class="text-sm text-ra-text dark:text-gray-300">
+          <strong>For {{ chosen_field }}:</strong> {{ narrative }}
+        </p>
+      {% else %}
+        <div class="text-sm text-ra-text-muted dark:text-gray-400 italic">
+          No prediction available for {{ chosen_field }}
+        </div>
+      {% endif %}
+
+    {% else %}
+      {% if ai_context and ai_context.mode == "single_match" and ai_context.best_category %}
+        {% if narrative %}
+          <p class="text-sm text-ra-text dark:text-gray-300">
+            <strong>For {{ ai_context.best_category }}:</strong> {{ narrative }}
+          </p>
+        {% endif %}
+      {% elif ai_context and ai_context.mode == "multi_match" %}
+        {% if narrative %}
+          <p class="text-sm text-ra-text dark:text-gray-300 mb-2">{{ narrative }}</p>
+        {% endif %}
+        {% if field_forecasts %}
+          <p class="text-sm font-semibold mb-1">Field-specific forecasts:</p>
+          <ul class="text-sm text-ra-text dark:text-gray-300 list-disc list-inside">
+            {% for ff in field_forecasts %}
+              <li><strong>{{ ff.category }}:</strong> {{ ff.teaser }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% elif narrative %}
+        <p class="text-sm text-ra-text dark:text-gray-300">{{ narrative }}</p>
+      {% endif %}
+
+      {% if who_does_well %}
+        <p class="text-sm mt-3"><strong>Who does well here?</strong> {{ who_does_well }}</p>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {# Predicted Finish Type #}
+  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+    {% if is_tt %}
+      <h2 class="text-lg font-bold mb-3 dark:text-white">Race Format</h2>
+      <p class="text-2xl font-bold dark:text-white">Individual Time Trial</p>
+      <p class="text-sm text-ra-text-muted dark:text-gray-400 mt-1">Solo effort -- no drafting, no group tactics</p>
+
+    {% elif pred_display %}
+      <h2 class="text-lg font-bold mb-3 dark:text-white">Predicted Finish Type</h2>
+      <div class="flex items-center gap-2 mb-2">
+        {{ finish_type_icon(pred.predicted_finish_type) }}
+        <span class="text-2xl font-bold dark:text-white">{{ pred_display.ft_display }}</span>
+      </div>
+      <span class="inline-block px-2 py-0.5 rounded text-xs font-medium {{ pred_display.conf_badge_class }}">
+        {{ pred_display.conf_label }}
+      </span>
+      <p class="text-sm text-ra-text-muted dark:text-gray-400 mt-2">
+        Based on {{ pred_display.edition_count }} previous edition{{ 's' if pred_display.edition_count != 1 else '' }}
+      </p>
+
+    {% else %}
+      <h2 class="text-lg font-bold mb-3 dark:text-white">Predicted Finish Type</h2>
+      {% if is_field_mode %}
+        <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No prediction available for {{ chosen_field }}</p>
+      {% else %}
+        <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No historical data for predictions yet.</p>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+
+{# ===== 2. Course Profile ===== #}
+{% if (profile_points and profile_points | length > 1) or course %}
+<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+  <h2 class="text-lg font-bold mb-3 dark:text-white">Course Profile</h2>
+
+  {% if course %}
+  <div class="grid grid-cols-3 gap-4 mb-4">
+    {% if course_terrain %}
+    <div>
+      <p class="text-xs text-ra-text-muted dark:text-gray-400 uppercase tracking-wide">Terrain</p>
+      <p class="text-lg font-semibold dark:text-white">{{ course_terrain }}</p>
+    </div>
+    {% endif %}
+    {% if course_elevation_str %}
+    <div>
+      <p class="text-xs text-ra-text-muted dark:text-gray-400 uppercase tracking-wide">Elevation / lap</p>
+      <p class="text-lg font-semibold dark:text-white">{{ course_elevation_str }}</p>
+    </div>
+    {% endif %}
+    {% if course_distance_str %}
+    <div>
+      <p class="text-xs text-ra-text-muted dark:text-gray-400 uppercase tracking-wide">Distance</p>
+      <p class="text-lg font-semibold dark:text-white">{{ course_distance_str }}</p>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# Climb legend #}
+  {% if climbs %}
+  <div class="flex gap-4 text-xs text-ra-text-muted dark:text-gray-400 mb-3">
+    <span class="flex items-center gap-1">
+      <span class="inline-block w-3 h-3 rounded-sm" style="background:#FFC107"></span>
+      Moderate (3-5%)
+    </span>
+    <span class="flex items-center gap-1">
+      <span class="inline-block w-3 h-3 rounded-sm" style="background:#FF5722"></span>
+      Steep (5-8%)
+    </span>
+    <span class="flex items-center gap-1">
+      <span class="inline-block w-3 h-3 rounded-sm" style="background:#B71C1C"></span>
+      Brutal (8%+)
+    </span>
+  </div>
+  {% endif %}
+
+  {# Elevation chart #}
+  {% if elevation_chart_data %}
+  <div class="plotly-chart w-full"
+       data-plotly-data='{{ elevation_chart_data }}'
+       data-plotly-layout='{{ elevation_chart_layout }}'
+       style="min-height:400px;">
+  </div>
+  {% endif %}
+
+  {# Climb breakdown #}
+  {% if climb_lines %}
+  <hr class="my-4 border-gray-200 dark:border-gray-700">
+  <h3 class="text-sm font-bold mb-2 dark:text-white">Climb Breakdown</h3>
+  {% for cl in climb_lines %}
+    <p class="text-sm text-ra-text dark:text-gray-300 mb-1">
+      <strong>Climb {{ cl.index }}:</strong> {{ cl.context }}
+    </p>
+  {% endfor %}
+  {% endif %}
+
+  {# Fallback: course metrics without profile #}
+  {% if not profile_points and course_terrain_desc %}
+  <p class="text-sm text-ra-text-muted dark:text-gray-400 mt-2">{{ course_terrain_desc }}</p>
+  {% endif %}
+</div>
+
+{% elif series.parent_series_id %}
+  {# Stage without course data #}
+  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+    <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No course data available for this stage.</p>
+  </div>
+{% endif %}
+
+
+{# ===== 3. Course Map ===== #}
+{% if map_coords_json %}
+<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+  <h2 class="text-lg font-bold mb-3 dark:text-white">Course Map</h2>
+  <div class="leaflet-map w-full rounded-lg"
+       data-leaflet-coords='{{ map_coords_json }}'
+       data-leaflet-climbs='{{ map_climbs_json }}'
+       style="height:350px;">
+  </div>
+</div>
+{% endif %}
+
+
+{# ===== 4. Finish Type Details + Historical Stats (two columns) ===== #}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+
+  {# Finish Type Details #}
+  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+    <h2 class="text-lg font-bold mb-3 dark:text-white">Finish Type Details</h2>
+
+    {% if pred and distribution_chart_data %}
+      <div class="plotly-chart w-full"
+           data-plotly-data='{{ distribution_chart_data }}'
+           data-plotly-layout='{{ distribution_chart_layout }}'
+           style="min-height:200px;">
+      </div>
+    {% endif %}
+
+    {% if editions_summary %}
+      <h3 class="text-sm font-bold mt-3 mb-2 dark:text-white">Historical Pattern</h3>
+      <div class="flex flex-wrap gap-3">
+        {% for ed in editions_summary %}
+          <div class="text-center" title="{{ ed.year }}: {{ ed.finish_type_display }}">
+            {{ finish_type_icon(ed.finish_type) }}
+            <div class="text-xs text-ra-text-muted dark:text-gray-400 mt-0.5">{{ ed.year }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% elif is_field_mode %}
+      <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No historical results for {{ chosen_field }}</p>
+    {% elif not pred %}
+      <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No prediction data available.</p>
+    {% endif %}
+  </div>
+
+  {# Historical Stats #}
+  <div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+    <h2 class="text-lg font-bold mb-3 dark:text-white">Historical Stats</h2>
+
+    {% if drop_rate %}
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <p class="text-xs text-ra-text-muted dark:text-gray-400 uppercase tracking-wide">Drop Rate</p>
+          <p class="text-2xl font-bold dark:text-white">{{ (drop_rate.drop_rate * 100) | round | int }}%</p>
+        </div>
+        <div>
+          {% set sel_label = drop_rate.label %}
+          {% set sel_colors = {"low": "bg-green-600", "moderate": "bg-yellow-500", "high": "bg-red-600", "extreme": "bg-red-800"} %}
+          {% set sel_labels = {"low": "Low attrition", "moderate": "Moderate attrition", "high": "High attrition", "extreme": "Extreme attrition"} %}
+          <span class="px-2 py-0.5 rounded text-xs font-medium text-white {{ sel_colors.get(sel_label, 'bg-gray-500') }}">
+            {{ sel_labels.get(sel_label, sel_label) }}
+          </span>
+        </div>
+      </div>
+      <p class="text-xs text-ra-text-muted dark:text-gray-400 mb-3">
+        Based on {{ drop_rate.edition_count }} edition{{ 's' if drop_rate.edition_count != 1 else '' }}
+        ({{ drop_rate.total_starters }} starters, {{ drop_rate.total_dropped }} dropped)
+      </p>
+    {% endif %}
+
+    {% if typical_speed %}
+      {% if drop_rate %}
+        <hr class="my-3 border-gray-200 dark:border-gray-700">
+      {% endif %}
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <p class="text-xs text-ra-text-muted dark:text-gray-400 uppercase tracking-wide">Winning Speed</p>
+          <p class="text-lg font-semibold dark:text-white">{{ typical_speed.median_winner_speed_mph }} mph</p>
+        </div>
+        <div>
+          <p class="text-xs text-ra-text-muted dark:text-gray-400 uppercase tracking-wide">Field Speed</p>
+          <p class="text-lg font-semibold dark:text-white">{{ typical_speed.median_field_speed_mph }} mph</p>
+        </div>
+      </div>
+      <p class="text-xs text-ra-text-muted dark:text-gray-400 mt-1">
+        Median across {{ typical_speed.edition_count }} edition{{ 's' if typical_speed.edition_count != 1 else '' }}.
+        ({{ typical_speed.median_winner_speed_kph }} / {{ typical_speed.median_field_speed_kph }} kph)
+      </p>
+    {% elif not is_field_mode %}
+      {% if drop_rate %}
+        <hr class="my-3 border-gray-200 dark:border-gray-700">
+      {% endif %}
+      <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">Pick a field to see the avg speeds for your field.</p>
+    {% elif not drop_rate %}
+      <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No historical stats available yet.</p>
+    {% endif %}
+  </div>
+</div>
+
+
+{# ===== 5. Field Forecasts (All Fields mode only) ===== #}
+{% if not is_field_mode and field_forecasts %}
+<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+  <h2 class="text-lg font-bold mb-3 dark:text-white">Field Forecasts</h2>
+  {% for ff in field_forecasts %}
+    <p class="text-sm text-ra-text dark:text-gray-300 mb-1">
+      <strong>{{ ff.category }}:</strong> {{ ff.ft_display }} -- {{ ff.teaser }}
+    </p>
+  {% endfor %}
+</div>
+{% endif %}
+
+
+{# ===== 6. Spooky Riders ===== #}
+<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+  <h2 class="text-lg font-bold mb-3 dark:text-white">Spooky Riders</h2>
+
+  {% if is_field_mode %}
+    {% if spooky_riders %}
+      <p class="text-xs text-ra-text-muted dark:text-gray-400 mb-3">
+        {% if spooky_source == "startlist" %}
+          Based on registered riders
+        {% else %}
+          Based on past editions (no startlist imported yet)
+        {% endif %}
+      </p>
+      {% for racer in spooky_riders %}
+      <div class="flex items-center justify-between py-2 {% if not loop.last %}border-b border-gray-100 dark:border-gray-700{% endif %}">
+        <div>
+          <span class="font-medium text-sm dark:text-white">{{ racer.name }}</span>
+          {% if racer.team %}
+            <span class="text-xs text-ra-text-muted dark:text-gray-400">({{ racer.team }})</span>
+          {% endif %}
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 rounded text-xs font-medium {{ racer._threat_class }}">
+            {{ racer._threat_label }}
+          </span>
+          <span class="text-xs text-ra-text-muted dark:text-gray-400">
+            {{ racer.carried_points | round(1) }} pts | {{ racer.wins }} wins
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No registered riders found for {{ chosen_field }}</p>
+    {% endif %}
+  {% else %}
+    <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">
+      Pick a field to see the spooky riders for your field.
+    </p>
+  {% endif %}
+</div>
+
+
+{# ===== 7. Startlist ===== #}
+<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+  <h2 class="text-lg font-bold mb-3 dark:text-white">Startlist</h2>
+
+  {% if team_blocks %}
+    {% for block in team_blocks %}
+      <div class="mb-3">
+        <p class="font-medium text-sm dark:text-white">
+          {% if team and team | length >= 3 and team | lower in block.team | lower %}
+            <span class="mr-1">&#11088;</span>
+          {% endif %}
+          {{ block.team }} ({{ block.count }})
+        </p>
+        {% if block.show_categories is defined and block.show_categories %}
+          {% set ns = namespace(current_cat='') %}
+          {% for rider in block.riders %}
+            {% set rider_cat = rider.categories[0] if rider.categories else '' %}
+            {% if rider_cat != ns.current_cat %}
+              {% set ns.current_cat = rider_cat %}
+              {% if rider_cat %}
+                <p class="text-xs text-ra-text-muted dark:text-gray-400 italic mt-1 ml-2">{{ rider_cat }}</p>
+              {% endif %}
+            {% endif %}
+            <p class="text-xs text-ra-text dark:text-gray-300 ml-4">{{ rider.name }}</p>
+          {% endfor %}
+        {% else %}
+          {% for rider in block.riders %}
+            <p class="text-xs text-ra-text dark:text-gray-300 ml-4">{{ rider.name }}</p>
+          {% endfor %}
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    {% if is_field_mode %}
+      <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No startlist data for {{ chosen_field }}</p>
+    {% else %}
+      <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No startlist data available yet.</p>
+    {% endif %}
+  {% endif %}
+</div>
+
+
+{# ===== 8. Similar Races ===== #}
+<div class="bg-[var(--bg-surface)] rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+  <h2 class="text-lg font-bold mb-3 dark:text-white">Similar Races</h2>
+
+  {% if similar_races %}
+    {% for score, item in similar_races %}
+      <div class="flex items-center justify-between py-2 {% if not loop.last %}border-b border-gray-100 dark:border-gray-700{% endif %}">
+        <div>
+          <span class="font-medium text-sm dark:text-white">{{ item.display_name }}</span>
+          <span class="text-xs text-ra-text-muted dark:text-gray-400 ml-2">
+            {{ item.location or '' }}
+            {% if item.course_type %}
+              &middot; {{ item.course_type | replace('_', ' ') | title }}
+            {% endif %}
+            {% if item.predicted_finish_type %}
+              &middot; {{ item.predicted_finish_type | finish_type_display }}
+            {% endif %}
+          </span>
+        </div>
+        <a href="/preview/{{ item.series_id }}"
+           class="text-xs text-[var(--accent)] hover:underline">
+          View
+        </a>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="text-sm text-ra-text-muted dark:text-gray-400 italic">No similar races found.</p>
+  {% endif %}
+</div>

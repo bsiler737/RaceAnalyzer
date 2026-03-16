@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "partials/_icons.html" import race_type_icon, finish_type_icon %}
+
+{% block title %}{{ series.display_name }} - Preview - RaceAnalyzer{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+
+  {# Back to feed link #}
+  <div class="mb-4">
+    <a href="/feed{% if team %}?team={{ team | urlencode }}{% endif %}{% if cat %}&cat={{ cat | urlencode }}{% endif %}"
+       class="inline-flex items-center gap-1 text-sm text-[var(--accent)] hover:underline">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10 2 L4 8 L10 14"/>
+      </svg>
+      Back to Feed
+    </a>
+  </div>
+
+  {# Race header #}
+  <div class="flex items-start justify-between mb-6">
+    <div>
+      <div class="flex items-center gap-3">
+        {% if race_type %}
+          {{ race_type_icon(race_type) }}
+        {% endif %}
+        <h1 class="text-3xl font-extrabold dark:text-white">{{ series.display_name }}</h1>
+      </div>
+      <div class="flex items-center gap-4 mt-2 text-sm text-ra-text-muted dark:text-gray-400">
+        {% if race_date %}
+          <span>{{ race_date.strftime('%b %d, %Y') }}</span>
+        {% endif %}
+        {% if race_location %}
+          <span>{{ race_location }}</span>
+        {% endif %}
+        {% if race_type %}
+          <span class="px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-xs">
+            {{ race_type | race_type_display }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+    {% if reg_url %}
+    <a href="{{ reg_url }}" target="_blank" rel="noopener"
+       class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90 shrink-0">
+      Register
+    </a>
+    {% endif %}
+  </div>
+
+  {# Stage navigation pills #}
+  {% if siblings and siblings | length > 1 %}
+  <div class="flex gap-2 mb-6 overflow-x-auto">
+    {% for sib in siblings %}
+      {% set sib_name = sib.display_name.split(': ')[-1] if ': ' in sib.display_name else sib.display_name %}
+      {% if sib.is_current %}
+        <span class="px-4 py-2 rounded-full text-sm font-medium bg-[var(--accent)] text-white whitespace-nowrap">
+          Stage {{ sib.stage_number }}: {{ sib_name }}
+        </span>
+      {% else %}
+        <a href="/preview/{{ sib.series_id }}{% if chosen_field %}?field={{ chosen_field | urlencode }}{% endif %}"
+           hx-get="/preview/{{ sib.series_id }}{% if chosen_field %}?field={{ chosen_field | urlencode }}{% endif %}"
+           hx-target="#preview-content"
+           hx-push-url="true"
+           class="px-4 py-2 rounded-full text-sm font-medium bg-gray-200 dark:bg-gray-700 text-ra-text dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 whitespace-nowrap">
+          Stage {{ sib.stage_number }}: {{ sib_name }}
+        </a>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# Field picker #}
+  {% if fields_list and fields_list | length > 1 %}
+  <div class="mb-6">
+    <label for="field-picker" class="block text-sm font-medium text-ra-text dark:text-gray-300 mb-1">Field</label>
+    <select id="field-picker" name="field"
+            hx-get="/preview/{{ series_id }}"
+            hx-target="#preview-content"
+            hx-push-url="true"
+            hx-include="[name='cat'],[name='team']"
+            class="w-full max-w-xs px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm">
+      <option value=""{% if not chosen_field %} selected{% endif %}>All Fields</option>
+      {% for f in fields_list %}
+        <option value="{{ f }}"{% if chosen_field == f %} selected{% endif %}>{{ f }}</option>
+      {% endfor %}
+    </select>
+    {% if cat %}<input type="hidden" name="cat" value="{{ cat }}">{% endif %}
+    {% if team %}<input type="hidden" name="team" value="{{ team }}">{% endif %}
+  </div>
+  {% endif %}
+
+  {# Main content area (HTMX target) #}
+  <div id="preview-content">
+    {% include "partials/_preview_sections.html" %}
+  </div>
+
+</div>
+{% endblock %}
