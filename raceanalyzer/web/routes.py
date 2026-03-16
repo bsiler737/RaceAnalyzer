@@ -221,25 +221,36 @@ def feed(
     if series_id:
         items = [i for i in items if i["series_id"] == series_id]
 
-    # Group by month
-    month_groups = queries.group_by_month(items)
+    # Split upcoming vs past — upcoming always renders fully, past is paginated
+    upcoming_items = [i for i in items if i.get("is_upcoming")]
+    past_items = [i for i in items if not i.get("is_upcoming")]
 
-    # Enrich all items with pre-computed template fields
-    enrich_items(items)
-    # Also enrich month_groups (they reference the same dicts, but be safe)
-    for _header, group_items in month_groups:
+    # Group upcoming by month (all rendered)
+    upcoming_month_groups = queries.group_by_month(upcoming_items)
+
+    # Paginate past races — show all up to current page
+    past_page_size = 20
+    past_visible_count = page * past_page_size
+    past_page_items = past_items[:past_visible_count]
+    past_remaining = max(0, len(past_items) - past_visible_count)
+
+    # Enrich only what we're rendering (upcoming + visible past)
+    enrich_items(upcoming_items)
+    enrich_items(past_page_items)
+    for _header, group_items in upcoming_month_groups:
         enrich_items(group_items)
 
     # Available states for filter pills
     available_states = queries.get_available_states(session)
 
-    # Pagination
-    page_size = 20
     total_items = len(items)
 
     ctx_data = {
         "items": items,
-        "month_groups": month_groups,
+        "upcoming_month_groups": upcoming_month_groups,
+        "past_page_items": past_page_items,
+        "past_remaining": past_remaining,
+        "total_past": len(past_items),
         "series_id": series_id,
         "cat": cat,
         "gender": gender,
@@ -250,13 +261,19 @@ def feed(
         "race_type": race_type or "",
         "states": states or "",
         "page": page,
-        "page_size": page_size,
         "total_items": total_items,
+        "total_upcoming": len(upcoming_items),
         "available_states": available_states,
     }
 
     if _is_htmx(request):
         ctx_data["request"] = request
+        # "Load more" past races — return just the past section
+        if page > 1:
+            ctx_data["all_past_rendered"] = past_page_items
+            return _templates(request).TemplateResponse(
+                "partials/_past_races.html", ctx_data,
+            )
         return _templates(request).TemplateResponse(
             "partials/_feed_cards.html", ctx_data,
         )

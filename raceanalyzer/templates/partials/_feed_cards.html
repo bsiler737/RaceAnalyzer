@@ -1,42 +1,75 @@
-{# HTMX-swappable feed content: month headers, stage groups, individual cards #}
+{# HTMX-swappable feed content: upcoming (all) + past (paginated) #}
 
-{% if month_groups is defined and month_groups %}
-  {% for header, group_items in month_groups %}
-  <div class="mb-6">
-    {# Month header - sticky, rounded, padded #}
-    <div class="sticky top-0 z-10 py-2 px-4 mb-2 rounded-lg backdrop-blur-sm"
-         style="background: rgba(240, 237, 234, 0.9);">
-      <h2 class="text-lg font-bold dark:text-white" style="color: #1a1a1a;">
-        {{ header }}
-        <span class="text-sm font-normal dark:text-gray-400 ml-2" style="color: #555;">
-          {{ group_items | length }} race{{ 's' if group_items | length != 1 else '' }}
-        </span>
-      </h2>
+{# ===== Upcoming races: all rendered, grouped by month ===== #}
+{% if upcoming_month_groups is defined and upcoming_month_groups %}
+  {% for header, group_items in upcoming_month_groups %}
+    {% if header != "Past Races" %}
+    <div class="mb-6">
+      <div class="sticky top-0 z-10 py-2 px-4 mb-2 rounded-lg backdrop-blur-sm"
+           style="background: rgba(240, 237, 234, 0.9);">
+        <h2 class="text-lg font-bold dark:text-white" style="color: #1a1a1a;">
+          {{ header }}
+          <span class="text-sm font-normal dark:text-gray-400 ml-2" style="color: #555;">
+            {{ group_items | length }} race{{ 's' if group_items | length != 1 else '' }}
+          </span>
+        </h2>
+      </div>
+
+      {% for item in group_items %}
+        {% if item.stages is defined and item.stages %}
+          {% include "partials/_stage_group.html" %}
+        {% else %}
+          {% include "partials/_feed_card.html" %}
+        {% endif %}
+      {% endfor %}
     </div>
-
-    {% for item in group_items %}
-      {% if item.stages is defined and item.stages %}
-        {# Stage race group #}
-        {% include "partials/_stage_group.html" %}
-      {% else %}
-        {# Regular race card #}
-        {% include "partials/_feed_card.html" %}
-      {% endif %}
-    {% endfor %}
-  </div>
+    {% endif %}
   {% endfor %}
-{% elif items is defined and items %}
-  {# Fallback: render items without month groups #}
-  {% for item in items %}
+{% endif %}
+
+{# ===== Past races: paginated, loaded on demand ===== #}
+{% if past_page_items is defined and past_page_items %}
+<div class="mb-6" id="past-races">
+  <div class="sticky top-0 z-10 py-2 px-4 mb-2 rounded-lg backdrop-blur-sm"
+       style="background: rgba(240, 237, 234, 0.9);">
+    <h2 class="text-lg font-bold dark:text-white" style="color: #1a1a1a;">
+      Past Races
+      <span class="text-sm font-normal dark:text-gray-400 ml-2" style="color: #555;">
+        {{ total_past }} total
+      </span>
+    </h2>
+  </div>
+
+  {% for item in past_page_items %}
     {% if item.stages is defined and item.stages %}
       {% include "partials/_stage_group.html" %}
     {% else %}
       {% include "partials/_feed_card.html" %}
     {% endif %}
   {% endfor %}
-{% else %}
+
+  {% if past_remaining is defined and past_remaining > 0 %}
+  <div class="text-center mt-4">
+    <button hx-get="/feed?page={{ page + 1 }}{% if team %}&team={{ team | urlencode }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% if race_type %}&race_type={{ race_type | urlencode }}{% endif %}{% if states %}&states={{ states | urlencode }}{% endif %}"
+            hx-target="#past-races"
+            hx-swap="outerHTML"
+            class="px-4 py-2 rounded-lg text-sm font-medium
+                   border border-gray-300 dark:border-gray-600
+                   text-ra-text dark:text-gray-200
+                   hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+      Load more past races ({{ past_remaining }} remaining)
+    </button>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ===== Empty state ===== #}
+{% if (not upcoming_month_groups or upcoming_month_groups | length == 0) and (not past_page_items or past_page_items | length == 0) %}
+  {% if items is defined and items | length == 0 %}
   <div class="text-center py-12 text-ra-text-muted dark:text-gray-400">
     <p class="text-lg">No races found.</p>
     <p class="text-sm mt-2">Try adjusting your filters or run <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">raceanalyzer scrape</code> to import data.</p>
   </div>
+  {% endif %}
 {% endif %}

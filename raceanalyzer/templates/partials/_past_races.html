@@ -1,0 +1,34 @@
+{# Past races section — returned for "Load more" HTMX requests #}
+<div class="mb-6" id="past-races">
+  <div class="sticky top-0 z-10 py-2 px-4 mb-2 rounded-lg backdrop-blur-sm"
+       style="background: rgba(240, 237, 234, 0.9);">
+    <h2 class="text-lg font-bold dark:text-white" style="color: #1a1a1a;">
+      Past Races
+      <span class="text-sm font-normal dark:text-gray-400 ml-2" style="color: #555;">
+        {{ total_past }} total
+      </span>
+    </h2>
+  </div>
+
+  {% for item in all_past_rendered %}
+    {% if item.stages is defined and item.stages %}
+      {% include "partials/_stage_group.html" %}
+    {% else %}
+      {% include "partials/_feed_card.html" %}
+    {% endif %}
+  {% endfor %}
+
+  {% if past_remaining is defined and past_remaining > 0 %}
+  <div class="text-center mt-4">
+    <button hx-get="/feed?page={{ page + 1 }}{% if team %}&team={{ team | urlencode }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% if race_type %}&race_type={{ race_type | urlencode }}{% endif %}{% if states %}&states={{ states | urlencode }}{% endif %}"
+            hx-target="#past-races"
+            hx-swap="outerHTML"
+            class="px-4 py-2 rounded-lg text-sm font-medium
+                   border border-gray-300 dark:border-gray-600
+                   text-ra-text dark:text-gray-200
+                   hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+      Load more past races ({{ past_remaining }} remaining)
+    </button>
+  </div>
+  {% endif %}
+</div>
