@@ -19,9 +19,11 @@ env/
 *.swp
 *.swo
 
-# Data
-data/
+# Data — ignore everything in data/ except the LFS-tracked DB
+data/*
+!data/raceanalyzer.db
 *.db
+!data/raceanalyzer.db
 
 # Testing
 .coverage
