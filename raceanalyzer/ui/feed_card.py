@@ -637,7 +637,7 @@ def build_card_html(item: dict) -> str:
         f'<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;'
         f'max-width:calc(100% - 30px);">'
         f'<span style="font-weight:700;font-size:1.3em;line-height:1.2;'
-        f'color:var(--text-color,#333);'
+        f'color:var(--text-color,#e0e0e0);'
         f'overflow:hidden;text-overflow:ellipsis;">{name}</span>'
         f'{countdown_pill}'
         f'</div>'
@@ -661,14 +661,14 @@ def build_card_html(item: dict) -> str:
             f'<span style="display:inline-flex;align-items:center;gap:3px;'
             f'background:var(--secondary-background-color,#f0f2f6);padding:1px 8px;'
             f'border-radius:4px;font-size:0.8em;'
-            f'color:var(--text-color,#333);">'
+            f'color:var(--text-color,#e0e0e0);">'
             f'{rt_icon} {rt_name}</span>'
         )
 
     if loc_str:
         parts.append(
             f'<div style="margin-top:2px;'
-            f'font-size:0.85em;color:var(--text-color,#555);">'
+            f'font-size:0.85em;color:var(--text-color,#bbb);">'
             f'{loc_str}'
             f'</div>'
         )
@@ -746,7 +746,7 @@ def build_card_html(item: dict) -> str:
             f'<div style="width:{min(drop_pct, 100)}%;height:100%;'
             f'background:{bar_color};'
             'border-radius:4px;"></div></div>'
-            f'<span style="font-size:0.78em;font-weight:500;color:var(--text-color,#444);">'
+            f'<span style="font-size:0.78em;font-weight:500;color:var(--text-color,#ccc);">'
             f'{drop_pct}%</span>'
             '<span style="font-size:0.72em;'
             f'color:var(--text-color,#666);">'
@@ -767,7 +767,7 @@ def build_card_html(item: dict) -> str:
             f'{ft_icon_20}'
             f'<span style="color:var(--text-color,#666);font-weight:400;'
             f'font-size:0.85em;">AI sez:</span> '
-            f'<span style="color:var(--text-color,#444);">{html.escape(wte)}</span>'
+            f'<span style="color:var(--text-color,#ccc);">{html.escape(wte)}</span>'
             f'</div>'
         )
 
@@ -883,7 +883,7 @@ def build_row_html(item: dict) -> str:
     parts.append(
         f'<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;">'
         f'<span style="font-weight:700;font-size:1.3em;line-height:1.2;'
-        f'color:var(--text-color,#333);'
+        f'color:var(--text-color,#e0e0e0);'
         f'overflow:hidden;text-overflow:ellipsis;">{name}</span>'
         f'{countdown_pill}'
         f'</div>'
@@ -900,7 +900,7 @@ def build_row_html(item: dict) -> str:
 
     if loc_str:
         parts.append(
-            f'<div style="font-size:0.85em;color:var(--text-color,#555);">'
+            f'<div style="font-size:0.85em;color:var(--text-color,#bbb);">'
             f'{loc_str}</div>'
         )
 
@@ -916,7 +916,7 @@ def build_row_html(item: dict) -> str:
             f'<span style="display:inline-flex;align-items:center;gap:3px;'
             f'background:var(--secondary-background-color,#f0f2f6);padding:1px 8px;'
             f'border-radius:4px;font-size:0.8em;'
-            f'color:var(--text-color,#333);">'
+            f'color:var(--text-color,#e0e0e0);">'
             f'{rt_icon} {rt_name}</span></div>'
         )
 
@@ -941,7 +941,7 @@ def build_row_html(item: dict) -> str:
             f'{ft_icon_20}'
             f'<span style="color:var(--text-color,#666);font-weight:400;'
             f'font-size:0.85em;">AI sez:</span> '
-            f'<span style="color:var(--text-color,#444);">{html.escape(ai_sez_text)}</span>'
+            f'<span style="color:var(--text-color,#ccc);">{html.escape(ai_sez_text)}</span>'
             f'</div>'
         )
 
@@ -1005,7 +1005,7 @@ def build_row_html(item: dict) -> str:
             f'<div style="width:{min(drop_pct, 100)}%;height:100%;'
             f'background:{bar_color};'
             'border-radius:4px;"></div></div>'
-            f'<span style="font-size:0.78em;font-weight:500;color:var(--text-color,#444);">'
+            f'<span style="font-size:0.78em;font-weight:500;color:var(--text-color,#ccc);">'
             f'{drop_pct}%</span>'
             '<span style="font-size:0.72em;'
             f'color:var(--text-color,#666);">'
@@ -1113,7 +1113,7 @@ def _build_chip_row(item: dict) -> list[str]:
                 'display:inline-flex;align-items:center;gap:3px;'
                 'background:var(--secondary-background-color,#f0f2f6);'
                 'padding:2px 8px;border-radius:4px;'
-                'color:var(--text-color,#444);">'
+                'color:var(--text-color,#ccc);">'
                 '\U0001f550 ~? min</span>'
             )
 
@@ -1127,7 +1127,7 @@ def _chip(chip_type: str, icon_svg: str, label: str) -> str:
         f' style="display:inline-flex;align-items:center;gap:3px;'
         f'background:var(--secondary-background-color,#f0f2f6);'
         f'padding:2px 8px;'
-        f'border-radius:4px;color:var(--text-color,#444);">'
+        f'border-radius:4px;color:var(--text-color,#ccc);">'
         f'{icon_svg} {label}</span>'
     )
 

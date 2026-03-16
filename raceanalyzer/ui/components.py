@@ -755,7 +755,7 @@ def render_racer_profile_filters(session) -> dict:
     """
     with st.sidebar.container(border=True):
         # Sprint 020: "My Info" header
-        st.markdown("**My Info**")
+        st.markdown("**Custom preview: my info**")
 
         # Sprint 020: Team search at top (before category pills)
         team_name = st.text_input(

@@ -1315,9 +1315,19 @@ def get_race_preview(
 
     # Build pred_map for _select_feed_prediction_context
     preview_pred_map = {(p.series_id, p.category): p for p in series_preds}
+
+    # Scope matched_categories to current registration fields only.
+    # This prevents showing forecasts for historical field names that
+    # don't exist in the current edition's registration.
+    current_reg_fields = {cd.category for cd in preview_cat_details}
+    scoped_matched = [
+        c for c in (matched_categories or [])
+        if c in current_reg_fields
+    ] if current_reg_fields else (matched_categories or [])
+
     ai_context = _select_feed_prediction_context(
         preview_pred_map, series_id,
-        matched_categories=matched_categories or [],
+        matched_categories=scoped_matched,
         course_type=ct,
         racer_profile_label=racer_profile_label,
         race_type=race_type_val.value if race_type_val else None,
@@ -1325,8 +1335,8 @@ def get_race_preview(
 
     # Build field_forecasts for multi-match preview
     field_forecasts = []
-    if matched_categories:
-        for cat in matched_categories:
+    if scoped_matched:
+        for cat in scoped_matched:
             cat_pred = preview_pred_map.get((series_id, cat))
             if (
                 cat_pred
