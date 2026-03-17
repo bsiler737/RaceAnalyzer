@@ -353,6 +353,72 @@ The feed query cache has a 5-minute TTL. After running pipeline commands via `fl
 fly machines restart
 ```
 
+## Automated Data Refresh Scheduler (Sprint 023)
+
+The server includes an in-process scheduler that automatically runs overdue data pipeline jobs. No external cron or separate machines needed.
+
+### How It Works
+
+1. **On cold start**: After a 10-second delay, the scheduler checks if any refresh jobs are overdue and runs them in a background thread.
+2. **While awake**: Every 6 hours, the scheduler rechecks for overdue jobs.
+3. **When the machine sleeps**: The scheduler sleeps too. On the next wake (triggered by a web request), it catches up.
+4. **Daily guarantee**: A GitHub Actions cron job pings `/health` once daily at 6 AM PST, waking the machine and triggering the scheduler.
+
+### Job Schedule
+
+| Job | Frequency | Steps |
+|-----|-----------|-------|
+| **Daily** | Every 24 hours | `fetch-startlists` → `compute-predictions` |
+| **Weekly** | Every 7 days | `fetch-calendar` → `fetch-startlists` → `elevation-extract` → `course-profile-extract` → `compute-predictions` |
+
+If both are overdue, only the weekly job runs (it's a superset of daily).
+
+### Disabling the Scheduler
+
+Set the environment variable to disable:
+
+```bash
+fly secrets set RACEANALYZER_SCHEDULER_ENABLED=0
+```
+
+To re-enable:
+
+```bash
+fly secrets unset RACEANALYZER_SCHEDULER_ENABLED
+```
+
+### Manual Pipeline Runs
+
+Use `refresh-all` for a single-command pipeline run:
+
+```bash
+# Full weekly pipeline (default)
+fly ssh console -C "python -m raceanalyzer --db /data/raceanalyzer.db refresh-all"
+
+# Daily pipeline only
+fly ssh console -C "python -m raceanalyzer --db /data/raceanalyzer.db refresh-all --daily"
+
+# Bypass 24h per-race cooldowns
+fly ssh console -C "python -m raceanalyzer --db /data/raceanalyzer.db refresh-all --force"
+```
+
+A filesystem lock (`/data/refresh.lock`) prevents the scheduler and manual runs from overlapping.
+
+### Monitoring
+
+The `/health` endpoint includes scheduler status:
+
+```bash
+curl -s https://raceanalyzer.fly.dev/health | python3 -m json.tool
+```
+
+Returns per-step refresh timestamps, scheduler state, and overdue flags. Returns HTTP 503 if the daily refresh is more than 48 hours stale.
+
+### Known Limitations
+
+- **Not safe for multi-machine deployments.** The filesystem lock is per-volume, not distributed. Keep `min_machines_running` at 0 or 1.
+- **Data freshness depends on web traffic.** If nobody visits the app, no jobs run — mitigated by the daily GH Actions wake-up cron.
+
 ### Fly.io Configuration Reference
 
 Key settings in `fly.toml`:

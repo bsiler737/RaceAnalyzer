@@ -10,7 +10,7 @@ primary_region = "sjc"  # San Jose -- where our machine and volume live
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = "stop"    # Recommend idle timeout >= 10 minutes (longer than the longest pipeline run)
   auto_start_machines = true
   min_machines_running = 0
 
@@ -36,8 +36,12 @@ primary_region = "sjc"  # San Jose -- where our machine and volume live
   cpus = 1
 
 # Pipeline commands (run via: fly ssh console -C "<command>"):
-#   python -m raceanalyzer update-calendar
-#   python -m raceanalyzer fetch-startlists
-#   python -m raceanalyzer fetch-polylines
-#   python -m raceanalyzer elevation-extract
-#   python -m raceanalyzer compute-predictions
+#   python -m raceanalyzer refresh-all              # Full weekly pipeline (automated by scheduler)
+#   python -m raceanalyzer refresh-all --daily      # Daily pipeline only
+#   python -m raceanalyzer refresh-all --force      # Bypass 24h cooldowns
+#   python -m raceanalyzer fetch-calendar            # Discover upcoming races
+#   python -m raceanalyzer fetch-startlists          # Fetch registered riders
+#   python -m raceanalyzer fetch-polylines           # Fetch RWGPS polylines
+#   python -m raceanalyzer elevation-extract         # Extract elevation data
+#   python -m raceanalyzer course-profile-extract    # Build profiles/detect climbs
+#   python -m raceanalyzer compute-predictions       # Recompute predictions

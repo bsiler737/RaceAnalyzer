@@ -61,3 +61,10 @@ class Settings:
     drop_rate_low_max: float = 0.10
     drop_rate_moderate_max: float = 0.25
     drop_rate_high_max: float = 0.40
+
+    # Scheduler settings (Sprint 023)
+    scheduler_enabled: bool = True
+    scheduler_startup_delay_seconds: int = 10
+    scheduler_check_interval_hours: float = 6.0
+    refresh_daily_interval_hours: float = 24.0
+    refresh_weekly_interval_hours: float = 168.0  # 7 days
