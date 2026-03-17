@@ -353,60 +353,82 @@ The feed query cache has a 5-minute TTL. After running pipeline commands via `fl
 fly machines restart
 ```
 
-## Automated Data Refresh Scheduler (Sprint 023)
+## Automated Data Refresh (Sprint 024)
 
-The server includes an in-process scheduler that automatically runs overdue data pipeline jobs. No external cron or separate machines needed.
+Data pipelines run via **GitHub Actions cron**, completely decoupled from web serving. Cold boots serve UI instantly with zero background CPU competition.
 
 ### How It Works
 
-1. **On cold start**: After a 10-second delay, the scheduler checks if any refresh jobs are overdue and runs them in a background thread.
-2. **While awake**: Every 6 hours, the scheduler rechecks for overdue jobs.
-3. **When the machine sleeps**: The scheduler sleeps too. On the next wake (triggered by a web request), it catches up.
-4. **Daily guarantee**: A GitHub Actions cron job pings `/health` once daily at 6 AM PST, waking the machine and triggering the scheduler.
+1. **GitHub Actions cron** triggers `refresh-all` via `fly ssh console` on a fixed schedule
+2. A pre-flight `curl /health` wakes the Fly.io machine before SSH connects
+3. The pipeline runs in a **separate process** from the web server
+4. The in-process scheduler is **disabled** (`RACEANALYZER_SCHEDULER_ENABLED=0` in `fly.toml`) — FastAPI serves HTTP without any background pipeline work
+5. A filesystem lock (`/data/refresh.lock`) prevents overlapping runs
 
-### Job Schedule
+### Cron Schedule
 
-| Job | Frequency | Steps |
-|-----|-----------|-------|
-| **Daily** | Every 24 hours | `fetch-startlists` → `compute-predictions` |
-| **Weekly** | Every 7 days | `fetch-calendar` → `fetch-startlists` → `elevation-extract` → `course-profile-extract` → `compute-predictions` |
+| Job | Cron | When | Steps |
+|-----|------|------|-------|
+| **Daily** | `0 14 * * 2-7` | Tue-Sun 6 AM PST | `fetch-startlists` → `compute-predictions` |
+| **Weekly** | `0 15 * * 1` | Monday 7 AM PST | `fetch-calendar` → `fetch-startlists` → `elevation-extract` → `course-profile-extract` → `compute-predictions` |
 
-If both are overdue, only the weekly job runs (it's a superset of daily).
+Daily skips Mondays because the weekly pipeline is a superset.
 
-### Disabling the Scheduler
+### GitHub Actions Setup
 
-Set the environment variable to disable:
+The workflow lives at `.github/workflows/refresh.yml`.
+
+**One-time secret setup:**
+
+1. Create a Fly.io deploy token (1-year expiry):
+   ```bash
+   fly tokens create deploy -x 8760h
+   ```
+
+2. Add it as a GitHub Actions secret:
+   - Go to **Settings → Secrets and variables → Actions → New repository secret**
+   - Name: `FLY_API_TOKEN`
+   - Value: the token from step 1
+
+3. That's it — the cron jobs will run automatically.
+
+**Token rotation:** Create a new token with the same command and update the GitHub secret. The old token is invalidated by the rotation.
+
+### Manual Triggers
+
+**From GitHub UI:**
+
+Go to **Actions → Refresh Pipeline → Run workflow** and select `daily` or `weekly` mode.
+
+**From the command line:**
 
 ```bash
-fly secrets set RACEANALYZER_SCHEDULER_ENABLED=0
-```
-
-To re-enable:
-
-```bash
-fly secrets unset RACEANALYZER_SCHEDULER_ENABLED
-```
-
-### Manual Pipeline Runs
-
-Use `refresh-all` for a single-command pipeline run:
-
-```bash
-# Full weekly pipeline (default)
-fly ssh console -C "python -m raceanalyzer --db /data/raceanalyzer.db refresh-all"
+# Full weekly pipeline
+fly ssh console -C "python -m raceanalyzer refresh-all"
 
 # Daily pipeline only
-fly ssh console -C "python -m raceanalyzer --db /data/raceanalyzer.db refresh-all --daily"
+fly ssh console -C "python -m raceanalyzer refresh-all --daily"
 
 # Bypass 24h per-race cooldowns
-fly ssh console -C "python -m raceanalyzer --db /data/raceanalyzer.db refresh-all --force"
+fly ssh console -C "python -m raceanalyzer refresh-all --force"
 ```
 
-A filesystem lock (`/data/refresh.lock`) prevents the scheduler and manual runs from overlapping.
+### Re-enabling the In-Process Scheduler
+
+If usage patterns change (frequent traffic keeping the machine warm), you can re-enable the in-process scheduler:
+
+1. Remove `RACEANALYZER_SCHEDULER_ENABLED = "0"` from `fly.toml` `[env]`
+2. `fly deploy`
+
+The scheduler code is still present and functional — it just reads `RefreshLog` entries and runs overdue jobs in a background thread on cold boot.
+
+### Migration Note (Sprint 023 → 024)
+
+RefreshLog types were renamed from `scheduler_daily`/`scheduler_weekly` to `pipeline_daily`/`pipeline_weekly`. Existing rows with the old types will not match new overdue queries. On the first GitHub Actions run after deploy, all jobs will appear overdue and run — this is expected and catches up automatically. The pipeline is idempotent.
 
 ### Monitoring
 
-The `/health` endpoint includes scheduler status:
+The `/health` endpoint includes refresh status:
 
 ```bash
 curl -s https://raceanalyzer.fly.dev/health | python3 -m json.tool
@@ -414,10 +436,14 @@ curl -s https://raceanalyzer.fly.dev/health | python3 -m json.tool
 
 Returns per-step refresh timestamps, scheduler state, and overdue flags. Returns HTTP 503 if the daily refresh is more than 48 hours stale.
 
+### Graceful Degradation
+
+If GitHub Actions is down, data gets stale but the app works normally. `/health` returns 503 when >48h stale. When GH Actions recovers, the next cron run catches up automatically. Manual `fly ssh console` runs always work as a fallback.
+
 ### Known Limitations
 
 - **Not safe for multi-machine deployments.** The filesystem lock is per-volume, not distributed. Keep `min_machines_running` at 0 or 1.
-- **Data freshness depends on web traffic.** If nobody visits the app, no jobs run — mitigated by the daily GH Actions wake-up cron.
+- **GitHub Actions cron imprecision.** Runs may be delayed 5-20 minutes. Cooldowns prevent duplicate work regardless.
 
 ### Fly.io Configuration Reference
 
@@ -431,8 +457,10 @@ Key settings in `fly.toml`:
 | `auto_stop_machines` | `stop` | Sleep when idle |
 | `auto_start_machines` | `true` | Wake on request |
 | `min_machines_running` | `0` | No always-on cost |
+| `machine_stop.timeout` | `15m` | Keep alive 15 min after last request (longer than pipeline run) |
 | `soft_limit` | `25` | Max concurrent requests before queuing |
 | `hard_limit` | `50` | Max concurrent requests before rejection |
 | `memory` | `512mb` | RAM (256MB is too small, causes OOM) |
 | `mounts.source` | `ra_data` | Persistent volume name |
 | `mounts.destination` | `/data` | Where the DB lives in the container |
+| `RACEANALYZER_SCHEDULER_ENABLED` | `0` | In-process scheduler disabled (pipeline via GH Actions) |

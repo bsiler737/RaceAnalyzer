@@ -62,22 +62,22 @@ class TestOverdueDetection:
 
     def test_recent_daily_not_overdue(self, scheduler, tmp_db):
         """Recent scheduler_daily → not overdue."""
-        _add_refresh_log(tmp_db, "scheduler_daily", hours_ago=1)
+        _add_refresh_log(tmp_db, "pipeline_daily", hours_ago=1)
         assert scheduler.is_daily_overdue() is False
 
     def test_stale_daily_is_overdue(self, scheduler, tmp_db):
         """Scheduler_daily older than 24h → overdue."""
-        _add_refresh_log(tmp_db, "scheduler_daily", hours_ago=25)
+        _add_refresh_log(tmp_db, "pipeline_daily", hours_ago=25)
         assert scheduler.is_daily_overdue() is True
 
     def test_recent_weekly_not_overdue(self, scheduler, tmp_db):
         """Recent scheduler_weekly → not overdue."""
-        _add_refresh_log(tmp_db, "scheduler_weekly", hours_ago=1)
+        _add_refresh_log(tmp_db, "pipeline_weekly", hours_ago=1)
         assert scheduler.is_weekly_overdue() is False
 
     def test_stale_weekly_is_overdue(self, scheduler, tmp_db):
         """Scheduler_weekly older than 7d → overdue."""
-        _add_refresh_log(tmp_db, "scheduler_weekly", hours_ago=170)
+        _add_refresh_log(tmp_db, "pipeline_weekly", hours_ago=170)
         assert scheduler.is_weekly_overdue() is True
 
     def test_manual_startlist_satisfies_daily_sla(self, scheduler, tmp_db):
@@ -87,7 +87,7 @@ class TestOverdueDetection:
 
     def test_weekly_run_satisfies_daily_sla(self, scheduler, tmp_db):
         """A recent weekly run also satisfies the daily SLA."""
-        _add_refresh_log(tmp_db, "scheduler_weekly", hours_ago=5)
+        _add_refresh_log(tmp_db, "pipeline_weekly", hours_ago=5)
         assert scheduler.is_daily_overdue() is False
 
     def test_first_run_bootstrap_runs_weekly(self, scheduler, tmp_db):
@@ -145,7 +145,7 @@ class TestCheckAndRunOverdue:
         from raceanalyzer.pipeline import PipelineResult
 
         # Weekly at 25h ago: within 7d (weekly not overdue) but >24h (daily overdue)
-        _add_refresh_log(tmp_db, "scheduler_weekly", hours_ago=25)
+        _add_refresh_log(tmp_db, "pipeline_weekly", hours_ago=25)
         mock_daily.return_value = PipelineResult(
             steps_total=2, steps_succeeded=2, steps_failed=0
         )
@@ -157,8 +157,8 @@ class TestCheckAndRunOverdue:
     @patch("raceanalyzer.scheduler.run_daily_pipeline")
     def test_skips_when_nothing_overdue(self, mock_daily, mock_weekly, scheduler, tmp_db):
         """When nothing is overdue, skip."""
-        _add_refresh_log(tmp_db, "scheduler_weekly", hours_ago=5)
-        _add_refresh_log(tmp_db, "scheduler_daily", hours_ago=5)
+        _add_refresh_log(tmp_db, "pipeline_weekly", hours_ago=5)
+        _add_refresh_log(tmp_db, "pipeline_daily", hours_ago=5)
         result = scheduler.check_and_run_overdue()
         assert result is None
         assert not mock_daily.called
@@ -217,9 +217,9 @@ class TestStaleness:
         assert scheduler.is_stale() is False
 
     def test_not_stale_with_recent_activity(self, scheduler, tmp_db):
-        _add_refresh_log(tmp_db, "scheduler_daily", hours_ago=5)
+        _add_refresh_log(tmp_db, "pipeline_daily", hours_ago=5)
         assert scheduler.is_stale() is False
 
     def test_stale_with_old_activity(self, scheduler, tmp_db):
-        _add_refresh_log(tmp_db, "scheduler_daily", hours_ago=50)
+        _add_refresh_log(tmp_db, "pipeline_daily", hours_ago=50)
         assert scheduler.is_stale() is True

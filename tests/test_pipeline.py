@@ -148,7 +148,7 @@ class TestRefreshLogRecording:
         session = get_session(tmp_db)
         logs = (
             session.query(RefreshLog)
-            .filter(RefreshLog.refresh_type == "scheduler_daily")
+            .filter(RefreshLog.refresh_type == "pipeline_daily")
             .all()
         )
         assert len(logs) == 1
@@ -169,7 +169,7 @@ class TestRefreshLogRecording:
         session = get_session(tmp_db)
         log = (
             session.query(RefreshLog)
-            .filter(RefreshLog.refresh_type == "scheduler_daily")
+            .filter(RefreshLog.refresh_type == "pipeline_daily")
             .first()
         )
         assert log.status == "failed"

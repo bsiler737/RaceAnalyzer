@@ -89,7 +89,7 @@ class TestHealthEndpoint:
         # Add an old entry to make it stale (has entries but all old)
         session.add(RefreshLog(
             race_id=None,
-            refresh_type="scheduler_daily",
+            refresh_type="pipeline_daily",
             refreshed_at=datetime.utcnow() - timedelta(hours=50),
             status="success",
             entry_count=5,
@@ -107,7 +107,7 @@ class TestHealthEndpoint:
         session = get_session(tmp_db)
         session.add(RefreshLog(
             race_id=None,
-            refresh_type="scheduler_daily",
+            refresh_type="pipeline_daily",
             refreshed_at=datetime.utcnow(),
             status="success",
             entry_count=5,

@@ -80,12 +80,12 @@ class RefreshScheduler:
             cutoff = datetime.utcnow() - timedelta(hours=self.settings.refresh_daily_interval_hours)
 
             # Check scheduler-level daily runs
-            last_scheduler = self._last_success_for_type(session, "scheduler_daily")
+            last_scheduler = self._last_success_for_type(session, "pipeline_daily")
             if last_scheduler and last_scheduler > cutoff:
                 return False
 
             # A weekly run also covers the daily SLA
-            last_weekly = self._last_success_for_type(session, "scheduler_weekly")
+            last_weekly = self._last_success_for_type(session, "pipeline_weekly")
             if last_weekly and last_weekly > cutoff:
                 return False
 
@@ -107,7 +107,7 @@ class RefreshScheduler:
         try:
             cutoff = datetime.utcnow() - timedelta(hours=self.settings.refresh_weekly_interval_hours)
 
-            last_weekly = self._last_success_for_type(session, "scheduler_weekly")
+            last_weekly = self._last_success_for_type(session, "pipeline_weekly")
             if last_weekly and last_weekly > cutoff:
                 return False
 
@@ -307,7 +307,7 @@ class RefreshScheduler:
             cutoff = datetime.utcnow() - timedelta(hours=48)
 
             # Check any recent successful refresh activity
-            for rtype in ("scheduler_daily", "scheduler_weekly", "startlist"):
+            for rtype in ("pipeline_daily", "pipeline_weekly", "startlist"):
                 last = self._last_success_for_type(session, rtype) if rtype.startswith("scheduler") else self._last_success_for_step(session, rtype)
                 if last and last > cutoff:
                     return False

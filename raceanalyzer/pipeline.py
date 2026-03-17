@@ -472,7 +472,7 @@ def _run_pipeline(
 def run_daily_pipeline(db_path: Path, *, force: bool = False) -> PipelineResult:
     """fetch-startlists → compute-predictions"""
     logger.info("[pipeline] Starting daily pipeline...")
-    result = _run_pipeline(DAILY_STEPS, db_path, force=force, refresh_type="scheduler_daily")
+    result = _run_pipeline(DAILY_STEPS, db_path, force=force, refresh_type="pipeline_daily")
     logger.info(
         "[pipeline] Daily pipeline finished: %d/%d succeeded.",
         result.steps_succeeded, result.steps_total,
@@ -483,7 +483,7 @@ def run_daily_pipeline(db_path: Path, *, force: bool = False) -> PipelineResult:
 def run_weekly_pipeline(db_path: Path, *, force: bool = False) -> PipelineResult:
     """fetch-calendar → fetch-startlists → elevation-extract → course-profile-extract → compute-predictions"""
     logger.info("[pipeline] Starting weekly pipeline...")
-    result = _run_pipeline(WEEKLY_STEPS, db_path, force=force, refresh_type="scheduler_weekly")
+    result = _run_pipeline(WEEKLY_STEPS, db_path, force=force, refresh_type="pipeline_weekly")
     logger.info(
         "[pipeline] Weekly pipeline finished: %d/%d succeeded.",
         result.steps_succeeded, result.steps_total,

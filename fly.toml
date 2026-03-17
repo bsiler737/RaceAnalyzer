@@ -6,13 +6,18 @@ primary_region = "sjc"  # San Jose -- where our machine and volume live
 [env]
   RACEANALYZER_DB_PATH = "/data/raceanalyzer.db"
   RACEANALYZER_PROD = "1"
+  RACEANALYZER_SCHEDULER_ENABLED = "0"  # Pipeline runs via GitHub Actions, not in-process
 
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = "stop"    # Recommend idle timeout >= 10 minutes (longer than the longest pipeline run)
+  auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 0
+
+  [http_service.machine_stop]
+    signal = "SIGTERM"
+    timeout = "15m"  # Keep alive 15 min after last request (longer than pipeline run)
 
   [http_service.concurrency]
     type = "requests"
@@ -36,8 +41,8 @@ primary_region = "sjc"  # San Jose -- where our machine and volume live
   cpus = 1
 
 # Pipeline commands (run via: fly ssh console -C "<command>"):
-#   python -m raceanalyzer refresh-all              # Full weekly pipeline (automated by scheduler)
-#   python -m raceanalyzer refresh-all --daily      # Daily pipeline only
+#   python -m raceanalyzer refresh-all              # Full weekly pipeline (automated by GH Actions cron)
+#   python -m raceanalyzer refresh-all --daily      # Daily pipeline only (automated by GH Actions cron)
 #   python -m raceanalyzer refresh-all --force      # Bypass 24h cooldowns
 #   python -m raceanalyzer fetch-calendar            # Discover upcoming races
 #   python -m raceanalyzer fetch-startlists          # Fetch registered riders
