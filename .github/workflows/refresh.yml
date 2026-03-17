@@ -1,0 +1,71 @@
+name: Refresh Pipeline
+
+# Runs the data pipeline on the Fly.io machine via SSH.
+# Replaces the in-process scheduler (Sprint 024) — scraping is fully
+# decoupled from web serving so cold boots serve UI instantly.
+
+on:
+  schedule:
+    - cron: '0 14 * * 2-7'  # Daily Tue-Sun at 14:00 UTC (6 AM PST)
+    - cron: '0 15 * * 1'    # Weekly Monday at 15:00 UTC (7 AM PST)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Pipeline mode'
+        required: true
+        default: 'daily'
+        type: choice
+        options:
+          - daily
+          - weekly
+
+concurrency:
+  group: raceanalyzer-refresh
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '0 14 * * 2-7') ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake machine
+        run: |
+          curl -sf --retry 3 --retry-delay 10 \
+            https://raceanalyzer.fly.dev/health \
+            || echo "Wake ping failed (machine may be starting)."
+
+      - name: Set up flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Run daily pipeline
+        timeout-minutes: 15
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          fly ssh console -a raceanalyzer \
+            -C "python -m raceanalyzer refresh-all --daily"
+
+  weekly:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '0 15 * * 1') ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'weekly')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake machine
+        run: |
+          curl -sf --retry 3 --retry-delay 10 \
+            https://raceanalyzer.fly.dev/health \
+            || echo "Wake ping failed (machine may be starting)."
+
+      - name: Set up flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Run weekly pipeline
+        timeout-minutes: 15
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          fly ssh console -a raceanalyzer \
+            -C "python -m raceanalyzer refresh-all"

@@ -1491,5 +1491,58 @@ def migrate_stages(ctx):
     click.echo(f"\nMigration complete: {total_created} child series created, {total_skipped} already existed.")
 
 
+@main.command("refresh-all")
+@click.option("--daily", "mode", flag_value="daily", help="Run daily pipeline only.")
+@click.option("--weekly", "mode", flag_value="weekly", help="Run weekly pipeline (default).")
+@click.option("--force", is_flag=True, help="Bypass per-race 24h cooldowns.")
+@click.pass_context
+def refresh_all(ctx, mode, force):
+    """Run the full data pipeline in dependency order (Sprint 023)."""
+    import fcntl
+    import sys
+
+    settings = ctx.obj["settings"]
+
+    from raceanalyzer.db.engine import init_db
+    from raceanalyzer.pipeline import run_daily_pipeline, run_weekly_pipeline
+
+    init_db(settings.db_path)
+
+    # Acquire filesystem lock
+    lock_path = settings.db_path.parent / "refresh.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fd = None
+    try:
+        lock_fd = open(lock_path, "w")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        click.echo("WARNING: Another refresh is already running (lock held). Skipping.")
+        if lock_fd:
+            lock_fd.close()
+        sys.exit(0)
+
+    try:
+        if mode == "daily":
+            click.echo("Running daily pipeline...")
+            result = run_daily_pipeline(settings.db_path, force=force)
+        else:
+            click.echo("Running weekly pipeline...")
+            result = run_weekly_pipeline(settings.db_path, force=force)
+
+        # Summary
+        if result.ok:
+            click.echo(f"{result.steps_succeeded}/{result.steps_total} steps succeeded.")
+        else:
+            click.echo(
+                f"{result.steps_succeeded}/{result.steps_total} steps succeeded, "
+                f"{result.steps_failed} failed: [{', '.join(result.failed_step_names)}]"
+            )
+            sys.exit(1)
+    finally:
+        if lock_fd:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
+
+
 if __name__ == "__main__":
     main()
