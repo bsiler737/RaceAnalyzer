@@ -109,7 +109,10 @@ def _step_fetch_calendar(session: Session, settings: Settings, *, force: bool = 
         if existing_race:
             existing_race.is_upcoming = True
             existing_race.registration_source = "road-results"
-            if series:
+            # Never overwrite series_id — that link is set by build-series
+            # and must remain stable. Calendar discovery only updates
+            # upcoming status and registration metadata.
+            if not existing_race.series_id and series:
                 existing_race.series_id = series.id
         else:
             race = Race(
