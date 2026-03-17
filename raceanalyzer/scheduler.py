@@ -308,7 +308,7 @@ class RefreshScheduler:
 
             # Check any recent successful refresh activity
             for rtype in ("pipeline_daily", "pipeline_weekly", "startlist"):
-                last = self._last_success_for_type(session, rtype) if rtype.startswith("scheduler") else self._last_success_for_step(session, rtype)
+                last = self._last_success_for_type(session, rtype) if rtype.startswith("pipeline") else self._last_success_for_step(session, rtype)
                 if last and last > cutoff:
                     return False
 

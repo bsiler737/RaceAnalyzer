@@ -83,8 +83,8 @@ class TestHealthEndpoint:
         assert data["last_refresh"]["calendar"]["last_success"] is not None
         assert data["last_refresh"]["calendar"]["records_processed"] == 23
 
-    def test_health_503_when_stale(self, client, tmp_db):
-        """Return 503 if daily refresh is >48h stale."""
+    def test_health_200_with_stale_flag(self, client, tmp_db):
+        """Return 200 with status=stale if daily refresh is >48h old."""
         session = get_session(tmp_db)
         # Add an old entry to make it stale (has entries but all old)
         session.add(RefreshLog(
@@ -98,7 +98,7 @@ class TestHealthEndpoint:
         session.close()
 
         resp = client.get("/health")
-        assert resp.status_code == 503
+        assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "stale"
 

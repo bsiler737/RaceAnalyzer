@@ -135,10 +135,11 @@ def create_app() -> FastAPI:
             response["last_refresh"] = scheduler.get_refresh_status()
             response["scheduler"] = scheduler.get_status()
 
-            # 503 if stale
+            # Flag staleness in the body but always return 200 so
+            # Fly.io health checks pass (503 causes machine to be
+            # marked unhealthy and auto-stopped).
             if scheduler.is_stale():
                 response["status"] = "stale"
-                return JSONResponse(response, status_code=503)
 
         return JSONResponse(response)
 
